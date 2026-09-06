@@ -95,6 +95,32 @@ Rien de branché sauf l'USB.
     firmware consomme ~60 Ko, et le bug des rapports HID vides ne touchait
     que les cartes à PSRAM active. Ne reflashe pas.
 
+### Les messages rouges « PSRAM » au démarrage : c'est normal
+
+Sur une carte N16R8 flashée avec la variante **standard**, chaque démarrage
+affiche :
+
+```
+E (302) quad_psram: PSRAM chip is not connected, or wrong PSRAM line mode
+E (308) esp_psram: PSRAM enabled but initialization failed. Bailing out.
+E cpu_start: Failed to init external RAM; continuing without it.
+```
+
+Ce n'est **pas une panne**. La variante standard configure la PSRAM en mode
+**quad** ; la puce R8 de ta carte est en mode **octal**. L'initialisation
+échoue donc — c'est littéralement ce que dit le message, *« wrong PSRAM line
+mode »* — et l'ESP32 continue avec sa seule RAM interne. D'où les 224 Ko
+libres au lieu de plusieurs millions.
+
+Le firmware complet en consomme environ 60 Ko : il y a largement la place.
+Et comme expliqué dans `docs/01`, le bug des rapports HID vides ne
+concernait que les cartes à PSRAM **active** : sans PSRAM, cette catégorie
+de problème disparaît.
+
+Pour faire taire ces messages il faudrait flasher la variante
+`SPIRAM_OCT` — mais tu n'y gagnerais rien pour ce projet, et tu
+réintroduirais la PSRAM dans le chemin des transferts USB. Laisse comme ça.
+
 Teste aussi le redémarrage :
 
 ```python

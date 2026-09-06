@@ -118,6 +118,15 @@ cours, envoie Échap, et déclenche un flash lumineux.
 └── licenses/                     licences des composants tiers
 ```
 
+> ⚠️ **`config.py` est livré avec `HID_ENABLED = False`** — c'est la position
+> de sécurité pour quiconque démarre le projet. Si tu re-téléverses ce
+> fichier depuis le dépôt après l'avoir déjà activé, **tu repasses à False**
+> et le macropad cesse de taper. Le REPL te le dit au démarrage :
+> `HID_ENABLED = False : le macropad ne tapera aucune touche.`
+>
+> Le réflexe : modifie la copie qui est **sur la carte** (double-clic dans
+> le panneau du bas de Thonny), pas celle du dépôt.
+
 **On copie le *contenu* de `device/` à la racine de la carte**, pas le
 dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
