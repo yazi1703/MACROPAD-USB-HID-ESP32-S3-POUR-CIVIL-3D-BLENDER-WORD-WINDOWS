@@ -1,9 +1,14 @@
 # Macropad USB HID ESP32-S3 — Civil 3D / Blender / Word / Windows
 
 Firmware MicroPython pour un macropad USB reconnu par Windows comme un
-**vrai clavier HID** : quatre touches mécaniques à macros, deux touches
-capacitives pour changer de profil, un écran OLED SH1106, et un gros bouton
-Échap déporté à LED respirante.
+**vrai clavier HID** : six touches mécaniques à macros — **trois gestes
+chacune**, soit dix-huit commandes par profil — deux touches capacitives
+pour changer de profil, un écran OLED SH1106 qui affiche le tableau des
+commandes, et un gros bouton Échap déporté à LED respirante.
+
+Le macropad **suit le logiciel actif** sur le PC, affiche le nom du fichier
+ouvert, compte les appuis, et se configure entièrement depuis une page web
+— par le câble USB ou par son propre WiFi.
 
 ---
 
@@ -17,6 +22,7 @@ capacitives pour changer de profil, un écran OLED SH1106, et un gros bouton
 | savoir si USB HID marche vraiment en MicroPython | [`docs/01-recherche-usb-hid.md`](docs/01-recherche-usb-hid.md) |
 | vérifier le brochage broche par broche | [`docs/02-cablage.md`](docs/02-cablage.md) |
 | cocher que tout est bon | [`docs/04-checklist.md`](docs/04-checklist.md) |
+| **comprendre l'écran et les trois gestes** | [`docs/09-ecran-et-gestes.md`](docs/09-ecran-et-gestes.md) |
 | savoir ce qui a été corrigé et pourquoi | [`docs/06-corrections.md`](docs/06-corrections.md) |
 | **que le macropad suive le logiciel actif** | [`docs/08-detection-auto.md`](docs/08-detection-auto.md) — le script PC |
 | **modifier les macros depuis le PC** | lancer `pc/macropad_auto.py`, puis `http://127.0.0.1:8765` |
@@ -67,6 +73,8 @@ Ordre de rotation des profils, circulaire dans les deux sens :
 BLENDER  →  CIVIL3D  →  WORD  →  WINDOWS  →  BLENDER
 ```
 
+**Appui court** (les valeurs d'usine) :
+
 |  | BLENDER | CIVIL 3D | WORD | WINDOWS |
 |---|---|---|---|---|
 | **B1** | `G` | `_MATCHPROP` + Entrée | Ctrl+B | Win+E |
@@ -76,8 +84,27 @@ BLENDER  →  CIVIL3D  →  WORD  →  WINDOWS  →  BLENDER
 | **B5** | `E` | `_ZOOM` + Entrée | Ctrl+U | Win+V |
 | **B6** | Ctrl+Z | Ctrl+S | Ctrl+Y | Win+Maj+S |
 
+Chaque touche connaît en plus un **appui long** et un **double appui** —
+`Ctrl+Y` sur l'appui long de B3, `_REGEN` sur le double appui de B5, etc.
+L'écran affiche les trois colonnes en permanence, et **saute sur la touche
+que tu viens d'utiliser en la surlignant** :
+
+```
+┌────────────────┐
+│▓CIVIL 3D▓▓▓AUTO│
+│ CRT   LNG DBL  │
+│1MATCH -   PROP │
+│2HATCH -   ANGL │
+│3ANNUL REDO -   │
+│4ISOLE -   -    │
+│────────────────│
+│C3D A12_Phase2.d│
+└────────────────┘
+```
+
 Ce ne sont que les valeurs d'usine : **tout se change depuis la page web**
-(voir ci-dessous), sans toucher au code.
+(voir ci-dessous), sans toucher au code. Détail de l'écran et des gestes :
+[`docs/09`](docs/09-ecran-et-gestes.md).
 
 Le gros bouton **ESC** agit dans tous les profils : il annule la macro en
 cours, envoie Échap, et déclenche un flash lumineux.
@@ -110,13 +137,15 @@ main. Voir [`docs/08`](docs/08-detection-auto.md).
 │   ├── main.py                   la boucle principale
 │   ├── config.py                 tous les réglages
 │   ├── profiles.py               macros d'usine (repli)
+│   ├── gestures.py               appui court / long / double appui
 │   ├── store.py                  lecture/écriture de profils.json
+│   ├── stats.py                  compteur d'usage (stats.json)
 │   ├── portal.py                 point d'accès WiFi + page web
 │   ├── link.py                   dialogue série avec le PC
 │   ├── layouts.py                AZERTY / QWERTY, traduction des caractères
 │   ├── hid_keyboard.py           envoi des rapports USB, file d'attente
 │   ├── inputs.py                 anti-rebond des entrées
-│   ├── display.py                interface OLED
+│   ├── display.py                écran : tableau, défilement, veille
 │   ├── sh1106.py                 pilote de l'écran (MIT, robert-hh)
 │   ├── led.py                    respiration et flash
 │   ├── diag.py                   diagnostic, n'envoie jamais de touche
@@ -124,9 +153,16 @@ main. Voir [`docs/08`](docs/08-detection-auto.md).
 │   └── lib/usb/device/           bibliothèque USB officielle (MIT)
 ├── pc/                           >>> À LANCER SUR LE PC, pas sur la carte
 │   ├── macropad_auto.py          détection du logiciel actif + config USB
-│   └── macropad_auto.bat         lanceur Windows
+│   ├── macropad_auto.bat         lanceur Windows
+│   └── macropad_apps.txt         table de secours (créée au 1er lancement)
+├── tools/                        >>> OUTILS DE DÉVELOPPEMENT (PC)
+│   ├── page_config.html          la page de configuration, source unique
+│   ├── injecter_page.py          l'injecte dans portal.py et macropad_auto.py
+│   └── generer_code_complet.py   régénère CODE_COMPLET.md
 ├── docs/                         documentation détaillée
-├── tests/test_logic.py           38 tests exécutables sur PC
+├── tests/
+│   ├── test_logic.py             94 tests du firmware, exécutables sur PC
+│   └── test_pc.py                7 tests du compagnon Windows
 └── licenses/                     licences des composants tiers
 ```
 
@@ -150,7 +186,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 78 tests ... OK
+→ Ran 101 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport
@@ -159,7 +195,9 @@ la boucle principale de `main.py`. Ils vérifient entre autres les rapports
 USB **octet par octet** (`Ctrl+Z` → `01 00 1A`, c'est-à-dire la touche `z`
 de l'AZERTY et non le `Z` américain qui vaudrait `Ctrl+W` = fermer le
 document), qu'aucune macro ne laisse un modificateur enfoncé, l'anti-rebond,
-la priorité d'ESC, le SAFE MODE, et les neuf corrections listées dans
+la priorité d'ESC, le SAFE MODE, la machine à états des trois gestes, le
+protocole série, la relecture d'un ancien `profils.json`, l'absence de
+débordement de l'écran, et les neuf corrections listées dans
 `docs/06-corrections.md`.
 
 **Non testé, faute de matériel :** l'énumération USB réelle sous Windows,

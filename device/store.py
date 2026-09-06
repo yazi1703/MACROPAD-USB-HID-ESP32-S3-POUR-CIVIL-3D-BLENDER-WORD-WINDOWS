@@ -1,51 +1,62 @@
 # -*- coding: utf-8 -*-
 """
-store.py - Enregistrement des profils personnalisés sur la carte.
+store.py - Enregistrement de la configuration sur la carte.
 
 =====================================================================
-À QUOI ÇA SERT
+A QUOI CA SERT
 =====================================================================
-La page web du mode configuration modifie tes profils. Il faut bien les
-ranger quelque part pour qu'ils survivent au débranchement : c'est le rôle
-de ce module. Il lit et écrit un fichier JSON sur la mémoire flash de la
-carte (`profils.json` par défaut).
+Les pages web modifient tes profils, tes macros et ta liste de logiciels.
+Il faut bien ranger tout cela quelque part pour que ca survive au
+debranchement : c'est le role de ce module. Il lit et ecrit un fichier
+JSON sur la memoire flash (`profils.json` par defaut).
 
 Le JSON est un format texte simple, lisible, que tu peux ouvrir dans
 Thonny pour voir ce que contient ta configuration.
 
+C'est aussi ici qu'est definie la forme d'echange avec les deux pages web
+(vers_json / depuis_json) : le portail WiFi et le compagnon USB parlent
+donc exactement le meme langage.
+
 =====================================================================
-DEUX RÈGLES DE SÉCURITÉ
+DEUX REGLES DE SECURITE
 =====================================================================
-1. **Rien n'est enregistré sans avoir été vérifié.** Chaque macro est
-   traduite en codes clavier AVANT l'écriture. Si un caractère est
-   impossible à taper ou si un nom de touche est inconnu, l'enregistrement
-   est refusé avec un message clair. Impossible d'enregistrer une
-   configuration qui planterait au prochain démarrage.
+1. **Rien n'est enregistre sans avoir ete verifie.** Chaque macro est
+   traduite en codes clavier AVANT l'ecriture. Si un caractere est
+   impossible a taper ou si un nom de touche est inconnu, l'enregistrement
+   est refuse avec un message clair. Impossible d'enregistrer une
+   configuration qui planterait au prochain demarrage.
 
 2. **Le fichier n'est jamais indispensable.** S'il est absent, illisible
-   ou incohérent, le firmware repart sur les profils d'usine de
-   `profiles.py` en le signalant dans le REPL. Une carte ne peut pas
-   devenir inutilisable à cause de ce fichier ; au pire, efface-le.
+   ou incoherent, le firmware repart sur les valeurs d'usine de
+   profiles.py en le signalant dans le REPL. Une carte ne peut pas
+   devenir inutilisable a cause de ce fichier ; au pire, efface-le.
 
 =====================================================================
 FORME DU FICHIER
 =====================================================================
     {
-      "version": 1,
+      "version": 2,
       "ordre": ["BLENDER", "CIVIL3D", "WORD", "WINDOWS"],
       "profils": {
         "CIVIL3D": {
           "titre": "CIVIL 3D",
           "touches": [
-            {"label": "MATCH", "type": "text_enter", "valeur": "_MATCHPROP"},
+            {"label": "MATCH",
+             "court":  {"type": "text_enter", "valeur": "_MATCHPROP"},
+             "long":   {"type": "none", "valeur": ""},
+             "double": {"type": "none", "valeur": ""}},
             ...
           ]
         }
+      },
+      "apps": {
+        "repli": {"profil": "WINDOWS", "abrege": "Win"},
+        "liste": [{"exe": "acad.exe", "profil": "CIVIL3D", "abrege": "C3D"}]
       }
     }
 
 Le "type" vaut "key", "combo", "text", "text_enter" ou "none".
-Pour un "combo", la valeur s'écrit avec des plus : "CTRL+SHIFT+ESC".
+Pour un "combo", la valeur s'ecrit avec des plus : "CTRL+SHIFT+ESC".
 """
 
 import json
@@ -57,162 +68,247 @@ TYPES = ("key", "combo", "text", "text_enter", "none")
 
 
 # =====================================================================
-# Conversion entre la forme JSON (page web) et la forme interne (firmware)
+# Conversion entre la forme des pages web et la forme interne
 # =====================================================================
 def action_vers_json(actions):
-    """Forme interne -> (type, valeur texte) pour la page web."""
+    """Forme interne -> (type, valeur texte) pour les formulaires."""
     if not actions:
         return "none", ""
-    kind, value = actions[0]
-    if kind == "combo":
-        return "combo", "+".join(value)
-    return kind, str(value)
+    genre, valeur = actions[0]
+    if genre == "combo":
+        return "combo", "+".join(valeur)
+    return genre, str(valeur)
 
 
-def action_depuis_json(kind, valeur):
+def action_depuis_json(genre, valeur):
     """(type, valeur texte) -> forme interne."""
-    if kind == "none":
+    if genre == "none" or (genre in ("text", "text_enter") and not valeur):
         return []
-    if kind == "combo":
+    if genre == "combo":
         touches = tuple(p.strip() for p in str(valeur).split("+") if p.strip())
         if not touches:
             raise ValueError("combinaison vide")
         return [("combo", touches)]
-    if kind in ("key", "text", "text_enter"):
-        return [(kind, str(valeur))]
-    raise ValueError("type inconnu : " + str(kind))
+    if genre in ("key", "text", "text_enter"):
+        if not str(valeur).strip():
+            return []
+        return [(genre, str(valeur))]
+    raise ValueError("type inconnu : " + str(genre))
 
 
 # =====================================================================
-# Vérification
+# Verification
 # =====================================================================
 def verifier(profils, ordre, nb_touches):
-    """Retourne la liste des problèmes. Liste vide = configuration saine."""
+    """Retourne la liste des problemes. Liste vide = configuration saine."""
     problemes = []
 
     if not ordre:
         problemes.append("l'ordre des profils est vide")
     if len(set(ordre)) != len(ordre):
         problemes.append("un profil apparait deux fois dans l'ordre")
-
     for nom in ordre:
         if nom not in profils:
             problemes.append("l'ordre cite '%s' qui n'existe pas" % nom)
 
-    for nom, macros in profils.items():
-        if len(macros) != nb_touches:
+    for nom, touches in profils.items():
+        if len(touches) != nb_touches:
             problemes.append("%s : %d touches au lieu de %d"
-                             % (nom, len(macros), nb_touches))
-        for index, macro in enumerate(macros):
-            label, actions = macro
+                             % (nom, len(touches), nb_touches))
+        for index, (label, gestes) in enumerate(touches):
             if len(label) > P.LABEL_MAX:
                 problemes.append("%s B%d : libelle '%s' depasse %d caracteres"
                                  % (nom, index + 1, label, P.LABEL_MAX))
-            try:
-                # La vérification qui compte : la macro est-elle réellement
-                # tapable avec la disposition clavier choisie ?
-                compile_actions(actions, C.KEYBOARD_LAYOUT)
-            except Exception as exc:
-                problemes.append("%s B%d (%s) : %s"
-                                 % (nom, index + 1, label, exc))
+            if not (gestes or {}).get(P.COURT):
+                # Un appui court vide est autorise : la touche est inactive.
+                pass
+            for geste, actions in (gestes or {}).items():
+                if geste not in P.GESTES:
+                    problemes.append("%s B%d : geste inconnu '%s'"
+                                     % (nom, index + 1, geste))
+                    continue
+                try:
+                    # La verification qui compte : la macro est-elle
+                    # reellement tapable avec la disposition choisie ?
+                    compile_actions(actions, C.KEYBOARD_LAYOUT)
+                except Exception as exc:
+                    problemes.append("%s B%d %s (%s) : %s"
+                                     % (nom, index + 1, geste, label, exc))
     return problemes
 
 
 # =====================================================================
-# Lecture
+# Valeurs d'usine
 # =====================================================================
 def defauts():
-    """Copie des profils d'usine, dans la forme interne."""
+    """Copie des valeurs d'usine, dans la forme interne."""
     profils = {}
-    for nom, macros in P.PROFILES.items():
-        profils[nom] = [(label, list(actions)) for label, actions in macros]
-    return profils, list(C.PROFILES_ORDER)
+    for nom, touches in P.PROFILES.items():
+        profils[nom] = [(label, dict(gestes)) for label, gestes in touches]
+    apps = [tuple(a) for a in P.APPS]
+    return profils, list(C.PROFILES_ORDER), dict(P.TITLES), apps, tuple(P.APPS_REPLI)
 
 
+# =====================================================================
+# Conversion vers et depuis les pages web
+# =====================================================================
+def vers_json(nb_touches, stats=None):
+    """Configuration complete, prete a etre envoyee a une page web."""
+    profils, ordre, titres, apps, repli, origine = charger(nb_touches)
+    blocs = {}
+    for nom, touches in profils.items():
+        liste = []
+        for index, (label, gestes) in enumerate(touches):
+            entree = {"label": label}
+            for geste in P.GESTES:
+                genre, valeur = action_vers_json((gestes or {}).get(geste))
+                entree[geste] = {"type": genre, "valeur": valeur}
+            if stats is not None:
+                entree["usages"] = stats.pour(nom)[index]
+            liste.append(entree)
+        blocs[nom] = {"titre": titres.get(nom, nom), "touches": liste}
+
+    return {
+        "version": 2,
+        "ordre": ordre,
+        "profils": blocs,
+        "apps": {
+            "repli": {"profil": repli[0], "abrege": repli[1]},
+            "liste": [{"exe": e, "profil": p, "abrege": a} for e, p, a in apps],
+        },
+        "touches": nb_touches,
+        "gestes": list(P.GESTES),
+        "origine": origine,
+    }
+
+
+def depuis_json(data, nb_touches):
+    """Forme web -> forme interne. Leve une exception si c'est illisible."""
+    ordre = [str(n) for n in data["ordre"]]
+    profils, titres = {}, {}
+    for nom, bloc in data["profils"].items():
+        touches = []
+        for entree in bloc["touches"][:nb_touches]:
+            gestes = {}
+            if "type" in entree and not any(g in entree for g in P.GESTES):
+                # Fichier de version 1 : une seule macro par touche, ecrite
+                # a plat. On la reprend comme appui court, les deux autres
+                # gestes restent libres. Personne ne perd sa configuration
+                # en mettant le firmware a jour.
+                entree = dict(entree)
+                entree[P.COURT] = {"type": entree.get("type", "none"),
+                                   "valeur": entree.get("valeur", "")}
+            for geste in P.GESTES:
+                champ = entree.get(geste) or {}
+                actions = action_depuis_json(champ.get("type", "none"),
+                                             champ.get("valeur", ""))
+                if actions:
+                    gestes[geste] = actions
+            touches.append((str(entree.get("label", ""))[:P.LABEL_MAX], gestes))
+        while len(touches) < nb_touches:
+            touches.append(("", {}))
+        profils[str(nom)] = touches
+        titres[str(nom)] = str(bloc.get("titre", nom))
+
+    bloc_apps = data.get("apps") or {}
+    apps = []
+    for entree in bloc_apps.get("liste", []):
+        exe = str(entree.get("exe", "")).strip().lower()
+        if exe:
+            apps.append((exe, str(entree.get("profil", "")).strip().upper(),
+                         str(entree.get("abrege", ""))[:7]))
+    bloc_repli = bloc_apps.get("repli") or {}
+    repli = (str(bloc_repli.get("profil", P.APPS_REPLI[0])).upper(),
+             str(bloc_repli.get("abrege", P.APPS_REPLI[1]))[:7])
+    return profils, ordre, titres, apps, repli
+
+
+# =====================================================================
+# Lecture et ecriture du fichier
+# =====================================================================
 def charger(nb_touches):
-    """Retourne (profils, ordre, titres, origine).
+    """Retourne (profils, ordre, titres, apps, repli, origine).
 
-    origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire
-    d'où viennent les macros actives.
+    origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire d'ou
+    viennent les macros actives.
     """
-    titres = dict(P.TITLES)
     try:
         with open(C.PROFILES_FILE) as fichier:
             data = json.load(fichier)
     except OSError:
-        return defauts() + (titres, "usine")          # fichier absent : normal
+        return defauts() + ("usine",)              # fichier absent : normal
     except Exception as exc:
-        print("[store] %s illisible (%s), retour aux profils d'usine"
+        print("[store] %s illisible (%s), retour aux valeurs d'usine"
               % (C.PROFILES_FILE, exc))
-        return defauts() + (titres, "usine")
+        return defauts() + ("usine",)
 
     try:
-        ordre = [str(n) for n in data["ordre"]]
-        profils = {}
-        for nom, bloc in data["profils"].items():
-            macros = []
-            for touche in bloc["touches"]:
-                actions = action_depuis_json(touche.get("type", "none"),
-                                             touche.get("valeur", ""))
-                macros.append((str(touche.get("label", ""))[:P.LABEL_MAX],
-                               actions))
-            profils[str(nom)] = macros
-            if bloc.get("titre"):
-                titres[str(nom)] = str(bloc["titre"])
+        profils, ordre, titres, apps, repli = depuis_json(data, nb_touches)
     except Exception as exc:
-        print("[store] %s mal formé (%s), retour aux profils d'usine"
+        print("[store] %s mal forme (%s), retour aux valeurs d'usine"
               % (C.PROFILES_FILE, exc))
-        return defauts() + (dict(P.TITLES), "usine")
+        return defauts() + ("usine",)
 
     problemes = verifier(profils, ordre, nb_touches)
     if problemes:
-        print("[store] %s refuse, retour aux profils d'usine :" % C.PROFILES_FILE)
+        print("[store] %s refuse, retour aux valeurs d'usine :" % C.PROFILES_FILE)
         for probleme in problemes:
             print("   -", probleme)
-        return defauts() + (dict(P.TITLES), "usine")
+        return defauts() + ("usine",)
 
-    return profils, ordre, titres, "fichier"
+    return profils, ordre, titres, apps, repli, "fichier"
 
 
-# =====================================================================
-# Écriture
-# =====================================================================
-def enregistrer(profils, ordre, titres, nb_touches):
-    """Vérifie puis écrit le fichier. Retourne (True, "") ou (False, raison)."""
+def enregistrer(profils, ordre, titres, apps, repli, nb_touches):
+    """Verifie puis ecrit. Retourne (True, "") ou (False, raison)."""
     problemes = verifier(profils, ordre, nb_touches)
     if problemes:
         return False, " ; ".join(problemes)
 
     blocs = {}
-    for nom, macros in profils.items():
-        touches = []
-        for label, actions in macros:
-            kind, valeur = action_vers_json(actions)
-            touches.append({"label": label, "type": kind, "valeur": valeur})
-        blocs[nom] = {"titre": titres.get(nom, nom), "touches": touches}
+    for nom, touches in profils.items():
+        liste = []
+        for label, gestes in touches:
+            entree = {"label": label}
+            for geste in P.GESTES:
+                genre, valeur = action_vers_json((gestes or {}).get(geste))
+                entree[geste] = {"type": genre, "valeur": valeur}
+            liste.append(entree)
+        blocs[nom] = {"titre": titres.get(nom, nom), "touches": liste}
 
-    data = {"version": 1, "ordre": list(ordre), "profils": blocs}
+    data = {"version": 2, "ordre": list(ordre), "profils": blocs,
+            "apps": {"repli": {"profil": repli[0], "abrege": repli[1]},
+                     "liste": [{"exe": e, "profil": p, "abrege": a}
+                               for e, p, a in apps]}}
     try:
-        # On écrit d'abord un fichier temporaire, puis on le renomme :
-        # une coupure de courant en plein enregistrement ne peut donc pas
-        # laisser un profils.json à moitié écrit.
+        # On ecrit d'abord un fichier temporaire, puis on le renomme : une
+        # coupure de courant en plein enregistrement ne peut donc pas
+        # laisser un profils.json a moitie ecrit.
         temporaire = C.PROFILES_FILE + ".tmp"
         with open(temporaire, "w") as fichier:
             json.dump(data, fichier)
+        import os
         try:
-            import os
             os.remove(C.PROFILES_FILE)
         except OSError:
             pass
-        import os
         os.rename(temporaire, C.PROFILES_FILE)
     except Exception as exc:
         return False, "ecriture impossible : %s" % exc
     return True, ""
 
 
+def enregistrer_json(data, nb_touches):
+    """Enregistre directement une configuration recue d'une page web."""
+    try:
+        profils, ordre, titres, apps, repli = depuis_json(data, nb_touches)
+    except Exception as exc:
+        return False, "donnees illisibles : %s" % exc
+    return enregistrer(profils, ordre, titres, apps, repli, nb_touches)
+
+
 def effacer():
-    """Supprime le fichier : retour aux profils d'usine au prochain RESET."""
+    """Supprime le fichier : retour aux valeurs d'usine au prochain RESET."""
     try:
         import os
         os.remove(C.PROFILES_FILE)

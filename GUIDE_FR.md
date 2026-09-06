@@ -10,6 +10,16 @@
 >   condensateurs, diodes et zeners. À lire avant de souder.
 > - `docs/01-recherche-usb-hid.md` — la recherche USB détaillée et sourcée.
 > - `docs/03-tests-progressifs.md` — les tests pas à pas, version détaillée.
+>
+> **Ce guide décrit la V0 : le montage et la mise en route du matériel.**
+> Il reste valable tel quel. Ce que la V1 a ajouté par-dessus est décrit
+> ailleurs, une fois le macropad monté et fonctionnel :
+> - `docs/07-mode-configuration.md` — changer ses macros depuis un
+>   navigateur, sans Thonny.
+> - `docs/08-detection-auto.md` — le profil suit le logiciel actif, et
+>   l'écran affiche le fichier ouvert.
+> - `docs/09-ecran-et-gestes.md` — **six touches, trois gestes chacune**
+>   (court, long, double), l'écran tableau et le compteur d'usage.
 
 Projet préparé le 6 septembre 2026. Lire les étapes dans l'ordre. Les fichiers modifiables sont dans `device/`. **HID_ENABLED est livré à False** : le premier branchement ne tape rien. Ne pas activer les macros avant les tests 1 à 7.
 
@@ -140,6 +150,8 @@ La carte possède une nappe caméra utilisant notamment nos GPIO. **Laisser cett
 | B2 | GPIO5 | Switch vers GND | Idem |
 | B3 | GPIO6 | Switch vers GND | Idem |
 | B4 | GPIO7 | Switch vers GND | Idem |
+| B5 *(V1)* | GPIO12 | Switch vers GND | Idem ; vérifier que la nappe caméra ne la prend pas |
+| B6 *(V1)* | GPIO13 | Switch vers GND | Idem ; vérifier que la nappe caméra ne la prend pas |
 | OLED SDA | GPIO8 | SDA | I2C ; utilisable si caméra absente |
 | OLED SCL | GPIO9 | SCL | I2C ; pas une broche BOOT sur S3 |
 | OLED VCC/GND | 3V3 / GND | VCC / GND | Ne pas alimenter en 5 V dans cette configuration |
@@ -242,7 +254,7 @@ Ne pas laisser le focus dans le REPL pendant un test HID : le périphérique éc
 
 ## 17. Premier démarrage
 
-Après les tests élémentaires, placer main.py sur la carte, laisser HID désactivé, RESET sans B1. OLED : CIVIL 3D avec quatre lignes B1–B4. Attendre **2,5 secondes**. Les entrées tenues pendant l'initialisation doivent être relâchées avant de déclencher. Les TTP doivent être configurés en **mode momentané/direct**, pas toggle, et rester libres de doigts pendant la stabilisation au démarrage. Le réglage HIGH/LOW du code ne convertit pas un module toggle en momentané.
+Après les tests élémentaires, placer main.py sur la carte, laisser HID désactivé, RESET sans B1. OLED : le nom du profil en gros, puis le tableau des commandes — une ligne par touche, avec les colonnes `CRT` / `LNG` / `DBL` (appui court, appui long, double appui) ; quatre lignes visibles à la fois, qui défilent toutes les 2,5 secondes. Voir `docs/09-ecran-et-gestes.md`. Attendre **2,5 secondes**. Les entrées tenues pendant l'initialisation doivent être relâchées avant de déclencher. Les TTP doivent être configurés en **mode momentané/direct**, pas toggle, et rester libres de doigts pendant la stabilisation au démarrage. Le réglage HIGH/LOW du code ne convertit pas un module toggle en momentané.
 
 Pas de matrice, d'encodeur, de double-clic ou de réseau dans cette V0. L'écran absent/HS est signalé puis désactivé. Le scan I2C reconnaît une adresse 0x3C/0x3D, **il ne prouve pas que le contrôleur est SH1106**. Un écran SSD1306 peut répondre à la même adresse.
 
@@ -333,6 +345,11 @@ Faire ensuite 20 à 30 pressions par touche, alterner rapidement NEXT/PREVIOUS, 
 - [ ] B2 fonctionnel
 - [ ] B3 fonctionnel
 - [ ] B4 fonctionnel
+- [ ] B5 fonctionnel *(V1)*
+- [ ] B6 fonctionnel *(V1)*
+- [ ] Appui long reconnu sur une touche qui en a un *(V1)*
+- [ ] Double appui reconnu sur une touche qui en a un *(V1)*
+- [ ] L'écran saute sur la touche utilisée et la surligne *(V1)*
 - [ ] TTP PREVIOUS fonctionnel, en mode momentané
 - [ ] TTP NEXT fonctionnel, en mode momentané
 - [ ] Navigation circulaire des profils OK

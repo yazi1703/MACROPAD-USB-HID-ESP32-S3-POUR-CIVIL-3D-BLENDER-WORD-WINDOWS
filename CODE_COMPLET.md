@@ -17,8 +17,10 @@ de `device/`, pas ce document.
 - [`device/main.py`](#devicemainpy)
 - [`device/runtime.py`](#deviceruntimepy)
 - [`device/inputs.py`](#deviceinputspy)
+- [`device/gestures.py`](#devicegesturespy)
 - [`device/layouts.py`](#devicelayoutspy)
 - [`device/store.py`](#devicestorepy)
+- [`device/stats.py`](#devicestatspy)
 - [`device/portal.py`](#deviceportalpy)
 - [`device/link.py`](#devicelinkpy)
 - [`device/hid_keyboard.py`](#devicehidkeyboardpy)
@@ -36,7 +38,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`199 lignes - sha256 8a4803bc131c0fb7`
+`245 lignes - sha256 a38a88b54622025d`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -193,11 +195,44 @@ LINK_ENABLED = True
 AUTO_TIMEOUT_MS = 15000
 
 # =====================================================================
+# 4 quater. COMPTEUR D'USAGE ET ECONOMISEUR D'ECRAN
+# =====================================================================
+# Le macropad compte les appuis sur chaque macro. La page de configuration
+# te les classe : tu sais quelles touches meritent la premiere rangee de
+# ton boitier, et lesquelles ne servent jamais.
+STATS_ENABLED = True
+STATS_FILE = "stats.json"
+# On n'ecrit sur la flash que toutes les N frappes : la memoire d'un
+# microcontroleur supporte un nombre limite d'ecritures, inutile de l'user
+# pour une statistique. Au pire on perd les N-1 derniers appuis.
+STATS_SAVE_EVERY = 25
+
+# --- Anti-marquage de l'ecran ---------------------------------------
+# Un OLED qui affiche la meme image pendant des heures MARQUE : les pixels
+# allumes en permanence vieillissent plus vite et laissent un fantome
+# visible. Le bandeau inverse du haut est exactement le pire cas.
+# Apres un moment sans appui on baisse le contraste, puis on eteint.
+# N'importe quelle touche reveille l'ecran instantanement.
+SCREEN_DIM_MS = 180000      # 3 minutes  -> contraste minimal
+SCREEN_OFF_MS = 900000      # 15 minutes -> ecran eteint
+SCREEN_DIM_CONTRAST = 1     # 0 a 255
+
+# =====================================================================
 # 5. TEMPS ET REACTIVITE (millisecondes)
 # =====================================================================
 # Délai entre la mise sous tension et la prise en compte des touches.
 # Sert de filet : si une macro devenait folle, tu as 2,5 s pour débrancher.
 BOOT_GUARD_MS = 2500
+
+# --- Gestes : appui court, appui long, double appui ------------------
+# Une touche maintenue au-delà de ce délai déclenche sa macro « longue »,
+# si elle en a une. La macro part dès le franchissement du seuil, sans
+# attendre le relâchement : tu la sens partir sous le doigt.
+GESTE_LONG_MS = 400
+# Deux appuis séparés de moins que ce délai forment un double appui.
+# ATTENTION : seules les touches qui ont RÉELLEMENT une macro de double
+# appui attendent ce délai. Les autres partent instantanément.
+GESTE_DOUBLE_MS = 260
 
 DEBOUNCE_MS = 25        # anti-rebond des touches B1 à B4
 ESC_DEBOUNCE_MS = 20    # anti-rebond du bouton ESC
@@ -227,6 +262,19 @@ MACRO_QUEUE_LIMIT = 4
 
 PROFILE_SPLASH_MS = 500     # durée d'affichage du nom du profil en grand
 
+# --- Le tableau des gestes ------------------------------------------
+# L'écran affiche un tableau : une ligne par touche, trois colonnes
+# (appui court, appui long, double appui). Quatre lignes tiennent à
+# l'écran ; s'il y a plus de touches, le tableau défile tout seul.
+TABLE_SCROLL_MS = 2500      # temps d'affichage avant de faire défiler d'un cran
+HIGHLIGHT_MS = 1300         # durée du surlignage de la touche utilisée
+
+# Défilement du nom de document, quand il est trop long pour l'écran.
+# Le nom va-et-vient doucement, avec une pause à chaque extrémité pour te
+# laisser le temps de lire le début puis la fin.
+DOC_SCROLL_MS = 70          # millisecondes par pixel (plus grand = plus lent)
+DOC_SCROLL_PAUSE_MS = 1600  # pause en début et en fin de course
+
 # =====================================================================
 # 6. LED RESPIRANTE
 # =====================================================================
@@ -244,134 +292,181 @@ LED_RETURN_MS = 350     # retour progressif du flash vers la respiration
 
 ## device/profiles.py
 
-`151 lignes - sha256 33b8cbd2fefaffbc`
+`210 lignes - sha256 34cb7214bae98caa`
 
 ```python
 # -*- coding: utf-8 -*-
 """
-profiles.py - Les profils et macros D'USINE du macropad.
+profiles.py - Les profils, macros et logiciels D'USINE du macropad.
 
 =====================================================================
-DEUX FAÇONS DE MODIFIER TES MACROS
+DEUX FACONS DE MODIFIER TES MACROS
 =====================================================================
-1. **La page web** (recommandé) : maintiens B2 pendant le RESET, connecte-toi
-   au WiFi du macropad, ouvre http://192.168.4.1 et modifie tout à la
-   souris. Tes réglages sont enregistrés dans `profils.json` sur la carte.
+1. **Les pages web** (recommande) :
+   - par USB : lance pc/macropad_auto.py, va sur http://127.0.0.1:8765
+   - par WiFi : maintiens B2 au RESET, va sur http://192.168.4.1
+   Tes reglages sont enregistres dans `profils.json` sur la carte.
 
 2. **Ce fichier** : ce sont les valeurs d'usine. Elles servent tant que
-   `profils.json` n'existe pas, et de filet de secours si ce fichier est
-   corrompu. Supprimer `profils.json` revient donc aux valeurs ci-dessous.
+   `profils.json` n'existe pas, et de filet de secours s'il est corrompu.
+   Supprimer `profils.json` revient donc aux valeurs ci-dessous.
 
 =====================================================================
-COMMENT EST ÉCRITE UNE MACRO
+TROIS GESTES PAR TOUCHE
 =====================================================================
-Chaque touche est une paire :   (libellé affiché, liste d'actions)
+Chaque touche peut declencher trois macros differentes :
 
-Le libellé s'affiche sur l'écran OLED : **6 caractères maximum**, parce que
-l'écran affiche maintenant six touches sur trois lignes.
+    appui court   -> obligatoire
+    appui long    -> facultatif (maintenu au-dela de GESTE_LONG_MS)
+    double appui  -> facultatif (deux appuis rapproches)
 
-Les types d'action :
+Six touches donnent donc jusqu'a dix-huit actions.
 
+Une touche qui n'a PAS de macro double part instantanement au
+relachement : on ne paie le delai d'attente que la ou on s'en sert.
+
+On ecrit une touche avec l'aide K() :
+
+    K("ANNUL",  [("combo", ("CTRL", "Z"))],              # appui court
+        long=  [("combo", ("CTRL", "Y"))],               # appui long
+        double=[("text_enter", "_UNDO")])                # double appui
+
+Le libelle s'affiche sur l'ecran : **6 caracteres maximum**.
+
+=====================================================================
+LES TYPES D'ACTION
+=====================================================================
   ("key", "TAB")                  une touche seule
   ("combo", ("CTRL", "Z"))        plusieurs touches ensemble
-  ("text", "_HATCH")              écrire une chaîne
-  ("text_enter", "_HATCH")        écrire une chaîne puis Entrée
+  ("text", "_HATCH")              ecrire une chaine
+  ("text_enter", "_HATCH")        ecrire une chaine puis Entree
 
-La liste permet d'enchaîner plusieurs actions :
+Une liste permet d'enchainer plusieurs actions dans un meme geste :
 
-  ("ZOOM-E", [("text_enter", "_ZOOM"), ("text_enter", "E")])
+    K("ZOOM-E", [("text_enter", "_ZOOM"), ("text_enter", "E")])
 
-Attention : les séquences à plusieurs actions ne sont pas éditables depuis
-la page web (elle ne gère qu'une action par touche). Si tu en écris une ici
-et que tu enregistres ensuite depuis la page web, elle sera remplacée.
+Attention : les sequences a plusieurs actions ne sont pas editables depuis
+les pages web (elles gerent une action par geste). Si tu en ecris une ici
+et que tu enregistres ensuite depuis une page web, elle sera remplacee.
 
 =====================================================================
 NOMS DE TOUCHES UTILISABLES
 =====================================================================
 Modificateurs : CTRL, SHIFT, ALT, WIN, ALTGR
-Touches nommées : ENTER, ESC, TAB, SPACE, BACKSPACE, DELETE, INSERT,
+Touches nommees : ENTER, ESC, TAB, SPACE, BACKSPACE, DELETE, INSERT,
                   HOME, END, PAGEUP, PAGEDOWN, UP, DOWN, LEFT, RIGHT,
-                  F1 à F12, MENU, CAPSLOCK, PRINTSCREEN
-Un seul caractère ("G", "z", "1") : la TOUCHE PHYSIQUE qui écrit ce
-caractère avec la disposition réglée dans config.py.
+                  F1 a F12, MENU, CAPSLOCK, PRINTSCREEN
+Un seul caractere ("G", "z", "1") : la TOUCHE PHYSIQUE qui ecrit ce
+caractere avec la disposition reglee dans config.py.
 """
+
+COURT = "court"
+LONG = "long"
+DOUBLE = "double"
+GESTES = (COURT, LONG, DOUBLE)
+
+LABEL_MAX = 6          # largeur d'un libelle sur l'ecran OLED
+
+
+def K(label, court, long=None, double=None):
+    """Construit une touche. Seul l'appui court est obligatoire."""
+    gestes = {COURT: court}
+    if long:
+        gestes[LONG] = long
+    if double:
+        gestes[DOUBLE] = double
+    return (label, gestes)
+
 
 PROFILES = {
 
     # -----------------------------------------------------------------
     "BLENDER": [
-        ("MOVE",   [("key", "G")]),                  # Grab, déplacer
-        ("ROT",    [("key", "R")]),                  # Rotate
-        ("SCALE",  [("key", "S")]),                  # Scale
-        ("TAB",    [("key", "TAB")]),                # Objet / Édition
-        ("EXTRUD", [("key", "E")]),                  # Extrude
-        ("ANNUL",  [("combo", ("CTRL", "Z"))]),      # Annuler
+        K("MOVE",   [("key", "G")]),
+        K("ROT",    [("key", "R")]),
+        K("SCALE",  [("key", "S")]),
+        K("TAB",    [("key", "TAB")]),
+        K("EXTRUD", [("key", "E")]),
+        K("ANNUL",  [("combo", ("CTRL", "Z"))],
+          long=[("combo", ("CTRL", "SHIFT", "Z"))]),      # retablir
     ],
 
     # -----------------------------------------------------------------
     # Le "_" devant les commandes AutoCAD force la commande INTERNATIONALE :
-    # _MATCHPROP fonctionne même sur un Civil 3D installé en français.
+    # _MATCHPROP fonctionne meme sur un Civil 3D installe en francais.
     "CIVIL3D": [
-        ("MATCH", [("text_enter", "_MATCHPROP")]),      # copier les propriétés
-        ("HATCH", [("text_enter", "_HATCH")]),          # hachures
-        ("ANNUL", [("combo", ("CTRL", "Z"))]),          # annuler
-        ("ISOLE", [("text_enter", "_ISOLATEOBJECTS")]),  # isoler
-        ("ZOOM",  [("text_enter", "_ZOOM")]),           # zoom
-        ("ENREG", [("combo", ("CTRL", "S"))]),          # enregistrer
+        K("MATCH", [("text_enter", "_MATCHPROP")]),
+        K("HATCH", [("text_enter", "_HATCH")]),
+        K("ANNUL", [("combo", ("CTRL", "Z"))],
+          long=[("combo", ("CTRL", "Y"))]),                # retablir
+        K("ISOLE", [("text_enter", "_ISOLATEOBJECTS")],
+          long=[("text_enter", "_UNISOLATEOBJECTS")]),     # tout remontrer
+        K("ZOOM",  [("text_enter", "_ZOOM")],
+          double=[("text_enter", "_REGEN")]),               # regenerer
+        K("ENREG", [("combo", ("CTRL", "S"))]),
     ],
 
     # -----------------------------------------------------------------
-    # RÉSERVE VALIDÉE AVEC TOI : ces raccourcis sont ceux de Word en
-    # ANGLAIS. Sur un Word FRANÇAIS, Gras se fait avec Ctrl+G et non
-    # Ctrl+B. Tu peux corriger cela en trente secondes depuis la page web.
+    # RESERVE VALIDEE AVEC TOI : ces raccourcis sont ceux de Word en
+    # ANGLAIS. Sur un Word FRANCAIS, Gras se fait avec Ctrl+G et non
+    # Ctrl+B. Tu peux corriger cela en trente secondes depuis une page web.
     "WORD": [
-        ("GRAS",   [("combo", ("CTRL", "B"))]),
-        ("ITAL",   [("combo", ("CTRL", "I"))]),
-        ("ENREG",  [("combo", ("CTRL", "S"))]),
-        ("ANNUL",  [("combo", ("CTRL", "Z"))]),
-        ("SOULIG", [("combo", ("CTRL", "U"))]),
-        ("REFAIR", [("combo", ("CTRL", "Y"))]),
+        K("GRAS",   [("combo", ("CTRL", "B"))]),
+        K("ITAL",   [("combo", ("CTRL", "I"))]),
+        K("ENREG",  [("combo", ("CTRL", "S"))]),
+        K("ANNUL",  [("combo", ("CTRL", "Z"))],
+          long=[("combo", ("CTRL", "Y"))]),
+        K("SOULIG", [("combo", ("CTRL", "U"))]),
+        K("REFAIR", [("combo", ("CTRL", "Y"))]),
     ],
 
     # -----------------------------------------------------------------
     "WINDOWS": [
-        ("EXPLOR", [("combo", ("WIN", "E"))]),               # Explorateur
-        ("ALTTAB", [("combo", ("ALT", "TAB"))]),             # changer de fenêtre
-        ("BUREAU", [("combo", ("WIN", "D"))]),               # afficher le bureau
-        ("TACHES", [("combo", ("CTRL", "SHIFT", "ESC"))]),   # gestionnaire
-        ("PRESSE", [("combo", ("WIN", "V"))]),               # presse-papiers
-        ("CAPTUR", [("combo", ("WIN", "SHIFT", "S"))]),      # capture d'écran
+        K("EXPLOR", [("combo", ("WIN", "E"))]),
+        K("ALTTAB", [("combo", ("ALT", "TAB"))]),
+        K("BUREAU", [("combo", ("WIN", "D"))]),
+        K("TACHES", [("combo", ("CTRL", "SHIFT", "ESC"))]),
+        K("PRESSE", [("combo", ("WIN", "V"))]),
+        K("CAPTUR", [("combo", ("WIN", "SHIFT", "S"))]),
     ],
 }
 
-# Nom affiché à l'écran quand il diffère de la clé interne.
+# Nom affiche a l'ecran quand il differe de la cle interne.
 TITLES = {"CIVIL3D": "CIVIL 3D"}
 
-# =====================================================================
-# MACROS DE TEST (utilisées seulement si HID_TEST est réglé dans config.py)
-# =====================================================================
-TESTS = {
-    "LETTER":   [("text", "a")],
-    "ESC":      [("key", "ESC")],
-    "UNDO":     [("combo", ("CTRL", "Z"))],
-    "AZERTY":   [("text", "_ABCDEFGHIJKLMNOPQRSTUVWXYZ")],
-    "COMMANDS": [("text", "_MATCHPROP _HATCH _ISOLATEOBJECTS")],
-}
 
-LABEL_MAX = 6          # largeur d'un libellé sur l'écran OLED
+# =====================================================================
+# ASSOCIATION LOGICIEL -> PROFIL
+# =====================================================================
+# Utilisee par la detection automatique. Le compagnon PC lit cette table
+# sur la carte, ce qui permet de la modifier depuis n'importe laquelle des
+# deux pages web : la configuration reste au meme endroit, sur le macropad.
+#
+#   nom de l'executable : (profil a activer, abreviation affichee)
+#
+# L'abreviation reste fixe a gauche de l'ecran pendant que le nom du
+# fichier defile : tu sais toujours dans quel logiciel tu es.
+APPS = [
+    ("acad.exe",     "CIVIL3D", "C3D"),
+    ("acadlt.exe",   "CIVIL3D", "C3D"),
+    ("blender.exe",  "BLENDER", "Blender"),
+    ("winword.exe",  "WORD",    "Wrd"),
+    ("excel.exe",    "WORD",    "Xls"),
+]
+
+# Profil et abreviation utilises pour tout ce qui n'est pas dans la liste.
+APPS_REPLI = ("WINDOWS", "Win")
 
 
 class ProfileManager:
-    """Se souvient du profil courant et gère la rotation circulaire.
+    """Se souvient du profil courant et gere la rotation circulaire.
 
-    "Circulaire" veut dire qu'après le dernier profil on revient au
-    premier, dans les deux sens. C'est l'opérateur % (reste de la
+    "Circulaire" veut dire qu'apres le dernier profil on revient au
+    premier, dans les deux sens. C'est l'operateur % (reste de la
     division) qui fait ce travail, sans aucun test if.
     """
 
     def __init__(self, order, default, profiles=None, keys_expected=None):
-        # profiles=None : on utilise les profils d'usine ci-dessus.
-        # Sinon on utilise ceux fournis (venant de profils.json).
         self.profiles = PROFILES if profiles is None else profiles
 
         if not order or len(set(order)) != len(order):
@@ -391,13 +486,25 @@ class ProfileManager:
 
     @property
     def macros(self):
-        """Les macros du profil courant."""
+        """Les touches du profil courant : [(libelle, gestes), ...]."""
         return self.profiles[self.name]
 
     def move(self, direction):
-        """direction vaut +1 (profil suivant) ou -1 (profil précédent)."""
+        """direction vaut +1 (profil suivant) ou -1 (profil precedent)."""
         self.index = (self.index + direction) % len(self.order)
         return self.name
+
+
+# =====================================================================
+# MACROS DE TEST (utilisees seulement si HID_TEST est regle dans config.py)
+# =====================================================================
+TESTS = {
+    "LETTER":   [("text", "a")],
+    "ESC":      [("key", "ESC")],
+    "UNDO":     [("combo", ("CTRL", "Z"))],
+    "AZERTY":   [("text", "_ABCDEFGHIJKLMNOPQRSTUVWXYZ")],
+    "COMMANDS": [("text", "_MATCHPROP _HATCH _ISOLATEOBJECTS")],
+}
 ```
 
 ---
@@ -494,52 +601,48 @@ else:
 
 ## device/main.py
 
-`347 lignes - sha256 46787f0efbe3ea74`
+`358 lignes - sha256 fccc91ff57df9170`
 
 ```python
 # -*- coding: utf-8 -*-
 """
-main.py - Le chef d'orchestre. Lancé automatiquement après boot.py.
+main.py - Le chef d'orchestre. Lance automatiquement apres boot.py.
 
 =====================================================================
 LES TROIS MODES
 =====================================================================
-boot.py a déjà décidé lequel s'applique, selon ce que tu maintenais
+boot.py a deja decide lequel s'applique, selon ce que tu maintenais
 pendant le RESET :
 
-  SAFE MODE   (B1) : on affiche un écran d'alerte et on rend la main au
-                     REPL. Aucun clavier n'existe.
-  MODE CONFIG (B2) : on allume le WiFi et on sert la page web de
-                     configuration. Aucun clavier n'existe non plus.
+  SAFE MODE   (B1) : ecran d'alerte, retour au REPL. Aucun clavier.
+  MODE CONFIG (B2) : WiFi + page web de configuration. Aucun clavier.
   NORMAL           : le macropad fait son travail.
 
 =====================================================================
 LE PRINCIPE DU MODE NORMAL : UNE SEULE BOUCLE, JAMAIS D'ATTENTE
 =====================================================================
-Tout tient dans une boucle qui tourne environ 500 fois par seconde. À
+Tout tient dans une boucle qui tourne environ 500 fois par seconde. A
 chaque tour on fait un tout petit peu de chaque travail :
 
-    1. lire les entrées
-    2. traiter ESC en priorité
-    3. traiter les profils et les macros
+    0. ecouter le PC (profil automatique, configuration)
+    1. lire les entrees
+    2. traiter ESC en priorite
+    3. profils, verrouillage, gestes des touches
     4. envoyer AU PLUS un paquet clavier
-    5. mettre à jour la LED
-    6. envoyer AU PLUS une page d'écran
+    5. mettre a jour la LED
+    6. envoyer AU PLUS une page d'ecran
     7. dormir 2 ms, et on recommence
 
-C'est une boucle coopérative : chaque tâche prend un petit morceau de
-temps puis rend la main volontairement. Écrire une commande de seize
-caractères (400 ms) n'empêche donc jamais le bouton ESC de répondre.
-
-L'ordre n'est pas anodin : ESC est traité en tout premier.
+C'est une boucle cooperative : chaque tache prend un petit morceau de
+temps puis rend la main volontairement. Ecrire une commande de seize
+caracteres (400 ms) n'empeche donc jamais le bouton ESC de repondre.
 
 =====================================================================
-D'OÙ VIENNENT LES MACROS
+TROIS GESTES PAR TOUCHE
 =====================================================================
-De `profils.json` s'il existe (créé par la page web), sinon des valeurs
-d'usine de `profiles.py`. Si le fichier est corrompu, on repart sur les
-valeurs d'usine en le signalant : le macropad ne peut pas devenir
-inutilisable à cause d'un fichier de configuration.
+Appui court, appui long, double appui : voir gestures.py. Une touche sans
+macro double part instantanement au relachement ; on ne paie le delai
+d'attente que la ou on s'en sert.
 """
 
 from time import ticks_ms, ticks_diff, sleep_ms
@@ -547,7 +650,9 @@ import config as C
 import runtime
 import store
 from inputs import Inputs
-from profiles import ProfileManager, TESTS
+from profiles import ProfileManager, TESTS, COURT
+from gestures import Gestes
+from stats import Stats
 from display import Display
 from hid_keyboard import HIDKeyboard
 from layouts import compile_actions
@@ -560,9 +665,9 @@ NB_TOUCHES = len(C.BUTTON_PINS)
 # MODE CONFIG : WiFi + page web
 # =====================================================================
 def mode_config(display):
-    """Allume le point d'accès et sert la page de configuration.
+    """Allume le point d'acces et sert la page de configuration.
 
-    Aucun clavier n'a été créé par boot.py : ce mode ne peut rien taper.
+    Aucun clavier n'a ete cree par boot.py : ce mode ne peut rien taper.
     On en sort par un RESET normal.
     """
     from portal import demarrer_ap, arreter_ap, Portail
@@ -571,8 +676,8 @@ def mode_config(display):
     print(" MODE CONFIGURATION")
     print("=" * 46)
 
-    # Une LED allumée fixe, différente de la respiration habituelle :
-    # d'un coup d'œil tu sais que le macropad n'est pas un clavier.
+    # LED allumee fixe, differente de la respiration habituelle : d'un
+    # coup d'oeil tu sais que le macropad n'est pas un clavier.
     led = None
     try:
         from led import Led
@@ -591,7 +696,7 @@ def mode_config(display):
         print("3. Ouvre http://%s dans un navigateur" % adresse)
         print("4. Modifie tes macros, enregistre, puis fais un RESET.")
 
-        portail = Portail(NB_TOUCHES)
+        portail = Portail(NB_TOUCHES, Stats(NB_TOUCHES))
         portail.ouvrir()
         while True:
             portail.service()          # rend la main au bout de 0,25 s
@@ -615,7 +720,6 @@ def mode_config(display):
 def run():
     display = Display()
 
-    # --- SAFE MODE : on n'exécute rien, on rend la main au REPL --------
     if runtime.safe_mode:
         display.message("SAFE MODE", "HID DISABLED", "", "Boutons lisibles",
                         "Aucune frappe")
@@ -624,29 +728,31 @@ def run():
         print("REPL disponible. Diagnostics : import diag; diag.run()")
         return
 
-    # --- MODE CONFIG : WiFi + page web ---------------------------------
     if runtime.config_mode:
         mode_config(display)
         return
 
-    # --- Chargement des macros -----------------------------------------
-    profils, ordre, titres, origine = store.charger(NB_TOUCHES)
+    # --- Chargement de la configuration --------------------------------
+    profils, ordre, titres, apps, repli, origine = store.charger(NB_TOUCHES)
     print("Macros chargees depuis :", origine)
 
     manager = ProfileManager(ordre, C.DEFAULT_PROFILE, profils, NB_TOUCHES)
 
-    # Vérification de TOUTES les macros avant la moindre frappe. Une macro
-    # impossible à taper doit échouer ici, pas au milieu d'une commande.
+    # Verification de TOUTES les macros avant la moindre frappe. Une macro
+    # impossible a taper doit echouer ici, pas au milieu d'une commande.
     for nom in ordre:
-        for label, actions in profils[nom]:
-            compile_actions(actions, C.KEYBOARD_LAYOUT)
+        for label, gestes_touche in profils[nom]:
+            for actions in (gestes_touche or {}).values():
+                compile_actions(actions, C.KEYBOARD_LAYOUT)
     if C.HID_TEST is not None and C.HID_TEST not in TESTS:
         raise ValueError("HID_TEST invalide")
 
     controls = Inputs()
     keyboard = HIDKeyboard(runtime.interface) if runtime.interface else None
+    stats = Stats(NB_TOUCHES)
+    gestes = Gestes(NB_TOUCHES, C.GESTE_LONG_MS, C.GESTE_DOUBLE_MS)
+    gestes.configurer(manager.macros)
 
-    # La LED est un confort : si son initialisation échoue, on continue.
     led = None
     try:
         from led import Led
@@ -654,27 +760,26 @@ def run():
     except Exception as exc:
         print("LED desactivee :", exc)
 
-    # Liaison avec le PC : detection automatique du logiciel actif et
-    # configuration a distance. Facultative : sans le script cote PC, le
-    # macropad fonctionne exactement comme avant.
-    lien = Link(NB_TOUCHES) if C.LINK_ENABLED else None
+    lien = Link(NB_TOUCHES, stats=stats) if C.LINK_ENABLED else None
     verrouille = False          # True = l'auto ne peut plus changer de profil
-    dernier_auto = None         # instant du dernier message du PC
+    dernier_auto = None
 
     def afficher(splash):
         display.profile(titres.get(manager.name, manager.name),
                         manager.macros, ticks_ms(),
                         manager.index, len(ordre), splash)
+        gestes.configurer(manager.macros)
 
     def recharger_profils():
         """Relit profils.json et applique la nouvelle configuration.
 
-        Appele quand le PC vient d'enregistrer des macros : les changements
+        Appele quand une page web vient d'enregistrer : les changements
         prennent effet immediatement, sans RESET.
         """
         nonlocal manager, titres, ordre
         try:
-            neufs, ordre_neuf, titres_neufs, origine_neuve = store.charger(NB_TOUCHES)
+            neufs, ordre_neuf, titres_neufs, _apps, _repli, origine_neuve = \
+                store.charger(NB_TOUCHES)
             nouveau = ProfileManager(ordre_neuf, manager.name, neufs, NB_TOUCHES)
         except Exception as exc:
             print("[main] configuration refusee, on garde l'ancienne :", exc)
@@ -683,6 +788,27 @@ def run():
         afficher(False)
         print("Macros rechargees depuis :", origine_neuve)
 
+    def declencher(index, geste):
+        """Execute la macro correspondant a un geste sur une touche."""
+        label, gestes_touche = manager.macros[index]
+        actions = (gestes_touche or {}).get(geste)
+        if C.HID_TEST is not None:
+            # En mode test, seul l'appui court sur B1 agit.
+            if index != 0 or geste != COURT:
+                return
+            label, actions = C.HID_TEST, TESTS[C.HID_TEST]
+
+        print("%s B%d %s %s" % (manager.name, index + 1, geste, label or "-"))
+        display.surligner(index, ticks_ms())
+        if not actions:
+            print("   (aucune macro sur ce geste)")
+            return
+        stats.compter(manager.name, index)
+        if keyboard:
+            keyboard.submit(actions)
+        else:
+            print("   (HID desactive : rien n'est tape)")
+
     afficher(False)
     print("Profil :", manager.name,
           "HID :", "initialise" if keyboard else "DESACTIVE")
@@ -690,7 +816,7 @@ def run():
         display.message("HID ERROR", "VOIR REPL")
 
     demarre = ticks_ms()
-    arme = False               # False tant que la garde de démarrage dure
+    arme = False
     etait_pret = False
     etat_affiche = None
     dernier_controle = demarre
@@ -720,89 +846,81 @@ def run():
                     elif genre == EVT_RECHARGER:
                         recharger_profils()
 
-            # --- Fin de la garde de démarrage -----------------------
+            # --- Fin de la garde de demarrage ------------------------
             if not arme and ticks_diff(now, demarre) >= C.BOOT_GUARD_MS:
                 arme = True
-                # Si tu tenais encore une touche, on l'ignore : il faudra
-                # la relâcher avant qu'elle ne serve.
                 controls.disarm_held()
                 fronts = []
                 print("Entrees actives ; HID_TEST =", C.HID_TEST)
 
             if arme:
-                appuyes = [nom for nom, front in fronts if front == 1]
+                for nom, front in fronts:
+                    display.reveiller(now)      # tout appui reveille l'ecran
 
-                # --- 1. ESC : priorité absolue, avant tout le reste ---
-                if "ESC" in appuyes:
-                    if keyboard:
-                        keyboard.escape(now)
-                        # tick() tout de suite : le paquet part dans le
-                        # même tour de boucle, sans attendre 2 ms de plus.
-                        keyboard.tick(now)
-                    if led:
-                        led.flash(now)
-                    print("ESC")
-                else:
-                    # --- 2. Changement de profil ---------------------
-                    precedent = "PREVIOUS" in appuyes
-                    suivant = "NEXT" in appuyes
-                    # Les deux TTP touchés EN MEME TEMPS : on bascule le
-                    # verrou. Profil verrouillé = le PC ne peut plus le
-                    # changer tout seul, tu gardes la main.
-                    if ((precedent or suivant)
-                            and controls.items["PREVIOUS"].active()
-                            and controls.items["NEXT"].active()):
-                        verrouille = not verrouille
-                        print("Verrouillage du profil :",
-                              "ACTIF" if verrouille else "inactif")
-                        afficher(False)
-                    elif precedent != suivant:
-                        manager.move(1 if suivant else -1)
-                        if keyboard:
-                            # On annule la macro en cours : hors de question
-                            # que la fin d'une commande de l'ancien profil
-                            # continue de s'écrire après le changement.
-                            keyboard.cancel()
-                        afficher(True)
-                        print("Profil :", manager.name)
-                    else:
-                        # --- 3. Les touches de macro -----------------
-                        for index in range(NB_TOUCHES):
-                            if "B" + str(index + 1) not in appuyes:
-                                continue
-                            label, actions = manager.macros[index]
-                            if C.HID_TEST is not None:
-                                # En mode test, seul B1 agit.
-                                if index != 0:
-                                    continue
-                                label, actions = C.HID_TEST, TESTS[C.HID_TEST]
-                            print(manager.name, "B" + str(index + 1), label)
-                            if not actions:
-                                print("   (touche inactive)")
-                            elif keyboard:
-                                keyboard.submit(actions)
-                            else:
-                                print("   (HID desactive : rien n'est tape)")
+                    # --- 1. ESC : priorite absolue --------------------
+                    if nom == "ESC":
+                        if front == 1:
+                            if keyboard:
+                                keyboard.escape(now)
+                                # tick() tout de suite : le paquet part dans
+                                # le meme tour de boucle.
+                                keyboard.tick(now)
+                            if led:
+                                led.flash(now)
+                            print("ESC")
+                        continue
+
+                    # --- 2. Profils et verrouillage -------------------
+                    if nom in ("PREVIOUS", "NEXT"):
+                        if front != 1:
+                            continue
+                        # Les deux TTP touches EN MEME TEMPS : on bascule le
+                        # verrou. Profil verrouille = le PC ne peut plus le
+                        # changer tout seul, tu gardes la main.
+                        if (controls.items["PREVIOUS"].active()
+                                and controls.items["NEXT"].active()):
+                            verrouille = not verrouille
+                            print("Verrouillage du profil :",
+                                  "ACTIF" if verrouille else "inactif")
+                            afficher(False)
+                        else:
+                            manager.move(1 if nom == "NEXT" else -1)
+                            if keyboard:
+                                # Hors de question que la fin d'une commande
+                                # de l'ancien profil continue de s'ecrire.
+                                keyboard.cancel()
+                            afficher(True)
+                            print("Profil :", manager.name)
+                        continue
+
+                    # --- 3. Les touches de macro ----------------------
+                    if nom.startswith("B"):
+                        index = int(nom[1:]) - 1
+                        if front == 1:
+                            geste = gestes.appui(index, now)
+                        else:
+                            geste = gestes.relachement(index, now)
+                        if geste:
+                            declencher(index, geste)
+
+                # Appuis longs et doubles appuis arrives a echeance.
+                for index, geste in gestes.service(now):
+                    declencher(index, geste)
 
             # --- 4. Travaux de fond, tous non bloquants -------------
             if keyboard:
                 keyboard.tick(now)
                 pret = keyboard.ready()
-                # Au moment précis où Windows ouvre le clavier, on ignore
-                # ce qui est déjà maintenu : sinon un doigt encore posé
-                # déclencherait une macro dès la connexion.
                 if pret and not etait_pret:
                     controls.disarm_held()
                 etait_pret = pret
 
-            # Petit indicateur en haut à droite de l'écran, rafraîchi
-            # seulement quand il change (un redessin coûte 8 tours).
             if ticks_diff(now, dernier_controle) >= 250:
                 dernier_controle = now
                 auto = (dernier_auto is not None
                         and ticks_diff(now, dernier_auto) < C.AUTO_TIMEOUT_MS)
                 if verrouille:
-                    etat = "LOCK"          # tu as verrouillé le profil
+                    etat = "LOCK"          # tu as verrouille le profil
                 elif keyboard is None:
                     etat = "OFF"
                 elif keyboard.fault:
@@ -821,7 +939,6 @@ def run():
                 try:
                     led.tick(now)
                 except Exception as exc:
-                    # Une panne de LED ne doit pas arrêter le clavier.
                     print("LED arretee :", exc)
                     try:
                         led.close()
@@ -833,13 +950,14 @@ def run():
             sleep_ms(C.LOOP_MS)
 
     finally:
-        # Ce bloc s'exécute TOUJOURS : arrêt normal, Ctrl-C dans Thonny,
-        # ou erreur imprévue. C'est là qu'on garantit qu'aucune touche ne
-        # reste enfoncée côté Windows et que la LED est éteinte.
+        # Ce bloc s'execute TOUJOURS : arret normal, Ctrl-C, ou erreur.
+        # C'est la qu'on garantit qu'aucune touche ne reste enfoncee cote
+        # Windows, que la LED est eteinte et que les compteurs sont sauves.
         if keyboard:
             keyboard.close()
         if led:
             led.close()
+        stats.enregistrer()
 
 
 if __name__ == "__main__":
@@ -1045,6 +1163,157 @@ class Inputs:
         for _, item in self.sequence:
             if item.active():
                 item.filter.armed = False
+```
+
+---
+
+## device/gestures.py
+
+`142 lignes - sha256 13788873315a15ef`
+
+```python
+# -*- coding: utf-8 -*-
+"""
+gestures.py - Appui court, appui long, double appui.
+
+=====================================================================
+CE QUE CA APPORTE
+=====================================================================
+Chaque touche peut declencher TROIS macros differentes selon la facon
+dont tu appuies :
+
+    appui court   -> macro 1
+    appui long    -> macro 2   (maintenu au-dela de GESTE_LONG_MS)
+    double appui  -> macro 3   (deux appuis rapprochés)
+
+Six touches deviennent donc dix-huit actions, sans un seul composant de
+plus.
+
+=====================================================================
+LE PIEGE DU DOUBLE APPUI, ET COMMENT ON L'EVITE
+=====================================================================
+Pour savoir si un appui est simple ou double, il faut attendre : "est-ce
+qu'un second appui arrive dans les 250 ms ?". Naivement, cela ajoute donc
+250 ms de retard a TOUTES les touches. Inacceptable pour un macropad.
+
+La solution : on ne fait attendre que les touches qui ont VRAIMENT une
+macro de double appui. Une touche qui n'en a pas part instantanement au
+relachement, exactement comme avant. Meme raisonnement pour l'appui long :
+sans macro longue, on ne surveille rien.
+
+C'est main.py qui declare les capacites de chaque touche, a chaque
+changement de profil, avec configurer().
+
+=====================================================================
+LA MACHINE A ETATS, TOUCHE PAR TOUCHE
+=====================================================================
+    REPOS      --appui-->        ENFONCE
+    ENFONCE    --maintenu-->     LONG_ENVOYE   (emet LONG)
+    ENFONCE    --relache-->      REPOS         (emet COURT)
+             ou ATTENTE_DOUBLE   si la touche a une macro double
+    ATTENTE_DOUBLE --appui-->    REPOS         (emet DOUBLE)
+    ATTENTE_DOUBLE --delai-->    REPOS         (emet COURT, tardif)
+    LONG_ENVOYE    --relache-->  REPOS         (rien : deja emis)
+
+L'appui long est emis DES QUE le seuil est franchi, sans attendre le
+relachement : tu sens la macro partir sous ton doigt, c'est bien plus
+agreable que d'attendre d'avoir relache.
+"""
+
+from time import ticks_diff, ticks_add
+
+# Les trois gestes
+COURT = "court"
+LONG = "long"
+DOUBLE = "double"
+
+# Etats internes
+_REPOS = 0
+_ENFONCE = 1
+_ATTENTE_DOUBLE = 2
+_LONG_ENVOYE = 3
+
+
+class Gestes:
+    """Transforme des appuis/relachements bruts en gestes."""
+
+    def __init__(self, nb_touches, long_ms=400, double_ms=260):
+        self.nb_touches = nb_touches
+        self.long_ms = long_ms
+        self.double_ms = double_ms
+        self.etats = [_REPOS] * nb_touches
+        self.instants = [0] * nb_touches          # debut d'appui / fin d'attente
+        # Capacites, mises a jour a chaque changement de profil.
+        self.a_long = [False] * nb_touches
+        self.a_double = [False] * nb_touches
+
+    # ------------------------------------------------------------------
+    def configurer(self, macros):
+        """Declare quelles touches ont une macro longue ou double.
+
+        macros est la liste (libelle, gestes) du profil courant. Une touche
+        sans macro longue ne surveillera pas le maintien ; une touche sans
+        macro double ne fera pas attendre le second appui.
+        """
+        for index in range(self.nb_touches):
+            gestes = {}
+            if index < len(macros):
+                gestes = macros[index][1] or {}
+            self.a_long[index] = bool(gestes.get(LONG))
+            self.a_double[index] = bool(gestes.get(DOUBLE))
+        self.reinitialiser()
+
+    def reinitialiser(self):
+        for index in range(self.nb_touches):
+            self.etats[index] = _REPOS
+
+    # ------------------------------------------------------------------
+    def appui(self, index, now):
+        """Un appui vient d'etre detecte. Retourne un geste ou None."""
+        if not (0 <= index < self.nb_touches):
+            return None
+        etat = self.etats[index]
+        if etat == _ATTENTE_DOUBLE:
+            # Second appui dans le delai : c'est un double.
+            self.etats[index] = _REPOS
+            return DOUBLE
+        self.etats[index] = _ENFONCE
+        self.instants[index] = now
+        return None
+
+    def relachement(self, index, now):
+        """Un relachement vient d'etre detecte. Retourne un geste ou None."""
+        if not (0 <= index < self.nb_touches):
+            return None
+        etat = self.etats[index]
+        if etat == _LONG_ENVOYE:
+            self.etats[index] = _REPOS      # la macro longue est deja partie
+            return None
+        if etat != _ENFONCE:
+            return None
+        if self.a_double[index]:
+            # On attend un eventuel second appui avant de conclure.
+            self.etats[index] = _ATTENTE_DOUBLE
+            self.instants[index] = ticks_add(now, self.double_ms)
+            return None
+        self.etats[index] = _REPOS
+        return COURT
+
+    def service(self, now):
+        """A appeler a chaque tour de boucle. Retourne [(index, geste), ...]."""
+        resultats = []
+        for index in range(self.nb_touches):
+            etat = self.etats[index]
+            if etat == _ENFONCE:
+                if (self.a_long[index]
+                        and ticks_diff(now, self.instants[index]) >= self.long_ms):
+                    self.etats[index] = _LONG_ENVOYE
+                    resultats.append((index, LONG))
+            elif etat == _ATTENTE_DOUBLE:
+                if ticks_diff(now, self.instants[index]) >= 0:
+                    self.etats[index] = _REPOS
+                    resultats.append((index, COURT))
+        return resultats
 ```
 
 ---
@@ -1390,57 +1659,68 @@ def compile_actions(actions, layout, caps_lock=False):
 
 ## device/store.py
 
-`221 lignes - sha256 2a5b3b63026dd7c8`
+`317 lignes - sha256 9e3bedfb00d161e7`
 
 ```python
 # -*- coding: utf-8 -*-
 """
-store.py - Enregistrement des profils personnalisés sur la carte.
+store.py - Enregistrement de la configuration sur la carte.
 
 =====================================================================
-À QUOI ÇA SERT
+A QUOI CA SERT
 =====================================================================
-La page web du mode configuration modifie tes profils. Il faut bien les
-ranger quelque part pour qu'ils survivent au débranchement : c'est le rôle
-de ce module. Il lit et écrit un fichier JSON sur la mémoire flash de la
-carte (`profils.json` par défaut).
+Les pages web modifient tes profils, tes macros et ta liste de logiciels.
+Il faut bien ranger tout cela quelque part pour que ca survive au
+debranchement : c'est le role de ce module. Il lit et ecrit un fichier
+JSON sur la memoire flash (`profils.json` par defaut).
 
 Le JSON est un format texte simple, lisible, que tu peux ouvrir dans
 Thonny pour voir ce que contient ta configuration.
 
+C'est aussi ici qu'est definie la forme d'echange avec les deux pages web
+(vers_json / depuis_json) : le portail WiFi et le compagnon USB parlent
+donc exactement le meme langage.
+
 =====================================================================
-DEUX RÈGLES DE SÉCURITÉ
+DEUX REGLES DE SECURITE
 =====================================================================
-1. **Rien n'est enregistré sans avoir été vérifié.** Chaque macro est
-   traduite en codes clavier AVANT l'écriture. Si un caractère est
-   impossible à taper ou si un nom de touche est inconnu, l'enregistrement
-   est refusé avec un message clair. Impossible d'enregistrer une
-   configuration qui planterait au prochain démarrage.
+1. **Rien n'est enregistre sans avoir ete verifie.** Chaque macro est
+   traduite en codes clavier AVANT l'ecriture. Si un caractere est
+   impossible a taper ou si un nom de touche est inconnu, l'enregistrement
+   est refuse avec un message clair. Impossible d'enregistrer une
+   configuration qui planterait au prochain demarrage.
 
 2. **Le fichier n'est jamais indispensable.** S'il est absent, illisible
-   ou incohérent, le firmware repart sur les profils d'usine de
-   `profiles.py` en le signalant dans le REPL. Une carte ne peut pas
-   devenir inutilisable à cause de ce fichier ; au pire, efface-le.
+   ou incoherent, le firmware repart sur les valeurs d'usine de
+   profiles.py en le signalant dans le REPL. Une carte ne peut pas
+   devenir inutilisable a cause de ce fichier ; au pire, efface-le.
 
 =====================================================================
 FORME DU FICHIER
 =====================================================================
     {
-      "version": 1,
+      "version": 2,
       "ordre": ["BLENDER", "CIVIL3D", "WORD", "WINDOWS"],
       "profils": {
         "CIVIL3D": {
           "titre": "CIVIL 3D",
           "touches": [
-            {"label": "MATCH", "type": "text_enter", "valeur": "_MATCHPROP"},
+            {"label": "MATCH",
+             "court":  {"type": "text_enter", "valeur": "_MATCHPROP"},
+             "long":   {"type": "none", "valeur": ""},
+             "double": {"type": "none", "valeur": ""}},
             ...
           ]
         }
+      },
+      "apps": {
+        "repli": {"profil": "WINDOWS", "abrege": "Win"},
+        "liste": [{"exe": "acad.exe", "profil": "CIVIL3D", "abrege": "C3D"}]
       }
     }
 
 Le "type" vaut "key", "combo", "text", "text_enter" ou "none".
-Pour un "combo", la valeur s'écrit avec des plus : "CTRL+SHIFT+ESC".
+Pour un "combo", la valeur s'ecrit avec des plus : "CTRL+SHIFT+ESC".
 """
 
 import json
@@ -1452,162 +1732,247 @@ TYPES = ("key", "combo", "text", "text_enter", "none")
 
 
 # =====================================================================
-# Conversion entre la forme JSON (page web) et la forme interne (firmware)
+# Conversion entre la forme des pages web et la forme interne
 # =====================================================================
 def action_vers_json(actions):
-    """Forme interne -> (type, valeur texte) pour la page web."""
+    """Forme interne -> (type, valeur texte) pour les formulaires."""
     if not actions:
         return "none", ""
-    kind, value = actions[0]
-    if kind == "combo":
-        return "combo", "+".join(value)
-    return kind, str(value)
+    genre, valeur = actions[0]
+    if genre == "combo":
+        return "combo", "+".join(valeur)
+    return genre, str(valeur)
 
 
-def action_depuis_json(kind, valeur):
+def action_depuis_json(genre, valeur):
     """(type, valeur texte) -> forme interne."""
-    if kind == "none":
+    if genre == "none" or (genre in ("text", "text_enter") and not valeur):
         return []
-    if kind == "combo":
+    if genre == "combo":
         touches = tuple(p.strip() for p in str(valeur).split("+") if p.strip())
         if not touches:
             raise ValueError("combinaison vide")
         return [("combo", touches)]
-    if kind in ("key", "text", "text_enter"):
-        return [(kind, str(valeur))]
-    raise ValueError("type inconnu : " + str(kind))
+    if genre in ("key", "text", "text_enter"):
+        if not str(valeur).strip():
+            return []
+        return [(genre, str(valeur))]
+    raise ValueError("type inconnu : " + str(genre))
 
 
 # =====================================================================
-# Vérification
+# Verification
 # =====================================================================
 def verifier(profils, ordre, nb_touches):
-    """Retourne la liste des problèmes. Liste vide = configuration saine."""
+    """Retourne la liste des problemes. Liste vide = configuration saine."""
     problemes = []
 
     if not ordre:
         problemes.append("l'ordre des profils est vide")
     if len(set(ordre)) != len(ordre):
         problemes.append("un profil apparait deux fois dans l'ordre")
-
     for nom in ordre:
         if nom not in profils:
             problemes.append("l'ordre cite '%s' qui n'existe pas" % nom)
 
-    for nom, macros in profils.items():
-        if len(macros) != nb_touches:
+    for nom, touches in profils.items():
+        if len(touches) != nb_touches:
             problemes.append("%s : %d touches au lieu de %d"
-                             % (nom, len(macros), nb_touches))
-        for index, macro in enumerate(macros):
-            label, actions = macro
+                             % (nom, len(touches), nb_touches))
+        for index, (label, gestes) in enumerate(touches):
             if len(label) > P.LABEL_MAX:
                 problemes.append("%s B%d : libelle '%s' depasse %d caracteres"
                                  % (nom, index + 1, label, P.LABEL_MAX))
-            try:
-                # La vérification qui compte : la macro est-elle réellement
-                # tapable avec la disposition clavier choisie ?
-                compile_actions(actions, C.KEYBOARD_LAYOUT)
-            except Exception as exc:
-                problemes.append("%s B%d (%s) : %s"
-                                 % (nom, index + 1, label, exc))
+            if not (gestes or {}).get(P.COURT):
+                # Un appui court vide est autorise : la touche est inactive.
+                pass
+            for geste, actions in (gestes or {}).items():
+                if geste not in P.GESTES:
+                    problemes.append("%s B%d : geste inconnu '%s'"
+                                     % (nom, index + 1, geste))
+                    continue
+                try:
+                    # La verification qui compte : la macro est-elle
+                    # reellement tapable avec la disposition choisie ?
+                    compile_actions(actions, C.KEYBOARD_LAYOUT)
+                except Exception as exc:
+                    problemes.append("%s B%d %s (%s) : %s"
+                                     % (nom, index + 1, geste, label, exc))
     return problemes
 
 
 # =====================================================================
-# Lecture
+# Valeurs d'usine
 # =====================================================================
 def defauts():
-    """Copie des profils d'usine, dans la forme interne."""
+    """Copie des valeurs d'usine, dans la forme interne."""
     profils = {}
-    for nom, macros in P.PROFILES.items():
-        profils[nom] = [(label, list(actions)) for label, actions in macros]
-    return profils, list(C.PROFILES_ORDER)
+    for nom, touches in P.PROFILES.items():
+        profils[nom] = [(label, dict(gestes)) for label, gestes in touches]
+    apps = [tuple(a) for a in P.APPS]
+    return profils, list(C.PROFILES_ORDER), dict(P.TITLES), apps, tuple(P.APPS_REPLI)
 
 
+# =====================================================================
+# Conversion vers et depuis les pages web
+# =====================================================================
+def vers_json(nb_touches, stats=None):
+    """Configuration complete, prete a etre envoyee a une page web."""
+    profils, ordre, titres, apps, repli, origine = charger(nb_touches)
+    blocs = {}
+    for nom, touches in profils.items():
+        liste = []
+        for index, (label, gestes) in enumerate(touches):
+            entree = {"label": label}
+            for geste in P.GESTES:
+                genre, valeur = action_vers_json((gestes or {}).get(geste))
+                entree[geste] = {"type": genre, "valeur": valeur}
+            if stats is not None:
+                entree["usages"] = stats.pour(nom)[index]
+            liste.append(entree)
+        blocs[nom] = {"titre": titres.get(nom, nom), "touches": liste}
+
+    return {
+        "version": 2,
+        "ordre": ordre,
+        "profils": blocs,
+        "apps": {
+            "repli": {"profil": repli[0], "abrege": repli[1]},
+            "liste": [{"exe": e, "profil": p, "abrege": a} for e, p, a in apps],
+        },
+        "touches": nb_touches,
+        "gestes": list(P.GESTES),
+        "origine": origine,
+    }
+
+
+def depuis_json(data, nb_touches):
+    """Forme web -> forme interne. Leve une exception si c'est illisible."""
+    ordre = [str(n) for n in data["ordre"]]
+    profils, titres = {}, {}
+    for nom, bloc in data["profils"].items():
+        touches = []
+        for entree in bloc["touches"][:nb_touches]:
+            gestes = {}
+            if "type" in entree and not any(g in entree for g in P.GESTES):
+                # Fichier de version 1 : une seule macro par touche, ecrite
+                # a plat. On la reprend comme appui court, les deux autres
+                # gestes restent libres. Personne ne perd sa configuration
+                # en mettant le firmware a jour.
+                entree = dict(entree)
+                entree[P.COURT] = {"type": entree.get("type", "none"),
+                                   "valeur": entree.get("valeur", "")}
+            for geste in P.GESTES:
+                champ = entree.get(geste) or {}
+                actions = action_depuis_json(champ.get("type", "none"),
+                                             champ.get("valeur", ""))
+                if actions:
+                    gestes[geste] = actions
+            touches.append((str(entree.get("label", ""))[:P.LABEL_MAX], gestes))
+        while len(touches) < nb_touches:
+            touches.append(("", {}))
+        profils[str(nom)] = touches
+        titres[str(nom)] = str(bloc.get("titre", nom))
+
+    bloc_apps = data.get("apps") or {}
+    apps = []
+    for entree in bloc_apps.get("liste", []):
+        exe = str(entree.get("exe", "")).strip().lower()
+        if exe:
+            apps.append((exe, str(entree.get("profil", "")).strip().upper(),
+                         str(entree.get("abrege", ""))[:7]))
+    bloc_repli = bloc_apps.get("repli") or {}
+    repli = (str(bloc_repli.get("profil", P.APPS_REPLI[0])).upper(),
+             str(bloc_repli.get("abrege", P.APPS_REPLI[1]))[:7])
+    return profils, ordre, titres, apps, repli
+
+
+# =====================================================================
+# Lecture et ecriture du fichier
+# =====================================================================
 def charger(nb_touches):
-    """Retourne (profils, ordre, titres, origine).
+    """Retourne (profils, ordre, titres, apps, repli, origine).
 
-    origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire
-    d'où viennent les macros actives.
+    origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire d'ou
+    viennent les macros actives.
     """
-    titres = dict(P.TITLES)
     try:
         with open(C.PROFILES_FILE) as fichier:
             data = json.load(fichier)
     except OSError:
-        return defauts() + (titres, "usine")          # fichier absent : normal
+        return defauts() + ("usine",)              # fichier absent : normal
     except Exception as exc:
-        print("[store] %s illisible (%s), retour aux profils d'usine"
+        print("[store] %s illisible (%s), retour aux valeurs d'usine"
               % (C.PROFILES_FILE, exc))
-        return defauts() + (titres, "usine")
+        return defauts() + ("usine",)
 
     try:
-        ordre = [str(n) for n in data["ordre"]]
-        profils = {}
-        for nom, bloc in data["profils"].items():
-            macros = []
-            for touche in bloc["touches"]:
-                actions = action_depuis_json(touche.get("type", "none"),
-                                             touche.get("valeur", ""))
-                macros.append((str(touche.get("label", ""))[:P.LABEL_MAX],
-                               actions))
-            profils[str(nom)] = macros
-            if bloc.get("titre"):
-                titres[str(nom)] = str(bloc["titre"])
+        profils, ordre, titres, apps, repli = depuis_json(data, nb_touches)
     except Exception as exc:
-        print("[store] %s mal formé (%s), retour aux profils d'usine"
+        print("[store] %s mal forme (%s), retour aux valeurs d'usine"
               % (C.PROFILES_FILE, exc))
-        return defauts() + (dict(P.TITLES), "usine")
+        return defauts() + ("usine",)
 
     problemes = verifier(profils, ordre, nb_touches)
     if problemes:
-        print("[store] %s refuse, retour aux profils d'usine :" % C.PROFILES_FILE)
+        print("[store] %s refuse, retour aux valeurs d'usine :" % C.PROFILES_FILE)
         for probleme in problemes:
             print("   -", probleme)
-        return defauts() + (dict(P.TITLES), "usine")
+        return defauts() + ("usine",)
 
-    return profils, ordre, titres, "fichier"
+    return profils, ordre, titres, apps, repli, "fichier"
 
 
-# =====================================================================
-# Écriture
-# =====================================================================
-def enregistrer(profils, ordre, titres, nb_touches):
-    """Vérifie puis écrit le fichier. Retourne (True, "") ou (False, raison)."""
+def enregistrer(profils, ordre, titres, apps, repli, nb_touches):
+    """Verifie puis ecrit. Retourne (True, "") ou (False, raison)."""
     problemes = verifier(profils, ordre, nb_touches)
     if problemes:
         return False, " ; ".join(problemes)
 
     blocs = {}
-    for nom, macros in profils.items():
-        touches = []
-        for label, actions in macros:
-            kind, valeur = action_vers_json(actions)
-            touches.append({"label": label, "type": kind, "valeur": valeur})
-        blocs[nom] = {"titre": titres.get(nom, nom), "touches": touches}
+    for nom, touches in profils.items():
+        liste = []
+        for label, gestes in touches:
+            entree = {"label": label}
+            for geste in P.GESTES:
+                genre, valeur = action_vers_json((gestes or {}).get(geste))
+                entree[geste] = {"type": genre, "valeur": valeur}
+            liste.append(entree)
+        blocs[nom] = {"titre": titres.get(nom, nom), "touches": liste}
 
-    data = {"version": 1, "ordre": list(ordre), "profils": blocs}
+    data = {"version": 2, "ordre": list(ordre), "profils": blocs,
+            "apps": {"repli": {"profil": repli[0], "abrege": repli[1]},
+                     "liste": [{"exe": e, "profil": p, "abrege": a}
+                               for e, p, a in apps]}}
     try:
-        # On écrit d'abord un fichier temporaire, puis on le renomme :
-        # une coupure de courant en plein enregistrement ne peut donc pas
-        # laisser un profils.json à moitié écrit.
+        # On ecrit d'abord un fichier temporaire, puis on le renomme : une
+        # coupure de courant en plein enregistrement ne peut donc pas
+        # laisser un profils.json a moitie ecrit.
         temporaire = C.PROFILES_FILE + ".tmp"
         with open(temporaire, "w") as fichier:
             json.dump(data, fichier)
+        import os
         try:
-            import os
             os.remove(C.PROFILES_FILE)
         except OSError:
             pass
-        import os
         os.rename(temporaire, C.PROFILES_FILE)
     except Exception as exc:
         return False, "ecriture impossible : %s" % exc
     return True, ""
 
 
+def enregistrer_json(data, nb_touches):
+    """Enregistre directement une configuration recue d'une page web."""
+    try:
+        profils, ordre, titres, apps, repli = depuis_json(data, nb_touches)
+    except Exception as exc:
+        return False, "donnees illisibles : %s" % exc
+    return enregistrer(profils, ordre, titres, apps, repli, nb_touches)
+
+
 def effacer():
-    """Supprime le fichier : retour aux profils d'usine au prochain RESET."""
+    """Supprime le fichier : retour aux valeurs d'usine au prochain RESET."""
     try:
         import os
         os.remove(C.PROFILES_FILE)
@@ -1618,9 +1983,138 @@ def effacer():
 
 ---
 
+## device/stats.py
+
+`120 lignes - sha256 5e43688b4770aaf3`
+
+```python
+# -*- coding: utf-8 -*-
+"""
+stats.py - Compteur d'usage des macros.
+
+=====================================================================
+A QUOI CA SERT
+=====================================================================
+Le macropad compte combien de fois chaque macro est declenchee. Au bout
+de deux semaines, la page de configuration te les classe et tu sais
+OBJECTIVEMENT :
+
+  * quelles macros meritent la premiere rangee de ton boitier ;
+  * lesquelles ne servent jamais et peuvent laisser leur place ;
+  * quels profils tu utilises vraiment.
+
+C'est de la donnee pour concevoir, pas de la decoration. Particulierement
+utile AVANT de figer la disposition d'un boitier imprime.
+
+=====================================================================
+POURQUOI ON N'ECRIT PAS A CHAQUE APPUI
+=====================================================================
+La memoire flash d'un microcontroleur supporte un nombre limite de cycles
+d'ecriture (de l'ordre de 100 000 par secteur). Ecrire a chaque appui
+userait la flash pour rien.
+
+Les compteurs vivent donc en memoire vive, et ne sont ecrits sur la flash
+que toutes les STATS_SAVE_EVERY frappes (25 par defaut), plus une fois a
+l'arret propre du programme. Au pire tu perds les vingt-quatre derniers
+appuis si tu debranches brutalement : sans importance pour une statistique.
+
+Le fichier stats.json n'est jamais indispensable : s'il manque ou s'il est
+illisible, on repart de zero sans rien signaler de dramatique.
+"""
+
+import json
+
+import config as C
+
+
+class Stats:
+    """Compteurs par profil et par touche."""
+
+    def __init__(self, nb_touches, actif=True):
+        self.nb_touches = nb_touches
+        self.actif = actif and getattr(C, "STATS_ENABLED", True)
+        self.compteurs = {}          # {"CIVIL3D": [12, 3, 40, 0, 1, 5], ...}
+        self._depuis_ecriture = 0
+        if self.actif:
+            self.charger()
+
+    # ------------------------------------------------------------------
+    def charger(self):
+        try:
+            with open(C.STATS_FILE) as fichier:
+                data = json.load(fichier)
+        except OSError:
+            return                    # pas encore de statistiques : normal
+        except Exception as exc:
+            print("[stats] fichier illisible (%s), on repart de zero" % exc)
+            return
+        if not isinstance(data, dict):
+            return
+        for nom, valeurs in data.items():
+            try:
+                liste = [int(v) for v in valeurs][:self.nb_touches]
+            except Exception:
+                continue
+            while len(liste) < self.nb_touches:
+                liste.append(0)
+            self.compteurs[str(nom)] = liste
+
+    def enregistrer(self):
+        """Ecrit les compteurs. Retourne True si l'ecriture a eu lieu."""
+        if not self.actif or not self.compteurs:
+            return False
+        try:
+            temporaire = C.STATS_FILE + ".tmp"
+            with open(temporaire, "w") as fichier:
+                json.dump(self.compteurs, fichier)
+            import os
+            try:
+                os.remove(C.STATS_FILE)
+            except OSError:
+                pass
+            os.rename(temporaire, C.STATS_FILE)
+        except Exception as exc:
+            print("[stats] ecriture impossible :", exc)
+            return False
+        self._depuis_ecriture = 0
+        return True
+
+    # ------------------------------------------------------------------
+    def compter(self, profil, index):
+        """Enregistre un appui. Ecrit sur la flash de temps en temps."""
+        if not self.actif or not (0 <= index < self.nb_touches):
+            return
+        liste = self.compteurs.get(profil)
+        if liste is None:
+            liste = [0] * self.nb_touches
+            self.compteurs[profil] = liste
+        liste[index] += 1
+        self._depuis_ecriture += 1
+        if self._depuis_ecriture >= getattr(C, "STATS_SAVE_EVERY", 25):
+            self.enregistrer()
+
+    def pour(self, profil):
+        """Compteurs d'un profil, toujours de la bonne longueur."""
+        return self.compteurs.get(profil, [0] * self.nb_touches)
+
+    def total(self):
+        return sum(sum(v) for v in self.compteurs.values())
+
+    def remettre_a_zero(self):
+        self.compteurs = {}
+        try:
+            import os
+            os.remove(C.STATS_FILE)
+        except OSError:
+            pass
+        self._depuis_ecriture = 0
+```
+
+---
+
 ## device/portal.py
 
-`318 lignes - sha256 6c7bb29ada107a3d`
+`418 lignes - sha256 fde44edd71ca8518`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1673,88 +2167,212 @@ import config as C
 import store
 
 # La page web. Volontairement compacte : elle tient dans la RAM de la carte.
-PAGE = """<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+PAGE = """<!DOCTYPE html><html lang=fr><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
 <title>Macropad</title><style>
-*{box-sizing:border-box}body{margin:0;padding:16px;background:#14161a;color:#e6e8ec;
-font:14px/1.5 system-ui,sans-serif}h1{font-size:18px;margin:0 0 4px}
-p.sub{margin:0 0 20px;color:#9aa3af}
-.prof{background:#1c1f26;border:1px solid #2a2f3a;border-radius:10px;padding:14px;margin-bottom:14px}
-.head{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
-.head input{flex:1;min-width:120px}
-input,select{background:#0f1115;color:#e6e8ec;border:1px solid #2a2f3a;
-border-radius:6px;padding:7px 8px;font:13px/1.2 ui-monospace,monospace}
-table{width:100%;border-collapse:collapse}td{padding:3px 4px 3px 0}
-td.n{width:26px;color:#7c8698;text-align:right;font:12px ui-monospace,monospace}
-.lab{width:88px}.val{width:100%}
-button{background:#2f6feb;color:#fff;border:0;border-radius:6px;padding:9px 14px;
-font:600 13px system-ui;cursor:pointer}button.g{background:#2a2f3a}
-button.r{background:#7a2230}.bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-#msg{margin-top:14px;padding:10px 12px;border-radius:8px;display:none;white-space:pre-wrap}
-.ok{background:#123524;border:1px solid #1f7a4d}.ko{background:#3a1620;border:1px solid #8a2b3f}
+*{box-sizing:border-box}
+body{margin:0;padding:0 0 40px;background:#0e1014;color:#e8eaee;
+font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+header{position:sticky;top:0;z-index:9;background:#151922;
+border-bottom:1px solid #262c3a;padding:14px 18px;display:flex;
+align-items:center;gap:14px;flex-wrap:wrap}
+header h1{font-size:16px;margin:0;letter-spacing:.4px}
+header .tag{font:11px ui-monospace,monospace;color:#8b94a6;
+border:1px solid #2b3242;border-radius:99px;padding:3px 9px}
+main{max-width:940px;margin:0 auto;padding:18px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;
+color:#8b94a6;margin:26px 0 10px;font-weight:600}
+.card{background:#151922;border:1px solid #262c3a;border-radius:12px;
+padding:14px;margin-bottom:12px}
+.ph{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.ph .grow{flex:1;min-width:110px}
+input,select{background:#0b0d12;color:#e8eaee;border:1px solid #2b3242;
+border-radius:7px;padding:7px 9px;font:13px/1.2 ui-monospace,monospace;
+width:100%}
+input:focus,select:focus{outline:0;border-color:#3d7bfd}
+table{width:100%;border-collapse:collapse}
+td,th{padding:3px 5px 3px 0;vertical-align:middle}
+th{font:11px system-ui;color:#6f7788;text-align:left;font-weight:600;
+text-transform:uppercase;letter-spacing:.6px;padding-bottom:6px}
+td.k{width:30px;color:#3d7bfd;font:700 13px ui-monospace,monospace}
+td.g{width:58px;color:#6f7788;font:11px system-ui}
+td.lab{width:110px}td.ty{width:132px}
+tr.sep td{border-top:1px solid #1f2531;padding-top:8px}
+.use{width:64px;text-align:right;font:11px ui-monospace,monospace;color:#6f7788}
+.bar{height:3px;background:#3d7bfd;border-radius:2px;margin-top:3px}
+button{background:#2b3242;color:#e8eaee;border:0;border-radius:8px;
+padding:9px 14px;font:600 13px system-ui;cursor:pointer}
+button:hover{filter:brightness(1.25)}
+button.p{background:#3d7bfd;color:#fff}button.d{background:#6d2233}
+button.s{padding:6px 10px;font-size:12px}
+.bar2{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+#msg{margin-top:16px;padding:11px 13px;border-radius:9px;display:none;
+white-space:pre-wrap;font:13px ui-monospace,monospace}
+.ok{background:#0f2e20;border:1px solid #1d6f47;color:#8ee0b4}
+.ko{background:#33131d;border:1px solid #7d2a3c;color:#f0a6b6}
+.hint{color:#6f7788;font-size:12px;margin:0 0 14px}
 </style></head><body>
-<h1>Macropad &mdash; configuration</h1>
-<p class="sub">Libelles : 6 caracteres max. Combinaison : <code>CTRL+MAJ+ESC</code>.
-Apres enregistrement, faire un RESET.</p>
-<div id="app"></div>
-<div class="bar">
-<button onclick="addProfil()" class="g">+ Profil</button>
-<button onclick="save()">Enregistrer</button>
-<button onclick="usine()" class="r">Profils d'usine</button>
+<header>
+<h1>Macropad</h1>
+<span class=tag id=src>...</span>
+<span class=tag id=cnt>...</span>
+</header>
+<main>
+<p class=hint>Libelles : 6 caracteres maximum. Combinaison :
+<b>CTRL+MAJ+ESC</b>. Chaque touche accepte trois gestes : appui court,
+appui long et double appui.</p>
+
+<h2>Profils et macros</h2>
+<div id=profs></div>
+<div class=bar2><button class=s onclick=addProfil()>+ Profil</button></div>
+
+<h2>Logiciels detectes</h2>
+<p class=hint>Le compagnon PC lit cette table sur le macropad. Le nom
+abrege reste affiche a gauche de l'ecran pendant que le nom du fichier
+defile.</p>
+<div class=card id=apps></div>
+
+<div class=bar2>
+<button class=p onclick=save()>Enregistrer</button>
+<button onclick=dl()>Telecharger la sauvegarde</button>
+<button class=d onclick=usine()>Valeurs d'usine</button>
 </div>
-<div id="msg"></div>
+<div id=msg></div>
+</main>
 <script>
-let D={ordre:[],profils:{}},N=6;
-const TYPES=[["key","touche"],["combo","combinaison"],["text","texte"],
-["text_enter","texte + Entree"],["none","inactive"]];
-function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;")}
+var D={ordre:[],profils:{},apps:{repli:{profil:"WINDOWS",abrege:"Win"},liste:[]}};
+var N=6,GESTES=["court","long","double"];
+var LIB={court:"court",long:"long",double:"double"};
+var TYPES=[["none","inactive"],["key","touche"],["combo","combinaison"],
+["text","texte"],["text_enter","texte + Entree"]];
+
+function el(tag,attrs,kids){var e=document.createElement(tag);
+ for(var k in attrs||{}){if(k=="cls")e.className=attrs[k];
+  else if(k.slice(0,2)=="on")e[k]=attrs[k];else e.setAttribute(k,attrs[k]);}
+ (kids||[]).forEach(function(c){
+  e.appendChild(typeof c=="string"?document.createTextNode(c):c);});
+ return e;}
+function inp(val,max,cb){var i=el("input");i.value=val||"";
+ if(max)i.maxLength=max;i.oninput=function(){cb(i.value);};return i;}
+function sel(val,cb){var s=el("select");TYPES.forEach(function(t){
+ var o=el("option",{value:t[0]},[t[1]]);if(t[0]==val)o.selected=true;
+ s.appendChild(o);});s.onchange=function(){cb(s.value);render();};return s;}
+
+function maxUse(){var m=1;for(var n in D.profils)
+ (D.profils[n].touches||[]).forEach(function(t){if(t.usages>m)m=t.usages;});
+ return m;}
+
 function render(){
- let h="";
+ var zone=document.getElementById("profs");zone.innerHTML="";
+ var mx=maxUse();
  D.ordre.forEach(function(nom){
-  const p=D.profils[nom];if(!p)return;
-  h+='<div class="prof"><div class="head"><input value="'+esc(nom)+
-     '" onchange="ren(this,\\''+esc(nom)+'\\')" title="nom interne">'+
-     '<input value="'+esc(p.titre)+'" oninput="D.profils[\\''+esc(nom)+
-     '\\'].titre=this.value" title="titre a l\\'ecran">'+
-     '<button class="r" onclick="del(\\''+esc(nom)+'\\')">Supprimer</button></div><table>';
-  for(let i=0;i<N;i++){
-   const t=p.touches[i]||{label:"",type:"none",valeur:""};
-   let o="";TYPES.forEach(function(x){
-    o+='<option value="'+x[0]+'"'+(t.type==x[0]?" selected":"")+'>'+x[1]+'</option>'});
-   h+='<tr><td class="n">B'+(i+1)+'</td>'+
-      '<td><input class="lab" maxlength="6" value="'+esc(t.label)+
-      '" oninput="set(\\''+esc(nom)+'\\','+i+',\\'label\\',this.value)"></td>'+
-      '<td><select onchange="set(\\''+esc(nom)+'\\','+i+',\\'type\\',this.value)">'+o+'</select></td>'+
-      '<td><input class="val" value="'+esc(t.valeur)+
-      '" oninput="set(\\''+esc(nom)+'\\','+i+',\\'valeur\\',this.value)"></td></tr>';
+  var p=D.profils[nom];if(!p)return;
+  var head=el("div",{cls:"ph"},[]);
+  head.appendChild(inp(nom,20,function(v){ren(nom,v);}));
+  head.firstChild.className="grow";head.firstChild.title="nom interne";
+  var t=inp(p.titre,16,function(v){p.titre=v;});t.className="grow";
+  t.title="titre affiche sur l'ecran";head.appendChild(t);
+  head.appendChild(el("button",{cls:"d s",onclick:function(){del(nom);}},
+   ["Supprimer"]));
+  var tb=el("table",{},[el("tr",{},[el("th",{},["#"]),el("th",{},["Geste"]),
+   el("th",{},["Libelle"]),el("th",{},["Type"]),el("th",{},["Valeur"]),
+   el("th",{},["Usage"])])]);
+  for(var i=0;i<N;i++){
+   if(!p.touches[i])p.touches[i]={label:"",usages:0};
+   var k=p.touches[i];
+   GESTES.forEach(function(g,gi){
+    if(!k[g])k[g]={type:"none",valeur:""};
+    var tr=el("tr",{cls:gi==0?"sep":""},[]);
+    if(gi==0){var c=el("td",{cls:"k",rowspan:3},["B"+(i+1)]);tr.appendChild(c);}
+    tr.appendChild(el("td",{cls:"g"},[LIB[g]]));
+    if(gi==0){
+     var cl=el("td",{cls:"lab",rowspan:3},[]);
+     cl.appendChild(inp(k.label,6,function(v){k.label=v;}));
+     tr.appendChild(cl);
+    }
+    var ct=el("td",{cls:"ty"},[]);
+    ct.appendChild(sel(k[g].type,function(v){k[g].type=v;}));
+    tr.appendChild(ct);
+    var cv=el("td",{},[]);
+    cv.appendChild(inp(k[g].valeur,60,function(v){k[g].valeur=v;}));
+    tr.appendChild(cv);
+    if(gi==0){
+     var u=k.usages||0;
+     var box=el("td",{cls:"use",rowspan:3},[String(u)]);
+     var b=el("div",{cls:"bar"});b.style.width=Math.round(60*u/mx)+"px";
+     box.appendChild(b);tr.appendChild(box);
+    }
+    tb.appendChild(tr);
+   });
   }
-  h+="</table></div>";
+  zone.appendChild(el("div",{cls:"card"},[head,tb]));
  });
- document.getElementById("app").innerHTML=h;
+ renderApps();
 }
-function set(n,i,k,v){const p=D.profils[n];
- while(p.touches.length<N)p.touches.push({label:"",type:"none",valeur:""});
- p.touches[i][k]=v}
-function ren(el,anc){const nv=el.value.trim();if(!nv||D.profils[nv]){render();return}
+
+function renderApps(){
+ var z=document.getElementById("apps");z.innerHTML="";
+ var tb=el("table",{},[el("tr",{},[el("th",{},["Programme (.exe)"]),
+  el("th",{},["Profil"]),el("th",{},["Abrege ecran"]),el("th",{},[""])])]);
+ D.apps.liste.forEach(function(a,i){
+  var tr=el("tr",{},[]);
+  var c1=el("td",{},[]);c1.appendChild(inp(a.exe,40,function(v){a.exe=v;}));
+  var c2=el("td",{},[]);c2.appendChild(inp(a.profil,20,function(v){a.profil=v;}));
+  var c3=el("td",{},[]);c3.appendChild(inp(a.abrege,7,function(v){a.abrege=v;}));
+  var c4=el("td",{cls:"use"},[el("button",{cls:"d s",onclick:function(){
+   D.apps.liste.splice(i,1);renderApps();}},["x"])]);
+  tr.appendChild(c1);tr.appendChild(c2);tr.appendChild(c3);tr.appendChild(c4);
+  tb.appendChild(tr);
+ });
+ var tr=el("tr",{cls:"sep"},[]);
+ tr.appendChild(el("td",{},["tout le reste"]));
+ var r1=el("td",{},[]);r1.appendChild(inp(D.apps.repli.profil,20,
+  function(v){D.apps.repli.profil=v;}));
+ var r2=el("td",{},[]);r2.appendChild(inp(D.apps.repli.abrege,7,
+  function(v){D.apps.repli.abrege=v;}));
+ tr.appendChild(r1);tr.appendChild(r2);tr.appendChild(el("td",{},[]));
+ tb.appendChild(tr);
+ z.appendChild(tb);
+ z.appendChild(el("div",{cls:"bar2"},[el("button",{cls:"s",onclick:function(){
+  D.apps.liste.push({exe:"",profil:D.ordre[0]||"",abrege:""});renderApps();}},
+  ["+ Logiciel"])]));
+}
+
+function ren(anc,nv){nv=(nv||"").trim();if(!nv||D.profils[nv])return;
  D.profils[nv]=D.profils[anc];delete D.profils[anc];
- D.ordre=D.ordre.map(function(x){return x==anc?nv:x});render()}
-function del(n){if(D.ordre.length<2){return say("Il faut au moins un profil",0)}
- delete D.profils[n];D.ordre=D.ordre.filter(function(x){return x!=n});render()}
-function addProfil(){let n="PROFIL",i=1;while(D.profils[n])n="PROFIL"+(++i);
- D.profils[n]={titre:n,touches:[]};
- for(let k=0;k<N;k++)D.profils[n].touches.push({label:"",type:"none",valeur:""});
- D.ordre.push(n);render()}
-function say(t,ok){const m=document.getElementById("msg");
- m.textContent=t;m.className=ok?"ok":"ko";m.style.display="block"}
-function save(){fetch("/api/profils",{method:"POST",body:JSON.stringify(D)})
- .then(function(r){return r.json()}).then(function(r){
-  say(r.ok?"Enregistre. Fais un RESET pour appliquer.":"Refuse :\\n"+r.raison,r.ok)})
- .catch(function(e){say("Erreur reseau : "+e,0)})}
-function usine(){if(!confirm("Revenir aux profils d'usine ?"))return;
- fetch("/api/usine",{method:"POST"}).then(function(){location.reload()})}
-fetch("/api/profils").then(function(r){return r.json()}).then(function(d){
- D=d;N=d.touches||6;render()});
-</script></body></html>"""
+ D.ordre=D.ordre.map(function(x){return x==anc?nv:x});render();}
+function del(n){if(D.ordre.length<2)return say("Il faut au moins un profil",0);
+ delete D.profils[n];D.ordre=D.ordre.filter(function(x){return x!=n});render();}
+function addProfil(){var n="PROFIL",i=1;while(D.profils[n])n="PROFIL"+(++i);
+ var t=[];for(var k=0;k<N;k++)t.push({label:"",usages:0});
+ D.profils[n]={titre:n,touches:t};D.ordre.push(n);render();}
+function say(t,ok){var m=document.getElementById("msg");
+ m.textContent=t;m.className=ok?"ok":"ko";m.style.display="block";
+ window.scrollTo(0,document.body.scrollHeight);}
+function dl(){var a=document.createElement("a");
+ a.href=URL.createObjectURL(new Blob([JSON.stringify(D,null,2)],
+  {type:"application/json"}));
+ a.download="macropad_config.json";a.click();}
+function usine(){if(!confirm("Revenir aux valeurs d'usine ?"))return;
+ fetch("/api/usine",{method:"POST"}).then(function(){location.reload();});}
+function save(){fetch("/api/profils",{method:"POST",
+ body:JSON.stringify(D)}).then(function(r){return r.json();})
+ .then(function(r){say(r.ok?"Enregistre et applique.":"Refuse :\n"+r.raison,
+  r.ok);if(r.ok)charger();})
+ .catch(function(e){say("Erreur : "+e,0);});}
+function charger(){fetch("/api/profils").then(function(r){return r.json();})
+ .then(function(d){
+  if(d.erreur)return say("Lecture impossible : "+d.erreur,0);
+  D=d;N=d.touches||6;if(!D.apps)D.apps={repli:{profil:"WINDOWS",abrege:"Win"},
+   liste:[]};
+  document.getElementById("src").textContent="source : "+(d.origine||"?");
+  var tot=0;for(var n in D.profils)(D.profils[n].touches||[]).forEach(
+   function(t){tot+=t.usages||0;});
+  document.getElementById("cnt").textContent=tot+" appuis comptes";
+  render();}).catch(function(e){say("Erreur : "+e,0);});}
+charger();
+</script></body></html>
+"""
 
 
 # =====================================================================
@@ -1803,8 +2421,9 @@ def arreter_ap():
 # =====================================================================
 class Portail:
 
-    def __init__(self, nb_touches):
+    def __init__(self, nb_touches, stats=None):
         self.nb_touches = nb_touches
+        self.stats = stats
         self.serveur = None
         self.clients = 0
 
@@ -1828,35 +2447,10 @@ class Portail:
 
     # ------------------------------------------------------------------
     def _etat_json(self):
-        profils, ordre, titres, origine = store.charger(self.nb_touches)
-        blocs = {}
-        for nom, macros in profils.items():
-            touches = []
-            for label, actions in macros:
-                kind, valeur = store.action_vers_json(actions)
-                touches.append({"label": label, "type": kind, "valeur": valeur})
-            blocs[nom] = {"titre": titres.get(nom, nom), "touches": touches}
-        return {"ordre": ordre, "profils": blocs,
-                "touches": self.nb_touches, "origine": origine}
+        return store.vers_json(self.nb_touches, self.stats)
 
     def _enregistrer(self, data):
-        profils = {}
-        titres = {}
-        try:
-            ordre = [str(n) for n in data["ordre"]]
-            for nom, bloc in data["profils"].items():
-                macros = []
-                for touche in bloc["touches"][:self.nb_touches]:
-                    actions = store.action_depuis_json(
-                        touche.get("type", "none"), touche.get("valeur", ""))
-                    macros.append((str(touche.get("label", ""))[:6], actions))
-                while len(macros) < self.nb_touches:
-                    macros.append(("", []))
-                profils[str(nom)] = macros
-                titres[str(nom)] = str(bloc.get("titre", nom))
-        except Exception as exc:
-            return False, "donnees illisibles : %s" % exc
-        return store.enregistrer(profils, ordre, titres, self.nb_touches)
+        return store.enregistrer_json(data, self.nb_touches)
 
     # ------------------------------------------------------------------
     def _repondre(self, client, corps, type_mime="text/html", code="200 OK"):
@@ -1947,7 +2541,7 @@ class Portail:
 
 ## device/link.py
 
-`258 lignes - sha256 62296a0381d8a160`
+`230 lignes - sha256 7f3d5d937ddfcfb6`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2050,8 +2644,9 @@ class SourceStdin:
 class Link:
     """Analyse les lignes venant du PC et repond."""
 
-    def __init__(self, nb_touches, source=None, sortie=None):
+    def __init__(self, nb_touches, source=None, sortie=None, stats=None):
         self.nb_touches = nb_touches
+        self.stats = stats            # pour joindre les compteurs d'usage
         self.actif = False
         self.source = source
         self.sortie = sortie or print
@@ -2146,18 +2741,7 @@ class Link:
     def _envoyer_config(self):
         """Envoie la configuration au PC, decoupee en morceaux."""
         try:
-            profils, ordre, titres, origine = store.charger(self.nb_touches)
-            blocs = {}
-            for nom, macros in profils.items():
-                touches = []
-                for label, actions in macros:
-                    kind, valeur = store.action_vers_json(actions)
-                    touches.append({"label": label, "type": kind,
-                                    "valeur": valeur})
-                blocs[nom] = {"titre": titres.get(nom, nom), "touches": touches}
-            texte = json.dumps({"ordre": ordre, "profils": blocs,
-                                "touches": self.nb_touches,
-                                "origine": origine})
+            texte = json.dumps(store.vers_json(self.nb_touches, self.stats))
         except Exception as exc:
             self.sortie("#KO:lecture impossible : %s" % exc)
             return
@@ -2181,28 +2765,10 @@ class Link:
             self.sortie("#KO:JSON invalide : %s" % exc)
             return None
 
-        try:
-            ordre = [str(n) for n in data["ordre"]]
-            profils = {}
-            titres = {}
-            for nom, bloc in data["profils"].items():
-                macros = []
-                for touche in bloc["touches"][:self.nb_touches]:
-                    actions = store.action_depuis_json(
-                        touche.get("type", "none"), touche.get("valeur", ""))
-                    macros.append((str(touche.get("label", ""))[:6], actions))
-                while len(macros) < self.nb_touches:
-                    macros.append(("", []))
-                profils[str(nom)] = macros
-                titres[str(nom)] = str(bloc.get("titre", nom))
-        except Exception as exc:
-            self.sortie("#KO:donnees illisibles : %s" % exc)
-            return None
-
-        # store.enregistrer refuse toute macro qui ne serait pas tapable :
-        # impossible d'enregistrer depuis le PC une configuration qui
-        # planterait au demarrage suivant.
-        ok, raison = store.enregistrer(profils, ordre, titres, self.nb_touches)
+        # store refuse toute macro qui ne serait pas tapable : impossible
+        # d'enregistrer depuis le PC une configuration qui planterait au
+        # demarrage suivant.
+        ok, raison = store.enregistrer_json(data, self.nb_touches)
         if ok:
             self.sortie("#OK:configuration enregistree")
             return (EVT_RECHARGER, None)
@@ -2554,66 +3120,96 @@ def create_interface():
 
 ## device/display.py
 
-`280 lignes - sha256 e0f42e8fbedea4c8`
+`501 lignes - sha256 5678cd3fafbd4a3c`
 
 ```python
 # -*- coding: utf-8 -*-
 """
-display.py - L'interface sur l'écran OLED SH1106 128x64.
+display.py - L'interface sur l'ecran OLED SH1106 128x64.
 
 =====================================================================
-L'ÉCRAN N'EST JAMAIS INDISPENSABLE
+L'ECRAN N'EST JAMAIS INDISPENSABLE
 =====================================================================
-S'il est absent, débranché, ou s'il tombe en panne en cours de route, on
+S'il est absent, debranche, ou s'il tombe en panne en cours de route, on
 l'abandonne proprement (self.oled = None) et le macropad continue de
-fonctionner comme clavier. Un écran ne doit jamais empêcher de taper.
+fonctionner comme clavier. Un ecran ne doit jamais empecher de taper.
 
 =====================================================================
-LA VUE PRINCIPALE, SIX TOUCHES
+LA VUE PRINCIPALE : UN TABLEAU DES GESTES
 =====================================================================
-    ┌────────────────────────┐
-    │▓CIVIL 3D▓▓▓▓▓▓▓▓▓▓HID▓▓│   bandeau en vidéo inversée
-    │ ▐1▌ MATCH   ▐2▌ HATCH  │
-    │ ▐3▌ ANNUL   ▐4▌ ISOLE  │   trois lignes de deux touches
-    │ ▐5▌ ZOOM    ▐6▌ ENREG  │
-    │────────────────────────│
-    │ ■ □ □ □                │   position dans la liste des profils
-    └────────────────────────┘
+    +------------------------+
+    |#CIVIL 3D#########AUTO##|  bandeau inverse : profil + etat
+    |   CRT   LNG   DBL      |  en-tete des trois colonnes
+    |#1#MATC  ---   ---      |  ligne surlignee = touche qui vient de servir
+    | 2 HATC  ---   ---      |
+    | 3 ANNU  REFA  ---      |
+    | 4 ISOL  UNIS  ---      |
+    |------------------------|
+    |C3D Projet_A12_Phas...  |  logiciel fixe + nom de fichier qui defile
+    +------------------------+
 
-Le numéro de chaque touche est dans une pastille en vidéo inversée : on
-retrouve la bonne touche d'un coup d'œil, sans lire. Les libellés font
-6 caractères au maximum, c'est ce que laisse la demi-largeur de l'écran.
+Chaque ligne montre les trois macros d'une touche :
+  CRT = appui court, LNG = appui long, DBL = double appui.
+Un tiret signale un geste sans macro.
 
-Les petits carrés du bas indiquent où tu es dans la liste des profils,
-comme les points d'un carrousel. Avec quatre profils tu vois quatre
-carrés, dont un plein.
+Quatre lignes tiennent a l'ecran. Avec six touches, le tableau **defile
+tout seul** d'un cran toutes les TABLE_SCROLL_MS.
+
+Et surtout : **des que tu appuies sur une touche, le tableau saute
+instantanement dessus et la surligne**. Tu vois donc ce que tu viens de
+declencher, et les deux autres gestes disponibles sur cette meme touche.
 
 =====================================================================
 POURQUOI UNE SEULE PAGE PAR TOUR DE BOUCLE
 =====================================================================
-L'écran fait 1024 octets. Les envoyer d'un coup prend environ 23 ms,
+L'ecran fait 1024 octets. Les envoyer d'un coup prend environ 23 ms,
 pendant lesquelles le processeur ne fait rien d'autre : on sentirait le
-macropad accrocher à chaque changement d'affichage.
+macropad accrocher a chaque changement d'affichage.
 
-Le SH1106 range sa mémoire en 8 bandes horizontales de 8 pixels, appelées
-pages. On en envoie UNE par tour de boucle, soit environ 3 ms. L'image
-complète se met à jour en 8 tours, c'est-à-dire environ 16 ms : invisible
-à l'œil, et les touches restent lues en permanence.
+Le SH1106 range sa memoire en 8 bandes horizontales de 8 pixels, les
+"pages". On en envoie UNE par tour de boucle, soit environ 3 ms. L'image
+complete se met a jour en 8 tours, environ 16 ms : invisible a l'oeil.
 
-Particularité du SH1106 : il possède 132 colonnes de mémoire pour une
-dalle de 128 pixels. Il faut décaler l'écriture de 2 colonnes, sinon toute
-l'image est décalée. C'est le rôle de la commande 0x02 dans tick().
+Le defilement du nom de fichier, lui, ne touche que la derniere ligne :
+on ne reenvoie donc que la page 7, huit fois moins de trafic.
+
+Particularite du SH1106 : 132 colonnes de memoire pour une dalle de 128
+pixels. Il faut decaler l'ecriture de 2 colonnes, sinon toute l'image est
+decalee. C'est le role de la commande 0x02 dans tick().
+
+=====================================================================
+ANTI-MARQUAGE
+=====================================================================
+Un OLED qui affiche la meme image pendant des heures MARQUE : les pixels
+allumes en permanence vieillissent plus vite et laissent un fantome
+definitif. Le bandeau inverse du haut est exactement le pire cas.
+
+Apres SCREEN_DIM_MS sans appui on baisse le contraste, apres
+SCREEN_OFF_MS on eteint la dalle. N'importe quelle touche reveille tout
+instantanement.
 """
 
 from time import ticks_ms, ticks_diff, ticks_add
 import config as C
 
-# Géométrie de la vue principale
-_TITRE_H = 11                       # hauteur du bandeau de titre
-_LIGNES_Y = (14, 29, 44)            # ligne de base des trois rangées
-_COLONNES_X = (0, 64)               # deux colonnes de 64 pixels
-_SEPARATEUR_Y = 54
-_PASTILLES_Y = 57
+# Geometrie
+_ENTETE_Y = 12                      # ligne des titres de colonnes
+_LIGNE_Y = (21, 29, 37, 45)         # les quatre lignes visibles du tableau
+_LIGNES_VISIBLES = len(_LIGNE_Y)
+_SEPARATEUR_Y = 53
+_BAS_Y = 55                         # ligne du document
+# Les trois colonnes du tableau : abscisse en pixels, largeur en
+# caracteres. La police fait 8 pixels de large, donc :
+#   1 chiffre (8) + 6 caracteres (48) + 4 (32) + 4 (32) = 120 sur 128.
+# La premiere colonne est la plus large parce qu'elle porte le libelle,
+# que tu as le droit d'ecrire sur 6 caracteres (LABEL_MAX).
+_COL_X = (8, 58, 92)                # colonnes court / long / double
+_COL_LARGEUR = (6, 4, 4)            # caracteres par colonne
+
+# Etats de l'economiseur d'ecran
+_VEILLE_NORMALE = 0
+_VEILLE_ATTENUEE = 1
+_VEILLE_ETEINTE = 2
 
 
 class Display:
@@ -2623,17 +3219,32 @@ class Display:
         self.titre = ""
         self.macros = []
         self.etat = ""
-        self.document = ""          # nom du fichier ouvert, envoye par le PC
-        self.pastilles = (0, 0)     # (index du profil courant, nombre total)
+        self.doc_abrege = ""
+        self.doc_nom = ""
+
+        self._defil_x = 0           # decalage du nom de fichier, en pixels
+        self._defil_sens = 1
+        self._defil_max = 0
+        self._defil_t = 0
+
+        self.fenetre = 0            # index de la premiere touche affichee
+        self._fenetre_t = 0         # prochain defilement automatique
+        self.surbrillance = -1      # touche surlignee, -1 = aucune
+        self._surbrillance_t = 0
+
         self.splash_until = None
-        self.pending_page = 8       # 8 = rien à envoyer ; 0 = tout à renvoyer
+        self.pending_page = 8       # 8 = rien a envoyer ; 0 = tout a renvoyer
+
+        self._veille = _VEILLE_NORMALE
+        self._activite = 0
+
         if not C.OLED_ENABLED:
             return
         try:
             from machine import Pin, I2C
             from sh1106 import SH1106_I2C
-            # timeout : si l'écran ne répond pas, l'échange est abandonné
-            # au lieu de bloquer indéfiniment toute la boucle principale.
+            # timeout : si l'ecran ne repond pas, l'echange est abandonne
+            # au lieu de bloquer indefiniment toute la boucle principale.
             bus = I2C(C.I2C_ID, sda=Pin(C.OLED_SDA), scl=Pin(C.OLED_SCL),
                       freq=C.I2C_FREQ, timeout=C.I2C_TIMEOUT_US)
             adresses = bus.scan()
@@ -2643,66 +3254,116 @@ class Display:
                 raise OSError("SH1106 absent (0x3C/0x3D)")
             self.oled = SH1106_I2C(128, 64, bus, addr=adresse, rotate=0)
             self.oled.contrast(C.OLED_CONTRAST)
+            self._activite = ticks_ms()
         except Exception as exc:
             self.disable(exc)
 
     def disable(self, erreur):
-        """Abandonne l'écran sans arrêter le macropad."""
+        """Abandonne l'ecran sans arreter le macropad."""
         print("OLED desactive :", erreur)
         self.oled = None
 
-    # ------------------------------------------------------------------
+    # ==================================================================
     # Briques de dessin
-    # ------------------------------------------------------------------
-    def _bandeau(self, texte, droite=""):
-        """Bandeau supérieur en vidéo inversée."""
+    # ==================================================================
+    def _bandeau(self):
         o = self.oled
-        o.fill_rect(0, 0, 128, _TITRE_H, 1)      # rectangle plein
-        o.text(texte[:13], 2, 2, 0)              # texte en noir sur blanc
-        if droite:
-            o.text(droite[:4], 128 - 8 * len(droite[:4]) - 2, 2, 0)
+        o.fill_rect(0, 0, 128, 11, 1)
+        o.text(self.titre[:13], 2, 2, 0)
+        if self.etat:
+            o.text(self.etat[:4], 128 - 8 * len(self.etat[:4]) - 2, 2, 0)
 
-    def _pastille_touche(self, x, y, numero, label):
-        """Une case : le numéro en vidéo inversée, puis le libellé."""
+    def _entete(self):
         o = self.oled
-        o.fill_rect(x + 1, y - 1, 9, 10, 1)
-        o.text(str(numero), x + 2, y, 0)
-        o.text(label[:6], x + 12, y, 1)
+        o.text("CRT", _COL_X[0], _ENTETE_Y, 1)
+        o.text("LNG", _COL_X[1], _ENTETE_Y, 1)
+        o.text("DBL", _COL_X[2], _ENTETE_Y, 1)
 
-    def _carrousel(self):
-        """Petits carrés indiquant la position dans la liste des profils."""
+    def _abrege_geste(self, gestes, nom, largeur):
+        """Libelle court d'un geste, ou un tiret s'il n'a pas de macro."""
+        actions = (gestes or {}).get(nom)
+        if not actions:
+            return "-"
+        genre, valeur = actions[0]
+        if genre == "combo":
+            # D'une combinaison, on montre la derniere touche : dans
+            # CTRL+SHIFT+Z, c'est le Z qui distingue la macro des autres.
+            texte = valeur[-1] if valeur else "?"
+        elif genre == "key":
+            texte = str(valeur)
+        else:
+            # Les commandes AutoCAD commencent par un underscore, qui ne
+            # sert qu'a forcer la version anglaise : inutile a l'ecran.
+            texte = str(valeur).lstrip("_")
+        return texte[:largeur].upper()
+
+    def _ligne_tableau(self, rang, index):
+        """Dessine une ligne du tableau. rang = position a l'ecran."""
         o = self.oled
-        index, total = self.pastilles
-        for i in range(min(total, 14)):
-            x = 2 + i * 8
-            if i == index:
-                o.fill_rect(x, _PASTILLES_Y, 5, 5, 1)      # profil courant
-            else:
-                o.rect(x, _PASTILLES_Y, 5, 5, 1)
+        y = _LIGNE_Y[rang]
+        label, gestes = self.macros[index]
+        surligne = (index == self.surbrillance)
+
+        if surligne:
+            o.fill_rect(0, y - 1, 128, 9, 1)
+        fond, encre = (1, 0) if surligne else (0, 1)
+
+        o.text(str(index + 1), 0, y, encre)
+        # Colonne 1 : le libelle de la touche, plus lisible que la macro
+        # elle-meme ("MATCH" parle mieux que "MATC" de "_MATCHPROP").
+        o.text(label[:_COL_LARGEUR[0]].upper(), _COL_X[0], y, encre)
+        o.text(self._abrege_geste(gestes, "long", _COL_LARGEUR[1]),
+               _COL_X[1], y, encre)
+        o.text(self._abrege_geste(gestes, "double", _COL_LARGEUR[2]),
+               _COL_X[2], y, encre)
+
+    def _zone_document(self):
+        """Ou commence le nom du fichier, et quelle largeur lui reste."""
+        depart = 2
+        if self.doc_abrege:
+            depart = 2 + len(self.doc_abrege) * 8 + 5
+        return depart, max(0, 128 - depart - 2)
+
+    def _dessiner_bas(self):
+        """Redessine UNIQUEMENT la derniere ligne (page 7).
+
+        Elle change souvent a cause du defilement ; la redessiner seule
+        divise par huit le trafic I2C.
+        """
+        o = self.oled
+        o.fill_rect(0, 56, 128, 8, 0)
+        if not self.doc_nom and not self.doc_abrege:
+            return
+        depart, _ = self._zone_document()
+        if self.doc_nom:
+            # framebuf decoupe tout seul ce qui depasse de l'ecran : on peut
+            # donc dessiner a une abscisse negative, le debut sort par la
+            # gauche. C'est tout le principe du defilement.
+            o.text(self.doc_nom, depart - self._defil_x, _BAS_Y + 1, 1)
+        if self.doc_abrege:
+            # On efface ce que le nom a deborde sur la zone reservee, puis
+            # on ecrit l'abreviation par-dessus : elle reste toujours lisible.
+            o.fill_rect(0, 56, depart - 2, 8, 0)
+            o.text(self.doc_abrege, 2, _BAS_Y + 1, 1)
 
     def _vue_principale(self):
         o = self.oled
         o.fill(0)
-        self._bandeau(self.titre, self.etat)
-        for index in range(min(len(self.macros), 6)):
-            x = _COLONNES_X[index % 2]
-            y = _LIGNES_Y[index // 2]
-            self._pastille_touche(x, y, index + 1, self.macros[index][0])
+        self._bandeau()
+        self._entete()
+        for rang in range(_LIGNES_VISIBLES):
+            index = self.fenetre + rang
+            if index < len(self.macros):
+                self._ligne_tableau(rang, index)
         o.hline(0, _SEPARATEUR_Y, 128, 1)
-        # En bas : le nom du document si le PC nous l'envoie, sinon la
-        # position dans la liste des profils. Le nom du fichier est plus
-        # informatif, il a donc la priorite.
-        if self.document:
-            o.text(self.document[:16], 2, _PASTILLES_Y - 1, 1)
-        else:
-            self._carrousel()
+        self._dessiner_bas()
 
     def _texte_double(self, texte):
-        """Écrit un texte en police doublée, centré.
+        """Ecrit un texte en police doublee, centre.
 
         MicroPython ne fournit qu'une police 8x8. Pour l'agrandir on dessine
-        le texte dans une petite image en mémoire, puis on recopie chaque
-        pixel sous forme d'un carré de 2x2 sur l'écran.
+        le texte dans une petite image en memoire, puis on recopie chaque
+        pixel sous forme d'un carre de 2x2 sur l'ecran.
         """
         import framebuf
         o = self.oled
@@ -2720,14 +3381,41 @@ class Display:
                     o.fill_rect(x0 + x * echelle, y0 + y * echelle,
                                 echelle, echelle, 1)
 
-    # ------------------------------------------------------------------
+    # ==================================================================
+    # Rafraichissements
+    # ==================================================================
+    def _redessiner(self):
+        if not self.oled or self.splash_until is not None:
+            return
+        try:
+            self._vue_principale()
+            self.pending_page = 0
+        except Exception as exc:
+            self.disable(exc)
+
+    def _rafraichir_bas(self):
+        """Redessine la derniere ligne et ne reenvoie que sa page."""
+        if not self.oled or self.splash_until is not None:
+            return
+        try:
+            self._dessiner_bas()
+            # 8 = aucun envoi en cours. On ne se glisse dans la file que si
+            # un rafraichissement complet n'est pas deja en route, sinon on
+            # lui ferait sauter des pages.
+            if self.pending_page >= 8:
+                self.pending_page = 7
+        except Exception as exc:
+            self.disable(exc)
+
+    # ==================================================================
     # API publique
-    # ------------------------------------------------------------------
+    # ==================================================================
     def message(self, *lignes):
         """Quelques lignes de texte brut : SAFE MODE, erreurs, diagnostic."""
         if not self.oled:
             return
         try:
+            self.reveiller(ticks_ms())
             self.splash_until = None
             self.oled.fill(0)
             y = 4
@@ -2739,103 +3427,202 @@ class Display:
             self.disable(exc)
 
     def config_screen(self, ssid, mot_de_passe, adresse):
-        """Écran du mode configuration : tout ce qu'il faut pour se connecter."""
+        """Ecran du mode configuration : tout pour se connecter."""
         if not self.oled:
             return
         try:
+            self.reveiller(ticks_ms())
             o = self.oled
             o.fill(0)
-            self._bandeau("MODE CONFIG", "WIFI")
+            self.titre, self.etat = "MODE CONFIG", "WIFI"
+            self._bandeau()
             o.text("Reseau :", 2, 15, 1)
             o.text(str(ssid)[:16], 2, 25, 1)
             o.text("Cle :", 2, 36, 1)
             o.text(str(mot_de_passe)[:16], 2, 46, 1)
             o.hline(0, _SEPARATEUR_Y, 128, 1)
-            o.text(str(adresse)[:16], 2, 56, 1)
+            o.text(str(adresse)[:16], 2, _BAS_Y + 1, 1)
             self.splash_until = None
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
 
-    def set_document(self, texte):
-        """Nom du document affiche en bas de l'ecran (envoye par le PC)."""
-        texte = (texte or "")[:16]
-        if texte == self.document:
-            return
-        self.document = texte
-        if self.oled and self.splash_until is None:
-            try:
-                self._vue_principale()
-                self.pending_page = 0
-            except Exception as exc:
-                self.disable(exc)
-
     def set_etat(self, etat):
-        """Petit texte en haut à droite : HID, SAFE, ..."""
+        """Petit texte en haut a droite : HID, AUTO, LOCK, ERR..."""
+        if etat == self.etat:
+            return
         self.etat = etat
-        if self.oled and self.splash_until is None:
-            try:
-                self._vue_principale()
-                self.pending_page = 0
-            except Exception as exc:
-                self.disable(exc)
+        self._redessiner()
+
+    def set_document(self, texte):
+        """Ce que le PC nous dit du document ouvert.
+
+        Format recu : "C3D|Projet_A12_Phase2.dwg"
+        La partie avant la barre verticale est l'abreviation du logiciel,
+        qui reste fixe a gauche. Ce qui suit est le nom du fichier, qui
+        defilera doucement s'il est trop long. Sans barre, tout est pris
+        pour le nom.
+        """
+        texte = texte or ""
+        if "|" in texte:
+            abrege, nom = texte.split("|", 1)
+        else:
+            abrege, nom = "", texte
+        abrege, nom = abrege.strip()[:7], nom.strip()[:48]
+        if abrege == self.doc_abrege and nom == self.doc_nom:
+            return
+        self.doc_abrege, self.doc_nom = abrege, nom
+
+        # De combien faut-il defiler pour voir la fin du nom ?
+        _, dispo = self._zone_document()
+        self._defil_max = max(0, len(nom) * 8 - dispo)
+        self._defil_x = 0
+        self._defil_sens = 1
+        self._defil_t = ticks_add(ticks_ms(), C.DOC_SCROLL_PAUSE_MS)
+        self._rafraichir_bas()
 
     def profile(self, titre, macros, now, index=0, total=1, splash=False):
-        """Affiche un profil.
-
-        splash=True montre d'abord son nom en gros pendant une demi-seconde,
-        puis on revient automatiquement à la vue à six touches.
-        """
+        """Affiche un profil. splash=True montre d'abord son nom en gros."""
         self.titre = titre
         self.macros = list(macros)
-        self.pastilles = (index, total)
+        self.fenetre = 0
+        self.surbrillance = -1
+        self._fenetre_t = ticks_add(now, C.TABLE_SCROLL_MS)
         if not self.oled:
             return
         try:
+            self.reveiller(now)
             if splash:
                 self._texte_double(titre[:8])
                 self.splash_until = ticks_add(now, C.PROFILE_SPLASH_MS)
             else:
-                self._vue_principale()
                 self.splash_until = None
+                self._vue_principale()
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
 
-    def tick(self, now):
-        """Envoie au plus UNE page. Appelé à chaque tour de boucle."""
+    def surligner(self, index, now):
+        """La touche vient de servir : on saute dessus et on la surligne.
+
+        C'est le retour visuel immediat : tu vois ce que tu as declenche,
+        et du meme coup les deux autres gestes disponibles sur cette touche.
+        """
+        self.reveiller(now)
+        if not self.oled or not (0 <= index < len(self.macros)):
+            return
+        self.surbrillance = index
+        self._surbrillance_t = ticks_add(now, C.HIGHLIGHT_MS)
+        # On amene la touche dans la fenetre visible si elle n'y est pas.
+        if index < self.fenetre:
+            self.fenetre = index
+        elif index >= self.fenetre + _LIGNES_VISIBLES:
+            self.fenetre = index - _LIGNES_VISIBLES + 1
+        # Pas de defilement automatique pendant qu'on regarde la touche.
+        self._fenetre_t = ticks_add(now, C.HIGHLIGHT_MS + C.TABLE_SCROLL_MS)
+        self._redessiner()
+
+    # ==================================================================
+    # Economiseur d'ecran
+    # ==================================================================
+    def reveiller(self, now):
+        """A appeler des qu'une touche est actionnee."""
+        self._activite = now
+        if self._veille == _VEILLE_NORMALE or not self.oled:
+            return
+        try:
+            if self._veille == _VEILLE_ETEINTE:
+                self.oled.sleep(False)
+            self.oled.contrast(C.OLED_CONTRAST)
+            self._veille = _VEILLE_NORMALE
+            self.pending_page = 0        # l'image doit etre reenvoyee
+        except Exception as exc:
+            self.disable(exc)
+
+    def _service_veille(self, now):
         if not self.oled:
             return
+        inactif = ticks_diff(now, self._activite)
+        try:
+            if self._veille == _VEILLE_NORMALE and inactif > C.SCREEN_DIM_MS:
+                self.oled.contrast(C.SCREEN_DIM_CONTRAST)
+                self._veille = _VEILLE_ATTENUEE
+            elif self._veille == _VEILLE_ATTENUEE and inactif > C.SCREEN_OFF_MS:
+                self.oled.sleep(True)
+                self._veille = _VEILLE_ETEINTE
+        except Exception as exc:
+            self.disable(exc)
+
+    # ==================================================================
+    # A appeler a chaque tour de boucle
+    # ==================================================================
+    def tick(self, now):
+        if not self.oled:
+            return
+
+        # --- fin de l'ecran "nom du profil en gros" --------------------
         if self.splash_until is not None and ticks_diff(now, self.splash_until) >= 0:
             self.splash_until = None
-            try:
-                self._vue_principale()
-                self.pending_page = 0
-            except Exception as exc:
-                self.disable(exc)
-                return
-        if not self.oled or self.pending_page >= 8:
+            self._redessiner()
+
+        if self._veille == _VEILLE_ETEINTE:
+            return          # ecran eteint : plus rien a animer ni a envoyer
+
+        if self.splash_until is None:
+            # --- fin du surlignage ------------------------------------
+            if (self.surbrillance >= 0
+                    and ticks_diff(now, self._surbrillance_t) >= 0):
+                self.surbrillance = -1
+                self._redessiner()
+
+            # --- defilement automatique du tableau --------------------
+            elif (len(self.macros) > _LIGNES_VISIBLES
+                    and ticks_diff(now, self._fenetre_t) >= 0):
+                maximum = len(self.macros) - _LIGNES_VISIBLES
+                self.fenetre = 0 if self.fenetre >= maximum else self.fenetre + 1
+                self._fenetre_t = ticks_add(now, C.TABLE_SCROLL_MS)
+                self._redessiner()
+
+            # --- defilement du nom de fichier -------------------------
+            elif self._defil_max > 0 and ticks_diff(now, self._defil_t) >= 0:
+                self._defil_x += self._defil_sens
+                if self._defil_x >= self._defil_max:
+                    self._defil_x = self._defil_max
+                    self._defil_sens = -1
+                    self._defil_t = ticks_add(now, C.DOC_SCROLL_PAUSE_MS)
+                elif self._defil_x <= 0:
+                    self._defil_x = 0
+                    self._defil_sens = 1
+                    self._defil_t = ticks_add(now, C.DOC_SCROLL_PAUSE_MS)
+                else:
+                    self._defil_t = ticks_add(now, C.DOC_SCROLL_MS)
+                self._rafraichir_bas()
+
+        self._service_veille(now)
+
+        # --- envoi d'AU PLUS une page a l'ecran ------------------------
+        if self.pending_page >= 8:
             return
         try:
             page = self.pending_page
             self.oled.write_cmd(0xB0 | page)   # choisir la bande n° page
-            self.oled.write_cmd(0x02)          # colonne de départ, poids faibles
-            self.oled.write_cmd(0x10)          # colonne de départ, poids forts
-            #        ^ 0x02 = le décalage de 2 colonnes propre au SH1106
+            self.oled.write_cmd(0x02)          # colonne de depart, poids faibles
+            self.oled.write_cmd(0x10)          # colonne de depart, poids forts
+            #        ^ 0x02 = le decalage de 2 colonnes propre au SH1106
             self.oled.write_data(
                 self.oled.displaybuf[page * 128:(page + 1) * 128])
             self.pending_page += 1
         except Exception as exc:
-            # Un écran arraché en cours de route ne doit pas arrêter le clavier.
+            # Un ecran arrache en cours de route ne doit pas arreter le clavier.
             self.disable(exc)
 
     def flush_startup(self):
-        """Envoie l'image entière d'un coup.
+        """Envoie l'image entiere d'un coup.
 
-        Réservé aux moments où l'on peut se permettre d'attendre : avant que
+        Reserve aux moments ou l'on peut se permettre d'attendre : avant que
         les touches ne deviennent actives, en SAFE MODE, en mode config.
         """
-        for _ in range(8):
+        for _ in range(9):
             self.tick(ticks_ms())
 ```
 

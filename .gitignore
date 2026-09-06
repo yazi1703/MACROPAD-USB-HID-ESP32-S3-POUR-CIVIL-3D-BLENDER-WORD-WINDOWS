@@ -1,2 +1,6 @@
 __pycache__/
 *.pyc
+
+# Fichiers ecrits par la carte ou par les tests
+profils.json
+stats.json

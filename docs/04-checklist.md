@@ -10,6 +10,7 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 [ ] entre 5V et GND  : pas de court-circuit
 [ ] entre 5V et 3V3  : pas de court-circuit
 [ ] GPIO4/5/6/7 vers GND : continuité SEULEMENT quand on appuie sur B1..B4
+[ ] GPIO12/13 vers GND : continuité SEULEMENT quand on appuie sur B5 et B6
 [ ] GPIO14 vers GND : continuité SEULEMENT quand on appuie sur ESC
 [ ] rien n'est branché sur GPIO19 ni GPIO20
 [ ] OLED alimenté en 3V3, PAS en 5V
@@ -105,13 +106,40 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 ## Profils en situation réelle
 
 ```
-[ ] profil Civil3D : les 4 commandes passent dans Civil 3D
-[ ] profil Blender : G / R / S / Tab
-[ ] profil Word : les 4 raccourcis
+[ ] profil Civil3D : les 6 commandes passent dans Civil 3D
+[ ] profil Blender : G / R / S / Tab / E / Ctrl+Z
+[ ] profil Word : les 6 raccourcis
 [ ] raccourcis Word adaptés si ton Word est en FRANÇAIS (Ctrl+G, pas Ctrl+B)
-[ ] profil Windows : les 4 raccourcis
+[ ] profil Windows : les 6 raccourcis
 [ ] ESC fonctionne dans TOUS les profils
 [ ] ESC interrompt bien une commande en cours d'écriture
+```
+
+## Les trois gestes (V1)
+
+```
+[ ] appui court : la macro part AU RELÂCHEMENT, sans attente perceptible
+    (sur une touche SANS macro « double appui »)
+[ ] appui long : la macro part AU BOUT DE 400 ms, doigt encore appuyé
+[ ] relâcher après un appui long n'envoie PAS la macro courte en plus
+[ ] double appui : deux appuis rapides envoient bien la macro « double »
+[ ] deux appuis lents envoient bien DEUX macros courtes
+[ ] une touche sans macro longue ni double reste instantanée
+[ ] GESTE_LONG_MS / GESTE_DOUBLE_MS ajustés à ton doigt si besoin
+```
+
+## L'écran tableau (V1)
+
+```
+[ ] les colonnes CRT / LNG / DBL sont lisibles
+[ ] les libellés ne débordent pas
+[ ] le tableau défile tout seul toutes les 2,5 s (6 touches, 4 lignes)
+[ ] un appui fait SAUTER l'écran sur la bonne ligne et la surligne
+[ ] la surbrillance s'efface après ~1,3 s et le défilement reprend
+[ ] le surlignage marche aussi sur un geste SANS macro (ligne avec « - »)
+[ ] contraste minimal après 3 min sans appui (SCREEN_DIM_MS)
+[ ] écran éteint après 15 min sans appui (SCREEN_OFF_MS)
+[ ] le premier appui réveille l'écran ET exécute sa macro
 ```
 
 ## Comportement global
@@ -145,10 +173,26 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 [ ] B2 maintenu au RESET : l'écran affiche MODE CONFIG
 [ ] le réseau WiFi MACROPAD apparaît
 [ ] http://192.168.4.1 s'ouvre dans le navigateur
-[ ] les 6 macros de chaque profil s'affichent dans la page
+[ ] les 6 touches × 3 gestes de chaque profil s'affichent dans la page
 [ ] une modification s'enregistre et survit au RESET
 [ ] une macro volontairement fausse (CTRL+BIDON) est REFUSÉE avec un message
-[ ] le bouton « Profils d'usine » ramène bien aux valeurs de profiles.py
+[ ] le bouton « Valeurs d'usine » ramène bien aux valeurs de profiles.py
 [ ] en mode config, aucune touche n'est envoyée (le clavier n'existe pas)
 [ ] profils.json sauvegardé sur le PC une fois la configuration au point
+```
+
+## Compagnon PC et détection automatique (V1)
+
+```
+[ ] py -m pip install pyserial : installé
+[ ] py macropad_auto.py --simuler : la console suit bien les fenêtres
+[ ] le script trouve le port natif tout seul (VID 0x303A)
+[ ] Thonny est resté sur le port UART, pas sur le port natif
+[ ] passer sur Civil 3D bascule le profil, l'écran affiche AUTO
+[ ] le nom du fichier ouvert s'affiche en bas de l'écran
+[ ] il DÉFILE quand il est trop long, et l'abrégé reste fixe à gauche
+[ ] les deux TTP223 ensemble : LOCK s'affiche, le PC ne change plus rien
+[ ] http://127.0.0.1:8765 s'ouvre, les modifications sont IMMÉDIATES
+[ ] ajouter un logiciel dans la page : la détection le prend en compte
+[ ] le compteur d'usage monte quand on tape (et survit à un RESET)
 ```

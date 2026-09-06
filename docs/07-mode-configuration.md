@@ -3,6 +3,17 @@
 Depuis la V1, tu n'as plus besoin de Thonny pour changer tes macros. Le
 macropad sait allumer son propre réseau WiFi et servir une page web.
 
+Il y a **deux chemins vers la même page**, et tu choisis selon la
+situation :
+
+| | Par WiFi (ce chapitre) | Par USB ([chapitre 8](08-detection-auto.md)) |
+|---|---|---|
+| Il faut | rien à installer | Python + `pyserial` sur le PC |
+| Démarrage | maintenir B2 + RESET | rien, le macropad tourne normalement |
+| Adresse | `http://192.168.4.1` | `http://127.0.0.1:8765` |
+| Application | après un RESET | **immédiate** |
+| Pratique pour | un téléphone, un PC verrouillé | l'usage courant |
+
 ---
 
 ## 7.1 En trois minutes
@@ -63,11 +74,29 @@ les 224 Ko de RAM de la carte.
 |---|---|
 | Renommer un profil | ✅ nom interne et titre affiché |
 | Ajouter / supprimer un profil | ✅ |
-| Changer les 6 macros d'un profil | ✅ libellé, type, valeur |
-| Revenir aux profils d'usine | ✅ bouton dédié |
+| Changer les macros des 6 touches | ✅ libellé, type, valeur |
+| **Trois gestes par touche** | ✅ appui court, appui long, double appui |
+| **Table des logiciels détectés** | ✅ programme, profil, abrégé écran |
+| **Compteur d'usage** | ✅ affiché en bout de ligne, avec sa barre |
+| Revenir aux valeurs d'usine | ✅ bouton dédié |
 | Séquences à plusieurs actions | ❌ réservées à `profiles.py` |
 
-Les quatre types de macro disponibles :
+### Les trois gestes
+
+Chaque touche occupe trois lignes dans la page, une par geste :
+
+| Geste | Comment | Par défaut |
+|---|---|---|
+| **court** | appuie et relâche | c'est la macro principale |
+| **long** | garde appuyé ≥ 400 ms | vide |
+| **double** | deux appuis en moins de 260 ms | vide |
+
+Les deux durées se règlent dans `config.py` (`GESTE_LONG_MS`,
+`GESTE_DOUBLE_MS`). Une touche qui n'a **pas** de macro « double » part
+dès le relâchement : tu ne paies l'attente que là où tu t'en sers.
+Voir le [chapitre 9](09-ecran-et-gestes.md) pour le détail.
+
+### Les cinq types de macro
 
 | Type | Valeur à saisir | Effet |
 |---|---|---|
@@ -75,10 +104,34 @@ Les quatre types de macro disponibles :
 | combinaison | `CTRL+Z`, `CTRL+SHIFT+ESC` | plusieurs touches ensemble |
 | texte | `_HATCH` | écrit la chaîne |
 | texte + Entrée | `_MATCHPROP` | écrit la chaîne puis valide |
-| inactive | — | la touche ne fait rien |
+| inactive | — | ce geste ne fait rien |
 
 **Le libellé fait 6 caractères au maximum** : c'est ce que laisse la
-demi-largeur de l'écran avec six touches.
+largeur de l'écran une fois les trois colonnes de gestes posées.
+
+### Les logiciels détectés
+
+La section du bas est la table que lit le compagnon PC :
+
+| Programme (.exe) | Profil | Abrégé écran |
+|---|---|---|
+| `acad.exe` | CIVIL3D | `C3D` |
+| `blender.exe` | BLENDER | `Blender` |
+| *tout le reste* | WINDOWS | `Win` |
+
+L'abrégé, **7 caractères au maximum**, est le texte fixe en bas à gauche
+de l'écran pendant que le nom du fichier défile. Détails au
+[chapitre 8](08-detection-auto.md).
+
+### Le compteur d'usage
+
+À droite de chaque touche, le nombre d'appuis depuis la mise en service,
+avec une petite barre pour comparer d'un coup d'œil. C'est ce qui te dira,
+au moment de dessiner le boîtier, quelles touches méritent la meilleure
+place — et lesquelles ne servent jamais.
+
+Le compteur est rangé dans `stats.json`, écrit **tous les 25 appuis** pour
+ménager la mémoire flash (elle supporte un nombre fini d'écritures).
 
 ---
 
@@ -114,19 +167,31 @@ l'ouvrir dans Thonny pour voir ce qu'il contient :
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "ordre": ["BLENDER", "CIVIL3D", "WORD", "WINDOWS"],
   "profils": {
     "CIVIL3D": {
       "titre": "CIVIL 3D",
       "touches": [
-        {"label": "MATCH", "type": "text_enter", "valeur": "_MATCHPROP"},
+        {"label": "MATCH",
+         "court":  {"type": "text_enter", "valeur": "_MATCHPROP"},
+         "long":   {"type": "none", "valeur": ""},
+         "double": {"type": "text_enter", "valeur": "_PROPERTIES"}},
         ...
       ]
     }
+  },
+  "apps": {
+    "repli": {"profil": "WINDOWS", "abrege": "Win"},
+    "liste": [{"exe": "acad.exe", "profil": "CIVIL3D", "abrege": "C3D"}]
   }
 }
 ```
+
+> **Version 2** : un fichier de version 1 (une seule macro par touche) est
+> relu sans problème — l'ancienne macro devient l'appui court. Le compteur
+> d'usage, lui, vit à part dans `stats.json` : effacer tes profils ne remet
+> pas les compteurs à zéro, et inversement.
 
 **Supprimer ce fichier revient aux profils d'usine** de `profiles.py`.
 C'est aussi ce que fait le bouton « Profils d'usine » de la page web.

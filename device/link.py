@@ -98,8 +98,9 @@ class SourceStdin:
 class Link:
     """Analyse les lignes venant du PC et repond."""
 
-    def __init__(self, nb_touches, source=None, sortie=None):
+    def __init__(self, nb_touches, source=None, sortie=None, stats=None):
         self.nb_touches = nb_touches
+        self.stats = stats            # pour joindre les compteurs d'usage
         self.actif = False
         self.source = source
         self.sortie = sortie or print
@@ -194,18 +195,7 @@ class Link:
     def _envoyer_config(self):
         """Envoie la configuration au PC, decoupee en morceaux."""
         try:
-            profils, ordre, titres, origine = store.charger(self.nb_touches)
-            blocs = {}
-            for nom, macros in profils.items():
-                touches = []
-                for label, actions in macros:
-                    kind, valeur = store.action_vers_json(actions)
-                    touches.append({"label": label, "type": kind,
-                                    "valeur": valeur})
-                blocs[nom] = {"titre": titres.get(nom, nom), "touches": touches}
-            texte = json.dumps({"ordre": ordre, "profils": blocs,
-                                "touches": self.nb_touches,
-                                "origine": origine})
+            texte = json.dumps(store.vers_json(self.nb_touches, self.stats))
         except Exception as exc:
             self.sortie("#KO:lecture impossible : %s" % exc)
             return
@@ -229,28 +219,10 @@ class Link:
             self.sortie("#KO:JSON invalide : %s" % exc)
             return None
 
-        try:
-            ordre = [str(n) for n in data["ordre"]]
-            profils = {}
-            titres = {}
-            for nom, bloc in data["profils"].items():
-                macros = []
-                for touche in bloc["touches"][:self.nb_touches]:
-                    actions = store.action_depuis_json(
-                        touche.get("type", "none"), touche.get("valeur", ""))
-                    macros.append((str(touche.get("label", ""))[:6], actions))
-                while len(macros) < self.nb_touches:
-                    macros.append(("", []))
-                profils[str(nom)] = macros
-                titres[str(nom)] = str(bloc.get("titre", nom))
-        except Exception as exc:
-            self.sortie("#KO:donnees illisibles : %s" % exc)
-            return None
-
-        # store.enregistrer refuse toute macro qui ne serait pas tapable :
-        # impossible d'enregistrer depuis le PC une configuration qui
-        # planterait au demarrage suivant.
-        ok, raison = store.enregistrer(profils, ordre, titres, self.nb_touches)
+        # store refuse toute macro qui ne serait pas tapable : impossible
+        # d'enregistrer depuis le PC une configuration qui planterait au
+        # demarrage suivant.
+        ok, raison = store.enregistrer_json(data, self.nb_touches)
         if ok:
             self.sortie("#OK:configuration enregistree")
             return (EVT_RECHARGER, None)

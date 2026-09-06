@@ -78,10 +78,12 @@ class Logic(unittest.TestCase):
         self.assertEqual(character_keys('a','FR_AZERTY',True),(-2,20))
     def test_macros_valid_and_enter(self):
         for macros in PROFILES.values():
-            for _,actions in macros:
-                self.assertTrue(compile_actions(actions,'FR_AZERTY'))
+            for _, gestes in macros:
+                for actions in gestes.values():
+                    self.assertTrue(compile_actions(actions,'FR_AZERTY'))
+        # B1, B2 et B4 de CIVIL3D ecrivent une commande _XXX suivie d'Entree
         for index in (0,1,3):
-            seq=compile_actions(PROFILES['CIVIL3D'][index][1],'FR_AZERTY')
+            seq=compile_actions(PROFILES['CIVIL3D'][index][1]['court'],'FR_AZERTY')
             self.assertEqual(seq[0],(37,)); self.assertEqual(seq[-1],(40,))
         self.assertEqual(compile_actions([('combo',('CTRL','Z'))],'FR_AZERTY'),[(-1,26)])
     def test_invalid_text_atomic(self):
@@ -384,20 +386,21 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
     def test_libelles_tiennent_sur_l_ecran(self):
         import profiles as P
         for nom, macros in P.PROFILES.items():
-            for label, _ in macros:
+            for label, _gestes in macros:
                 self.assertLessEqual(len(label), P.LABEL_MAX,
                                      "%s : '%s'" % (nom, label))
 
     def test_toutes_les_macros_usine_sont_tapables(self):
         import profiles as P
         for nom, macros in P.PROFILES.items():
-            for label, actions in macros:
-                compile_actions(actions, C.KEYBOARD_LAYOUT)
+            for label, gestes in macros:
+                for actions in gestes.values():
+                    compile_actions(actions, C.KEYBOARD_LAYOUT)
 
     def test_rotation_sur_six_touches(self):
         from profiles import ProfileManager
         import store
-        profils, ordre, titres, origine = store.charger(6)
+        profils, ordre, titres, apps, repli, origine = store.charger(6)
         self.assertEqual(origine, 'usine')
         p = ProfileManager(ordre, C.DEFAULT_PROFILE, profils, 6)
         self.assertEqual(len(p.macros), 6)
@@ -407,52 +410,56 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
     # --- enregistrement JSON --------------------------------------------
     def test_aller_retour_json(self):
         import store
-        profils, ordre = store.defauts()
-        titres = {'CIVIL3D': 'CIVIL 3D'}
-        ok, raison = store.enregistrer(profils, ordre, titres, 6)
+        profils, ordre, titres, apps, repli = store.defauts()
+        ok, raison = store.enregistrer(profils, ordre, titres, apps, repli, 6)
         self.assertTrue(ok, raison)
-        relus, ordre2, titres2, origine = store.charger(6)
+        relus, ordre2, titres2, apps2, repli2, origine = store.charger(6)
         self.assertEqual(origine, 'fichier')
         self.assertEqual(ordre2, ordre)
-        # Les macros relues doivent produire exactement les memes frappes.
+        self.assertEqual(apps2, apps)          # la table des logiciels survit
+        self.assertEqual(repli2, repli)
+        # Les macros relues doivent produire exactement les memes frappes,
+        # geste par geste.
         for nom in ordre:
             for i in range(6):
-                self.assertEqual(
-                    compile_actions(relus[nom][i][1], 'FR_AZERTY'),
-                    compile_actions(profils[nom][i][1], 'FR_AZERTY'),
-                    '%s B%d' % (nom, i + 1))
+                for geste in ('court', 'long', 'double'):
+                    self.assertEqual(
+                        compile_actions(relus[nom][i][1].get(geste, []), 'FR_AZERTY'),
+                        compile_actions(profils[nom][i][1].get(geste, []), 'FR_AZERTY'),
+                        '%s B%d %s' % (nom, i + 1, geste))
 
     def test_macro_intapable_refusee(self):
         import store
-        profils, ordre = store.defauts()
-        profils['CIVIL3D'][0] = ('KO', [('key', 'TOUCHE_QUI_NEXISTE_PAS')])
-        ok, raison = store.enregistrer(profils, ordre, {}, 6)
+        profils, ordre, titres, apps, repli = store.defauts()
+        profils['CIVIL3D'][0] = ('KO', {'court': [('key', 'TOUCHE_BIDON')]})
+        ok, raison = store.enregistrer(profils, ordre, titres, apps, repli, 6)
         self.assertFalse(ok)
         self.assertIn('CIVIL3D', raison)
 
     def test_libelle_trop_long_refuse(self):
         import store
-        profils, ordre = store.defauts()
-        profils['WORD'][0] = ('BEAUCOUPTROPLONG', [('key', 'A')])
-        ok, raison = store.enregistrer(profils, ordre, {}, 6)
+        profils, ordre, titres, apps, repli = store.defauts()
+        profils['WORD'][0] = ('BEAUCOUPTROPLONG', {'court': [('key', 'A')]})
+        ok, raison = store.enregistrer(profils, ordre, titres, apps, repli, 6)
         self.assertFalse(ok)
 
     def test_fichier_corrompu_repli_sur_usine(self):
         import store
         with open(C.PROFILES_FILE, 'w') as f:
             f.write('{ ceci n est pas du JSON')
-        profils, ordre, titres, origine = store.charger(6)
+        profils, ordre, titres, apps, repli, origine = store.charger(6)
         self.assertEqual(origine, 'usine')      # ne doit PAS planter
         self.assertEqual(len(profils['CIVIL3D']), 6)
 
     def test_fichier_incoherent_repli_sur_usine(self):
         import store, json as J
         # JSON valide, mais une macro impossible a taper.
-        data = {'version': 1, 'ordre': ['X'], 'profils': {'X': {'titre': 'X',
-                'touches': [{'label': 'A', 'type': 'key', 'valeur': 'INCONNU'}] * 6}}}
+        touche = {'label': 'A', 'court': {'type': 'key', 'valeur': 'INCONNU'}}
+        data = {'version': 2, 'ordre': ['X'],
+                'profils': {'X': {'titre': 'X', 'touches': [touche] * 6}}}
         with open(C.PROFILES_FILE, 'w') as f:
             J.dump(data, f)
-        profils, ordre, titres, origine = store.charger(6)
+        profils, ordre, titres, apps, repli, origine = store.charger(6)
         self.assertEqual(origine, 'usine')
 
     def test_conversion_combo(self):
@@ -493,6 +500,13 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
                 self._v(x, y, 1, h)
 
             def text(self, s, x, y, c=1):
+                if y >= 54:
+                    # Ligne du bas : le defilement du nom de fichier ecrit
+                    # VOLONTAIREMENT en dehors de l'ecran, framebuf coupe
+                    # ce qui depasse. On ne verifie donc que la hauteur.
+                    if y < 0 or y + 8 > 64:
+                        self.out_of_bounds += 1
+                    return
                 self._v(x, y, 8 * len(s), 8)
 
             def write_cmd(self, c):
@@ -538,6 +552,21 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
                 ecran.tick(clock[0])
                 clock[0] += 1
             ecran.set_etat('HID')
+
+            # Le saut sur la touche utilisee : c'est lui qui deplace la
+            # fenetre du tableau, donc lui qui pourrait deborder.
+            for touche in range(len(P.PROFILES[nom])):
+                ecran.surligner(touche, clock[0])
+                clock[0] += 20
+                ecran.tick(clock[0])
+
+        # Le nom de fichier le plus long possible, avec le plus long des
+        # abreges : c'est le pire cas de la ligne du bas.
+        ecran.set_document('Blender|' + 'M' * 48)
+        for _ in range(3000):
+            ecran.tick(clock[0])
+            clock[0] += 1
+
         ecran.config_screen('MACROPAD', 'macropad2026', '192.168.4.1')
         ecran.flush_startup()
         self.assertEqual(ecran.out_of_bounds if hasattr(ecran, 'out_of_bounds')
@@ -623,17 +652,25 @@ class PageWebDeConfiguration(unittest.TestCase):
         self.assertEqual(data["ordre"], list(C.PROFILES_ORDER))
         civil = data["profils"]["CIVIL3D"]["touches"]
         self.assertEqual(len(civil), 6)
-        self.assertEqual(civil[0]["valeur"], "_MATCHPROP")
-        self.assertEqual(civil[0]["type"], "text_enter")
+        self.assertEqual(civil[0]["court"]["valeur"], "_MATCHPROP")
+        self.assertEqual(civil[0]["court"]["type"], "text_enter")
         # Les combinaisons sont lisibles dans le formulaire.
-        self.assertEqual(civil[2]["valeur"], "CTRL+Z")
+        self.assertEqual(civil[2]["court"]["valeur"], "CTRL+Z")
+        # L'appui long de B3 retablit (Ctrl+Y).
+        self.assertEqual(civil[2]["long"]["valeur"], "CTRL+Y")
+        # La table des logiciels voyage avec la configuration.
+        self.assertTrue(any(a["exe"] == "acad.exe"
+                            for a in data["apps"]["liste"]))
 
     def test_enregistrement_valide(self):
         import json as J
         sortie = self._requete("GET", "/api/profils")
         data = J.loads(sortie.split(b"\r\n\r\n", 1)[1])
         data["profils"]["CIVIL3D"]["touches"][0] = {
-            "label": "TALUS", "type": "text_enter", "valeur": "_GRADING"}
+            "label": "TALUS",
+            "court": {"type": "text_enter", "valeur": "_GRADING"},
+            "long": {"type": "combo", "valeur": "CTRL+S"},
+            "double": {"type": "none", "valeur": ""}}
         reponse = self._requete("POST", "/api/profils",
                                 J.dumps(data).encode())
         resultat = J.loads(reponse.split(b"\r\n\r\n", 1)[1])
@@ -641,10 +678,12 @@ class PageWebDeConfiguration(unittest.TestCase):
 
         # La modification doit etre relue telle quelle par le firmware.
         import store
-        profils, ordre, titres, origine = store.charger(6)
+        profils, ordre, titres, apps, repli, origine = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(profils["CIVIL3D"][0][0], "TALUS")
-        frappes = compile_actions(profils["CIVIL3D"][0][1], "FR_AZERTY")
+        # L'appui long enregistre est bien relu.
+        self.assertTrue(profils["CIVIL3D"][0][1].get("long"))
+        frappes = compile_actions(profils["CIVIL3D"][0][1]["court"], "FR_AZERTY")
         self.assertEqual(len(frappes), len("_GRADING") + 1)   # + ENTREE
         self.assertEqual(frappes[0], (37,))                   # "_" en AZERTY
 
@@ -653,14 +692,15 @@ class PageWebDeConfiguration(unittest.TestCase):
         sortie = self._requete("GET", "/api/profils")
         data = J.loads(sortie.split(b"\r\n\r\n", 1)[1])
         data["profils"]["WORD"]["touches"][0] = {
-            "label": "KO", "type": "combo", "valeur": "CTRL+TOUCHE_BIDON"}
+            "label": "KO",
+            "court": {"type": "combo", "valeur": "CTRL+TOUCHE_BIDON"}}
         reponse = self._requete("POST", "/api/profils", J.dumps(data).encode())
         resultat = J.loads(reponse.split(b"\r\n\r\n", 1)[1])
         self.assertFalse(resultat["ok"])
         self.assertIn("WORD", resultat["raison"])
         # Rien ne doit avoir ete ecrit : on reste sur les profils d'usine.
         import store
-        self.assertEqual(store.charger(6)[3], "usine")
+        self.assertEqual(store.charger(6)[5], "usine")
 
     def test_enregistrement_refuse_un_json_casse(self):
         import json as J
@@ -670,11 +710,10 @@ class PageWebDeConfiguration(unittest.TestCase):
 
     def test_retour_usine(self):
         import store
-        profils, ordre = store.defauts()
-        store.enregistrer(profils, ordre, {}, 6)
-        self.assertEqual(store.charger(6)[3], "fichier")
+        store.enregistrer(*store.defauts(), nb_touches=6)
+        self.assertEqual(store.charger(6)[5], "fichier")
         self._requete("POST", "/api/usine")
-        self.assertEqual(store.charger(6)[3], "usine")
+        self.assertEqual(store.charger(6)[5], "usine")
 
     def test_chemin_inconnu(self):
         self.assertIn(b"404", self._requete("GET", "/nimportequoi"))
@@ -772,8 +811,9 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         data = J.loads(texte)
         self.assertEqual(data["touches"], 6)
         self.assertEqual(data["ordre"], list(C.PROFILES_ORDER))
-        self.assertEqual(data["profils"]["CIVIL3D"]["touches"][0]["valeur"],
-                         "_MATCHPROP")
+        self.assertEqual(
+            data["profils"]["CIVIL3D"]["touches"][0]["court"]["valeur"],
+            "_MATCHPROP")
 
     # --- ecriture de la configuration par le PC -------------------------
     def _envoyer_config(self, lien, source, data):
@@ -795,16 +835,21 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         lien.service()
         data = J.loads("".join(l[3:] for l in sorties if l.startswith("#C:")))
         data["profils"]["CIVIL3D"]["touches"][0] = {
-            "label": "TALUS", "type": "text_enter", "valeur": "_GRADING"}
+            "label": "TALUS",
+            "court": {"type": "text_enter", "valeur": "_GRADING"},
+            "long": {"type": "combo", "valeur": "CTRL+S"},
+            "double": {"type": "none", "valeur": ""}}
 
         sorties.clear()
         evenements = self._envoyer_config(lien, source, data)
         self.assertIn((link.EVT_RECHARGER, None), evenements)
         self.assertTrue(any(s.startswith("#OK:") for s in sorties), sorties)
 
-        profils, ordre, titres, origine = store.charger(6)
+        profils, ordre, titres, apps, repli, origine = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(profils["CIVIL3D"][0][0], "TALUS")
+        # L'appui long enregistre est bien relu.
+        self.assertTrue(profils["CIVIL3D"][0][1].get("long"))
 
     def test_macro_intapable_refusee_par_le_lien(self):
         import json as J, link, store
@@ -813,14 +858,15 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         lien.service()
         data = J.loads("".join(l[3:] for l in sorties if l.startswith("#C:")))
         data["profils"]["WORD"]["touches"][0] = {
-            "label": "KO", "type": "combo", "valeur": "CTRL+TOUCHE_BIDON"}
+            "label": "KO",
+            "court": {"type": "combo", "valeur": "CTRL+TOUCHE_BIDON"}}
 
         sorties.clear()
         evenements = self._envoyer_config(lien, source, data)
         self.assertNotIn((link.EVT_RECHARGER, None), evenements)
         self.assertTrue(any(s.startswith("#KO:") for s in sorties), sorties)
         # Rien n'a ete ecrit : on reste sur les profils d'usine.
-        self.assertEqual(store.charger(6)[3], "usine")
+        self.assertEqual(store.charger(6)[5], "usine")
 
     def test_json_casse_refuse(self):
         lien, source, sorties = self._lien()
@@ -844,6 +890,180 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         for _ in range(400):
             lien.service()
         self.assertTrue(any("volumineuse" in s for s in sorties), sorties)
+
+
+
+class GestesCourtLongDouble(unittest.TestCase):
+    """Appui court, appui long et double appui."""
+
+    def setUp(self):
+        clock[0] = 0
+        from gestures import Gestes
+        self.G = Gestes(6, long_ms=400, double_ms=260)
+
+    def _touche(self, index, long_=False, double=False):
+        self.G.a_long[index] = long_
+        self.G.a_double[index] = double
+
+    # --- appui court -----------------------------------------------------
+    def test_appui_court_instantane_sans_double(self):
+        # Une touche SANS macro double ne doit subir aucun retard.
+        self._touche(0)
+        self.assertIsNone(self.G.appui(0, 0))
+        self.assertEqual(self.G.relachement(0, 80), 'court')
+        self.assertEqual(self.G.service(80), [])
+
+    def test_appui_court_retarde_si_double_possible(self):
+        # Avec une macro double, il faut bien attendre de savoir.
+        self._touche(0, double=True)
+        self.G.appui(0, 0)
+        self.assertIsNone(self.G.relachement(0, 80))     # on ne conclut pas
+        self.assertEqual(self.G.service(200), [])        # toujours dans le delai
+        self.assertEqual(self.G.service(345), [(0, 'court')])
+
+    # --- double appui ----------------------------------------------------
+    def test_double_appui(self):
+        self._touche(0, double=True)
+        self.G.appui(0, 0)
+        self.G.relachement(0, 60)
+        self.assertEqual(self.G.appui(0, 150), 'double')
+        self.assertEqual(self.G.service(500), [])        # pas de court en plus
+
+    def test_deux_appuis_trop_espaces_font_deux_courts(self):
+        self._touche(0, double=True)
+        self.G.appui(0, 0)
+        self.G.relachement(0, 60)
+        self.assertEqual(self.G.service(330), [(0, 'court')])
+        self.G.appui(0, 400)
+        self.G.relachement(0, 460)
+        self.assertEqual(self.G.service(730), [(0, 'court')])
+
+    # --- appui long ------------------------------------------------------
+    def test_appui_long_part_des_le_seuil(self):
+        self._touche(0, long_=True)
+        self.G.appui(0, 0)
+        self.assertEqual(self.G.service(399), [])
+        self.assertEqual(self.G.service(400), [(0, 'long')])
+        # Le relachement ne doit PAS declencher un court en plus.
+        self.assertIsNone(self.G.relachement(0, 900))
+
+    def test_maintien_sans_macro_longue_reste_un_court(self):
+        self._touche(0)                      # aucune macro longue
+        self.G.appui(0, 0)
+        self.assertEqual(self.G.service(2000), [])
+        self.assertEqual(self.G.relachement(0, 2000), 'court')
+
+    def test_touches_independantes(self):
+        self._touche(0, long_=True)
+        self._touche(1, double=True)
+        self.G.appui(0, 0)
+        self.G.appui(1, 10)
+        self.G.relachement(1, 60)
+        # La touche 1 conclut son attente de double a t=320.
+        self.assertEqual(self.G.service(330), [(1, 'court')])
+        self.assertEqual(self.G.service(399), [])
+        # La touche 0, elle, franchit son seuil long a t=400.
+        self.assertEqual(self.G.service(400), [(0, 'long')])
+        self.assertEqual(self.G.service(500), [])
+
+    def test_configurer_depuis_les_macros(self):
+        import profiles as P
+        self.G.configurer(P.PROFILES['CIVIL3D'])
+        # B3 ANNUL a un appui long (retablir), pas de double.
+        self.assertTrue(self.G.a_long[2])
+        self.assertFalse(self.G.a_double[2])
+        # B5 ZOOM a un double appui.
+        self.assertTrue(self.G.a_double[4])
+        # B1 MATCH n'a que l'appui court : aucun retard, aucune surveillance.
+        self.assertFalse(self.G.a_long[0])
+        self.assertFalse(self.G.a_double[0])
+
+
+class ValeursUsineSansPiege(unittest.TestCase):
+    """Les valeurs d'usine doivent survivre a un aller-retour par page web."""
+
+    def setUp(self):
+        try:
+            import os
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    def test_aucune_sequence_dans_les_valeurs_usine(self):
+        # Les pages web ne gardent qu'UNE action par geste. Si une valeur
+        # d'usine en contenait deux, un simple "Enregistrer" la tronquerait
+        # sans prevenir. On interdit donc le piege a la source.
+        import profiles as P
+        for nom, touches in P.PROFILES.items():
+            for index, (label, gestes) in enumerate(touches):
+                for geste, actions in gestes.items():
+                    self.assertEqual(
+                        len(actions), 1,
+                        "%s B%d %s : %d actions, la page web n'en garderait "
+                        "qu'une" % (nom, index + 1, geste, len(actions)))
+
+    def test_aller_retour_complet_sans_perte(self):
+        import store
+        avant = store.vers_json(6)
+        ok, raison = store.enregistrer_json(avant, 6)
+        self.assertTrue(ok, raison)
+        apres = store.vers_json(6)
+        self.assertEqual(apres["ordre"], avant["ordre"])
+        self.assertEqual(apres["apps"], avant["apps"])
+        for nom in avant["ordre"]:
+            self.assertEqual(apres["profils"][nom], avant["profils"][nom], nom)
+
+
+class AncienFichierDeConfiguration(unittest.TestCase):
+    """Un profils.json ecrit par la V1 doit encore se lire apres la mise a
+    jour. Sinon, l'utilisateur perd ses macros en changeant de firmware :
+    c'est exactement ce qu'on veut eviter."""
+
+    def test_version_1_relue_comme_appui_court(self):
+        import store
+        ancien = {
+            "version": 1,
+            "ordre": ["CIVIL3D"],
+            "profils": {"CIVIL3D": {"titre": "CIVIL 3D", "touches": [
+                {"label": "MATCH", "type": "text_enter", "valeur": "_MATCHPROP"},
+                {"label": "ANNUL", "type": "combo", "valeur": "CTRL+Z"},
+                {"label": "", "type": "none", "valeur": ""},
+            ]}},
+        }
+        profils, ordre, titres, apps, repli = store.depuis_json(ancien, 6)
+        touches = profils["CIVIL3D"]
+
+        self.assertEqual(len(touches), 6)          # complete a six touches
+        self.assertEqual(titres["CIVIL3D"], "CIVIL 3D")
+
+        label, gestes = touches[0]
+        self.assertEqual(label, "MATCH")
+        self.assertEqual(gestes["court"], [("text_enter", "_MATCHPROP")])
+        self.assertNotIn("long", gestes)           # les deux autres gestes
+        self.assertNotIn("double", gestes)         # restent libres
+
+        self.assertEqual(touches[1][1]["court"], [("combo", ("CTRL", "Z"))])
+        self.assertEqual(touches[2][1], {})        # touche inactive
+
+        # Et le tout reste tapable : rien de casse par la conversion.
+        self.assertEqual(store.verifier(profils, ordre, 6), [])
+
+    def test_version_2_non_touchee_par_la_conversion(self):
+        # La conversion ne doit se declencher que sur les anciens fichiers.
+        import store
+        recent = {
+            "version": 2,
+            "ordre": ["WORD"],
+            "profils": {"WORD": {"titre": "WORD", "touches": [
+                {"label": "GRAS", "type": "ignore", "valeur": "ignore",
+                 "court": {"type": "combo", "valeur": "CTRL+B"}},
+            ]}},
+        }
+        profils, _, _, _, _ = store.depuis_json(recent, 6)
+        self.assertEqual(profils["WORD"][0][1]["court"],
+                         [("combo", ("CTRL", "B"))])
 
 
 if __name__=='__main__': unittest.main(verbosity=2)

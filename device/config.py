@@ -152,11 +152,44 @@ LINK_ENABLED = True
 AUTO_TIMEOUT_MS = 15000
 
 # =====================================================================
+# 4 quater. COMPTEUR D'USAGE ET ECONOMISEUR D'ECRAN
+# =====================================================================
+# Le macropad compte les appuis sur chaque macro. La page de configuration
+# te les classe : tu sais quelles touches meritent la premiere rangee de
+# ton boitier, et lesquelles ne servent jamais.
+STATS_ENABLED = True
+STATS_FILE = "stats.json"
+# On n'ecrit sur la flash que toutes les N frappes : la memoire d'un
+# microcontroleur supporte un nombre limite d'ecritures, inutile de l'user
+# pour une statistique. Au pire on perd les N-1 derniers appuis.
+STATS_SAVE_EVERY = 25
+
+# --- Anti-marquage de l'ecran ---------------------------------------
+# Un OLED qui affiche la meme image pendant des heures MARQUE : les pixels
+# allumes en permanence vieillissent plus vite et laissent un fantome
+# visible. Le bandeau inverse du haut est exactement le pire cas.
+# Apres un moment sans appui on baisse le contraste, puis on eteint.
+# N'importe quelle touche reveille l'ecran instantanement.
+SCREEN_DIM_MS = 180000      # 3 minutes  -> contraste minimal
+SCREEN_OFF_MS = 900000      # 15 minutes -> ecran eteint
+SCREEN_DIM_CONTRAST = 1     # 0 a 255
+
+# =====================================================================
 # 5. TEMPS ET REACTIVITE (millisecondes)
 # =====================================================================
 # Délai entre la mise sous tension et la prise en compte des touches.
 # Sert de filet : si une macro devenait folle, tu as 2,5 s pour débrancher.
 BOOT_GUARD_MS = 2500
+
+# --- Gestes : appui court, appui long, double appui ------------------
+# Une touche maintenue au-delà de ce délai déclenche sa macro « longue »,
+# si elle en a une. La macro part dès le franchissement du seuil, sans
+# attendre le relâchement : tu la sens partir sous le doigt.
+GESTE_LONG_MS = 400
+# Deux appuis séparés de moins que ce délai forment un double appui.
+# ATTENTION : seules les touches qui ont RÉELLEMENT une macro de double
+# appui attendent ce délai. Les autres partent instantanément.
+GESTE_DOUBLE_MS = 260
 
 DEBOUNCE_MS = 25        # anti-rebond des touches B1 à B4
 ESC_DEBOUNCE_MS = 20    # anti-rebond du bouton ESC
@@ -185,6 +218,19 @@ HID_TIMEOUT_MS = 1000
 MACRO_QUEUE_LIMIT = 4
 
 PROFILE_SPLASH_MS = 500     # durée d'affichage du nom du profil en grand
+
+# --- Le tableau des gestes ------------------------------------------
+# L'écran affiche un tableau : une ligne par touche, trois colonnes
+# (appui court, appui long, double appui). Quatre lignes tiennent à
+# l'écran ; s'il y a plus de touches, le tableau défile tout seul.
+TABLE_SCROLL_MS = 2500      # temps d'affichage avant de faire défiler d'un cran
+HIGHLIGHT_MS = 1300         # durée du surlignage de la touche utilisée
+
+# Défilement du nom de document, quand il est trop long pour l'écran.
+# Le nom va-et-vient doucement, avec une pause à chaque extrémité pour te
+# laisser le temps de lire le début puis la fin.
+DOC_SCROLL_MS = 70          # millisecondes par pixel (plus grand = plus lent)
+DOC_SCROLL_PAUSE_MS = 1600  # pause en début et en fin de course
 
 # =====================================================================
 # 6. LED RESPIRANTE
