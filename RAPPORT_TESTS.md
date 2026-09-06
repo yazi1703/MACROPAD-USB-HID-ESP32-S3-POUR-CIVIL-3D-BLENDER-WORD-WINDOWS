@@ -29,6 +29,25 @@ Les GPIO, l'horloge, le PWM et le transport USB sont simulés. Le test d'absence
 
 Support machine.USBDevice sur le port ESP32 du tag 1.29.0 ; sélection SPIRAM_OCT ; broches du S3 et cohérence du pinout photo ; calcul de courant LED/base ; méthodes PWM/I2C et conservation CDC ; reprise des licences.
 
+## Validé sur le matériel réel (session de montage)
+
+Les points suivants ne relèvent plus de la simulation : ils ont été
+constatés sur la carte de l'utilisateur, un ESP32-S3 N16R8.
+
+| Point | Résultat |
+|---|---|
+| Firmware | MicroPython **v1.28.0**, `_build='ESP32_GENERIC_S3'` (variante standard, PSRAM non activée, 224 Ko libres) |
+| `machine.USBDevice` | présent : `True` |
+| Chargement des modules | `config`, `layouts`, `inputs`, `display`, `sh1106`, `led`, `profiles`, `runtime`, `diag` s'importent et s'exécutent sans erreur sur la carte |
+| Écran OLED | SH1106 détecté à **0x3C**, pilote initialisé sans exception, texte affiché correctement et non décalé |
+| Anti-rebond | appuis francs sur ESC, B1, B2, B3 : **un seul événement APPUI suivi d'un seul relâchement**, aucun rebond, compteurs exacts |
+| Étage LED | paliers PWM 5 / 25 / 50 / 100 % distincts, respiration fluide, aucun échauffement |
+| Traduction clavier | `diag.keymap()` produit bien le `_` en touche 37 sans Maj |
+
+Restent non validés à ce stade : l'énumération USB HID sous Windows et la
+frappe réelle, les deux modules TTP223, la quatrième touche mécanique, la
+rotation des profils et les essais applicatifs Civil 3D / Blender / Word.
+
 ## Non exécuté — à faire sur le matériel
 
 Aucun ESP32-S3 ni PC Windows cible n'était accessible. Pas de flash de carte, pas d'énumération HID, pas de mesure de latence ou de consommation, pas de validation du SH1106 réel ni des TTP, pas d'essai Thonny USB physique, pas de test applicatif Civil3D/Blender/Word. La compilation complète ESP-IDF du firmware n'a pas été effectuée ; le binaire recommandé est celui du site officiel. Concernant l'issue HID #18098 : les notes de version officielles de MicroPython **v1.27.0** annoncent explicitement « *a fix for blank USB HID reports on boards with PSRAM* », ce qui correspond exactement au symptôme signalé et exactement à une carte N16R8. La version 1.29.0 retenue est postérieure à ce correctif. Cela reste une preuve documentaire, pas une preuve matérielle : commencer malgré tout par le test LETTER.
