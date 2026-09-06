@@ -122,6 +122,15 @@ class HIDKeyboard:
         self.current = []
         self.phase = "idle"
         self.release_needed = True
+        # INDISPENSABLE : le relâchement qu'on vient de programmer est une
+        # NOUVELLE action, le chronomètre du garde-fou doit repartir de zéro.
+        #
+        # Sans cette ligne, self.progress gardait la date de la dernière
+        # frappe. Un changement de profil survenant après quelques secondes
+        # de repos déclenchait donc instantanément « transfert sans
+        # progression » et bloquait le clavier jusqu'au RESET, alors que
+        # rien n'était en panne. Panne constatée sur le matériel.
+        self.progress = ticks_ms()
 
     def escape(self, now):
         """Bouton ESC : priorité absolue.
@@ -184,6 +193,13 @@ class HIDKeyboard:
                 print("HID : interface ouverte par Windows")
                 self.opened = True
                 self.progress = now
+                if self.fault:
+                    # L'hôte vient de reconfigurer le périphérique : il a
+                    # forcément oublié toute touche restée enfoncée. On peut
+                    # donc repartir d'un état sain, plutôt que d'exiger un
+                    # RESET matériel pour un incident déjà passé.
+                    print("HID : reconnexion USB, reprise apres panne")
+                    self.fault = False
 
             # Garde-fou : si plus rien n'avance alors qu'on a du travail,
             # c'est que l'USB est bloqué. On arrête tout plutôt que de

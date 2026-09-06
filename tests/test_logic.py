@@ -303,4 +303,56 @@ class Corrections(unittest.TestCase):
                                 'PREVIOUS', 'NEXT'])
 
 
+
+class BugChangementDeProfil(unittest.TestCase):
+    """Panne constatee sur le materiel : un changement de profil apres un
+    moment de repos declenchait « transfert sans progression » et bloquait
+    definitivement le clavier."""
+
+    def setUp(self):
+        clock[0] = 0
+        Pin.levels = {}
+
+    def test_cancel_apres_repos_ne_declenche_pas_de_panne(self):
+        t = Transport()
+        k = HIDKeyboard(t)
+        k.tick(0)                       # ouverture + relachement initial
+        # Le macropad reste au repos bien plus longtemps que HID_TIMEOUT_MS.
+        for n in range(0, 30000, 500):
+            clock[0] = n
+            k.tick(n)
+        self.assertFalse(k.fault)
+        # L'utilisateur touche un TTP223 : main.py appelle cancel().
+        clock[0] = 30000
+        k.cancel()
+        k.tick(30000)
+        self.assertFalse(k.fault)       # echouait avant la correction
+        self.assertTrue(k.submit([('text', 'a')]))
+        pump(k, 30002, 300)
+        self.assertIn((20,), t.sent)    # la macro suivante part bien
+
+    def test_le_vrai_blocage_declenche_toujours_la_panne(self):
+        # On verifie que la correction n'a pas desarme le garde-fou.
+        t = Transport()
+        k = HIDKeyboard(t)
+        k.tick(0)
+        k.submit([('text', 'abc')])
+        t.blocked = True                # l'endpoint ne se libere jamais
+        pump(k, 2, 3000)
+        self.assertTrue(k.fault)
+
+    def test_reconnexion_usb_efface_la_panne(self):
+        t = Transport()
+        k = HIDKeyboard(t)
+        k.tick(0)
+        k._fail('panne simulee')
+        self.assertTrue(k.fault)
+        t.open = False
+        k.tick(10)                      # cable debranche
+        t.open = True
+        k.tick(20)                      # rebranche : l'hote reconfigure tout
+        self.assertFalse(k.fault)
+        self.assertTrue(k.submit([('text', 'a')]))
+
+
 if __name__=='__main__': unittest.main(verbosity=2)

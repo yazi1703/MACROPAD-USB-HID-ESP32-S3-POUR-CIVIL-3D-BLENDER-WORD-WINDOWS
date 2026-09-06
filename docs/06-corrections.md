@@ -225,6 +225,65 @@ fautes. Détail complet et calculs dans `docs/05-electronique.md` § 5.5.
 
 ---
 
+## Correction 10 — Un changement de profil bloquait le clavier (trouvée au montage)
+
+**Fichier :** `device/hid_keyboard.py`
+
+**Le symptôme.** En cours d'utilisation, un simple changement de profil
+produisait :
+
+```
+Profil : WORD
+ERREUR CRITIQUE HID : transfert sans progression - macros arretees, RESET requis
+```
+
+Et à partir de là, plus aucune macro ne partait : toutes répondaient
+`HID : action ignoree, interface non prete`, jusqu'au RESET matériel.
+
+**La cause.** `tick()` surveille les blocages avec un chronomètre :
+
+```python
+if ticks_diff(now, self.progress) > C.HID_TIMEOUT_MS and (self.release_needed or ...):
+    self._fail("transfert sans progression")
+```
+
+`self.progress` mémorise la date de la dernière avancée réelle. Mais quand
+le macropad est au repos, **rien ne le rafraîchit** : il vieillit
+indéfiniment.
+
+Or `cancel()` — appelé à chaque changement de profil par `main.py` —
+positionnait `release_needed = True` **sans toucher à `progress`**. Au tour
+de boucle suivant, le garde-fou comparait donc l'instant présent à une date
+vieille de plusieurs secondes, voire minutes, et déclarait une panne
+instantanément. Rien n'était réellement bloqué.
+
+Il suffisait de laisser le macropad tranquille plus d'une seconde
+(`HID_TIMEOUT_MS`) puis de changer de profil pour le tuer. Autant dire :
+en permanence.
+
+À noter que `escape()`, lui, faisait bien `self.progress = now` après son
+appel à `cancel()`. C'est pour cela que le bouton ESC ne déclenchait
+jamais le problème, ce qui rendait le symptôme d'autant plus déroutant.
+
+**La correction.** `cancel()` remet le chronomètre à zéro : le relâchement
+qu'il programme est une nouvelle action, elle mérite son propre délai.
+
+**Correction complémentaire.** Une panne était définitive : `fault` ne se
+levait jamais et seul un RESET matériel rendait le clavier. C'est excessif
+pour un incident passé. Désormais, quand l'hôte USB **reconfigure le
+périphérique** (débranchement/rebranchement, réveil du PC), la panne est
+effacée : l'hôte a de toute façon oublié toute touche restée enfoncée,
+l'état est donc sain par construction.
+
+**Tests :** `test_cancel_apres_repos_ne_declenche_pas_de_panne`,
+`test_le_vrai_blocage_declenche_toujours_la_panne` (vérifie que le
+garde-fou n'a pas été désarmé), `test_reconnexion_usb_efface_la_panne`.
+Les deux premiers échouent sur la version précédente.
+
+**Bug d'origine**, présent dès la première version du projet : mes
+corrections antérieures ne l'avaient ni causé ni révélé. Il a fallu
+l'usage réel pour le faire sortir.
+
 ## Ce qui n'a PAS été touché
 
 - La structure `device/` et les quatre fichiers USB officiels recopiés :
