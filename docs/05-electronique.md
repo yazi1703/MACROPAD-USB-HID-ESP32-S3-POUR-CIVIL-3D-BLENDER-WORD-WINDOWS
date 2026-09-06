@@ -67,6 +67,38 @@ Débranche l'USB avant de toucher un fil. Deux raisons :
 
 ## 5.3 Vérifications au multimètre AVANT la première mise sous tension
 
+### D'abord : MESURE chaque résistance avant de la monter
+
+Cinq secondes par résistance, et cela évite des heures de recherche. Ne te
+fie **jamais** aux anneaux de couleur seuls : sous une lumière jaune, sur un
+corps bleu ou beige, deux valeurs très éloignées se ressemblent beaucoup.
+
+Multimètre en position **ohms (Ω)**, une pointe sur chaque patte, résistance
+hors du montage.
+
+Quelques pièges rencontrés sur ce projet :
+
+| Valeur voulue | Anneaux | Confusion fréquente | Anneaux |
+|---|---|---|---|
+| **150 Ω** | marron, vert, marron | 1,5 MΩ | marron, vert, **vert** |
+| **150 Ω** | marron, vert, marron | 1 MΩ | marron, **noir**, vert |
+| **330 Ω** | orange, orange, marron | 33 Ω | orange, orange, **noir** |
+| **2,2 kΩ** | rouge, rouge, rouge | 22 Ω | rouge, rouge, **noir** |
+
+Un seul anneau d'écart, et le montage ne fonctionne plus du tout.
+
+**Ce que donne une erreur de ce type**, avec une LED alimentée en 5 V :
+
+| Résistance réelle | Courant | Effet visible |
+|---|---|---|
+| 150 Ω (voulu) | 18 mA | LED bien allumée |
+| 1 MΩ | **0,003 mA** | LED totalement invisible, même dans le noir |
+| 33 Ω | 88 mA | LED trop lumineuse, résistance brûlante |
+
+Avec une résistance de 1 MΩ en série, le multimètre lui-même devient une
+charge comparable au circuit : les tensions mesurées deviennent
+incohérentes, ni 0 V ni 5 V, ce qui égare complètement le diagnostic.
+
 Câble USB **débranché**. Multimètre en position continuité (le symbole qui
 fait « bip ») ou en ohms.
 
