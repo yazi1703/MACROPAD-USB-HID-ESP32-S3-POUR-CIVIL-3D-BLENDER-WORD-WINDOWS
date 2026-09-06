@@ -64,6 +64,7 @@ class Display:
         self.titre = ""
         self.macros = []
         self.etat = ""
+        self.document = ""          # nom du fichier ouvert, envoye par le PC
         self.pastilles = (0, 0)     # (index du profil courant, nombre total)
         self.splash_until = None
         self.pending_page = 8       # 8 = rien à envoyer ; 0 = tout à renvoyer
@@ -129,7 +130,13 @@ class Display:
             y = _LIGNES_Y[index // 2]
             self._pastille_touche(x, y, index + 1, self.macros[index][0])
         o.hline(0, _SEPARATEUR_Y, 128, 1)
-        self._carrousel()
+        # En bas : le nom du document si le PC nous l'envoie, sinon la
+        # position dans la liste des profils. Le nom du fichier est plus
+        # informatif, il a donc la priorite.
+        if self.document:
+            o.text(self.document[:16], 2, _PASTILLES_Y - 1, 1)
+        else:
+            self._carrousel()
 
     def _texte_double(self, texte):
         """Écrit un texte en police doublée, centré.
@@ -190,6 +197,19 @@ class Display:
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
+
+    def set_document(self, texte):
+        """Nom du document affiche en bas de l'ecran (envoye par le PC)."""
+        texte = (texte or "")[:16]
+        if texte == self.document:
+            return
+        self.document = texte
+        if self.oled and self.splash_until is None:
+            try:
+                self._vue_principale()
+                self.pending_page = 0
+            except Exception as exc:
+                self.disable(exc)
 
     def set_etat(self, etat):
         """Petit texte en haut à droite : HID, SAFE, ..."""

@@ -52,6 +52,7 @@ from profiles import ProfileManager, TESTS
 from display import Display
 from hid_keyboard import HIDKeyboard
 from layouts import compile_actions
+from link import Link, EVT_PROFIL, EVT_DOCUMENT, EVT_RECHARGER
 
 NB_TOUCHES = len(C.BUTTON_PINS)
 
@@ -154,10 +155,34 @@ def run():
     except Exception as exc:
         print("LED desactivee :", exc)
 
+    # Liaison avec le PC : detection automatique du logiciel actif et
+    # configuration a distance. Facultative : sans le script cote PC, le
+    # macropad fonctionne exactement comme avant.
+    lien = Link(NB_TOUCHES) if C.LINK_ENABLED else None
+    verrouille = False          # True = l'auto ne peut plus changer de profil
+    dernier_auto = None         # instant du dernier message du PC
+
     def afficher(splash):
         display.profile(titres.get(manager.name, manager.name),
                         manager.macros, ticks_ms(),
                         manager.index, len(ordre), splash)
+
+    def recharger_profils():
+        """Relit profils.json et applique la nouvelle configuration.
+
+        Appele quand le PC vient d'enregistrer des macros : les changements
+        prennent effet immediatement, sans RESET.
+        """
+        nonlocal manager, titres, ordre
+        try:
+            neufs, ordre_neuf, titres_neufs, origine_neuve = store.charger(NB_TOUCHES)
+            nouveau = ProfileManager(ordre_neuf, manager.name, neufs, NB_TOUCHES)
+        except Exception as exc:
+            print("[main] configuration refusee, on garde l'ancienne :", exc)
+            return
+        manager, titres, ordre = nouveau, titres_neufs, ordre_neuf
+        afficher(False)
+        print("Macros rechargees depuis :", origine_neuve)
 
     afficher(False)
     print("Profil :", manager.name,
@@ -175,6 +200,26 @@ def run():
         while True:
             now = ticks_ms()
             fronts = controls.poll(now)
+
+            # --- 0. Ce que dit le PC ---------------------------------
+            if lien:
+                for genre, valeur in lien.service():
+                    if genre == EVT_PROFIL:
+                        dernier_auto = now
+                        # Le verrou te rend la main : si tu l'as active,
+                        # le PC ne peut plus imposer de profil.
+                        if (not verrouille and valeur in manager.order
+                                and valeur != manager.name):
+                            manager.index = manager.order.index(valeur)
+                            if keyboard:
+                                keyboard.cancel()
+                            afficher(True)
+                            print("Profil (auto) :", manager.name)
+                    elif genre == EVT_DOCUMENT:
+                        dernier_auto = now
+                        display.set_document(valeur)
+                    elif genre == EVT_RECHARGER:
+                        recharger_profils()
 
             # --- Fin de la garde de démarrage -----------------------
             if not arme and ticks_diff(now, demarre) >= C.BOOT_GUARD_MS:
@@ -202,9 +247,17 @@ def run():
                     # --- 2. Changement de profil ---------------------
                     precedent = "PREVIOUS" in appuyes
                     suivant = "NEXT" in appuyes
-                    # Les deux TTP touchés ensemble : on ne fait rien, on
-                    # ne saurait pas dans quel sens aller.
-                    if precedent != suivant:
+                    # Les deux TTP touchés EN MEME TEMPS : on bascule le
+                    # verrou. Profil verrouillé = le PC ne peut plus le
+                    # changer tout seul, tu gardes la main.
+                    if ((precedent or suivant)
+                            and controls.items["PREVIOUS"].active()
+                            and controls.items["NEXT"].active()):
+                        verrouille = not verrouille
+                        print("Verrouillage du profil :",
+                              "ACTIF" if verrouille else "inactif")
+                        afficher(False)
+                    elif precedent != suivant:
                         manager.move(1 if suivant else -1)
                         if keyboard:
                             # On annule la macro en cours : hors de question
@@ -247,14 +300,20 @@ def run():
             # seulement quand il change (un redessin coûte 8 tours).
             if ticks_diff(now, dernier_controle) >= 250:
                 dernier_controle = now
-                if keyboard is None:
+                auto = (dernier_auto is not None
+                        and ticks_diff(now, dernier_auto) < C.AUTO_TIMEOUT_MS)
+                if verrouille:
+                    etat = "LOCK"          # tu as verrouillé le profil
+                elif keyboard is None:
                     etat = "OFF"
                 elif keyboard.fault:
                     etat = "ERR"
-                elif keyboard.ready():
-                    etat = "HID"
-                else:
+                elif not keyboard.ready():
                     etat = "..."
+                elif auto:
+                    etat = "AUTO"          # le PC pilote les profils
+                else:
+                    etat = "HID"
                 if etat != etat_affiche:
                     etat_affiche = etat
                     display.set_etat(etat)

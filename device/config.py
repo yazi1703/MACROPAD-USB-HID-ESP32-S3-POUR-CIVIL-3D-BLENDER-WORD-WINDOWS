@@ -136,6 +136,22 @@ AP_PORT = 80                        # page web sur http://192.168.4.1
 PROFILES_FILE = "profils.json"
 
 # =====================================================================
+# 4 ter. LIAISON AVEC LE PC (detection automatique du logiciel)
+# =====================================================================
+# Le macropad expose un port serie en plus du clavier. Le script
+# tools/macropad_auto.py, lance sur le PC, s'en sert pour :
+#   * dire quel logiciel est au premier plan -> changement de profil auto
+#   * envoyer le nom du document ouvert -> affiche sur l'ecran
+#   * transmettre tes modifications de macros, appliquees sans redemarrer
+#
+# Mettre False desactive completement cette ecoute.
+LINK_ENABLED = True
+
+# Au-dela de ce delai sans nouvelle du PC, on considere que le script n'est
+# plus la et l'ecran cesse d'afficher "AUTO".
+AUTO_TIMEOUT_MS = 15000
+
+# =====================================================================
 # 5. TEMPS ET REACTIVITE (millisecondes)
 # =====================================================================
 # Délai entre la mise sous tension et la prise en compte des touches.

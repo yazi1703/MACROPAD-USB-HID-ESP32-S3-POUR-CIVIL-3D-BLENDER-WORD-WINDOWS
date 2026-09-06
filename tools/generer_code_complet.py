@@ -30,6 +30,7 @@ ORDRE = [
     "layouts.py",
     "store.py",
     "portal.py",
+    "link.py",
     "hid_keyboard.py",
     "display.py",
     "led.py",

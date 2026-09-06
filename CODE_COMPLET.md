@@ -20,6 +20,7 @@ de `device/`, pas ce document.
 - [`device/layouts.py`](#devicelayoutspy)
 - [`device/store.py`](#devicestorepy)
 - [`device/portal.py`](#deviceportalpy)
+- [`device/link.py`](#devicelinkpy)
 - [`device/hid_keyboard.py`](#devicehidkeyboardpy)
 - [`device/display.py`](#devicedisplaypy)
 - [`device/led.py`](#deviceledpy)
@@ -35,7 +36,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`183 lignes - sha256 47983ec466e68ea8`
+`199 lignes - sha256 8a4803bc131c0fb7`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -174,6 +175,22 @@ AP_PORT = 80                        # page web sur http://192.168.4.1
 # Fichier où sont enregistrés tes profils personnalisés. Tant qu'il
 # n'existe pas, ce sont les profils d'usine de profiles.py qui servent.
 PROFILES_FILE = "profils.json"
+
+# =====================================================================
+# 4 ter. LIAISON AVEC LE PC (detection automatique du logiciel)
+# =====================================================================
+# Le macropad expose un port serie en plus du clavier. Le script
+# tools/macropad_auto.py, lance sur le PC, s'en sert pour :
+#   * dire quel logiciel est au premier plan -> changement de profil auto
+#   * envoyer le nom du document ouvert -> affiche sur l'ecran
+#   * transmettre tes modifications de macros, appliquees sans redemarrer
+#
+# Mettre False desactive completement cette ecoute.
+LINK_ENABLED = True
+
+# Au-dela de ce delai sans nouvelle du PC, on considere que le script n'est
+# plus la et l'ecran cesse d'afficher "AUTO".
+AUTO_TIMEOUT_MS = 15000
 
 # =====================================================================
 # 5. TEMPS ET REACTIVITE (millisecondes)
@@ -477,7 +494,7 @@ else:
 
 ## device/main.py
 
-`288 lignes - sha256 a48035b1f39e193c`
+`347 lignes - sha256 46787f0efbe3ea74`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -534,6 +551,7 @@ from profiles import ProfileManager, TESTS
 from display import Display
 from hid_keyboard import HIDKeyboard
 from layouts import compile_actions
+from link import Link, EVT_PROFIL, EVT_DOCUMENT, EVT_RECHARGER
 
 NB_TOUCHES = len(C.BUTTON_PINS)
 
@@ -636,10 +654,34 @@ def run():
     except Exception as exc:
         print("LED desactivee :", exc)
 
+    # Liaison avec le PC : detection automatique du logiciel actif et
+    # configuration a distance. Facultative : sans le script cote PC, le
+    # macropad fonctionne exactement comme avant.
+    lien = Link(NB_TOUCHES) if C.LINK_ENABLED else None
+    verrouille = False          # True = l'auto ne peut plus changer de profil
+    dernier_auto = None         # instant du dernier message du PC
+
     def afficher(splash):
         display.profile(titres.get(manager.name, manager.name),
                         manager.macros, ticks_ms(),
                         manager.index, len(ordre), splash)
+
+    def recharger_profils():
+        """Relit profils.json et applique la nouvelle configuration.
+
+        Appele quand le PC vient d'enregistrer des macros : les changements
+        prennent effet immediatement, sans RESET.
+        """
+        nonlocal manager, titres, ordre
+        try:
+            neufs, ordre_neuf, titres_neufs, origine_neuve = store.charger(NB_TOUCHES)
+            nouveau = ProfileManager(ordre_neuf, manager.name, neufs, NB_TOUCHES)
+        except Exception as exc:
+            print("[main] configuration refusee, on garde l'ancienne :", exc)
+            return
+        manager, titres, ordre = nouveau, titres_neufs, ordre_neuf
+        afficher(False)
+        print("Macros rechargees depuis :", origine_neuve)
 
     afficher(False)
     print("Profil :", manager.name,
@@ -657,6 +699,26 @@ def run():
         while True:
             now = ticks_ms()
             fronts = controls.poll(now)
+
+            # --- 0. Ce que dit le PC ---------------------------------
+            if lien:
+                for genre, valeur in lien.service():
+                    if genre == EVT_PROFIL:
+                        dernier_auto = now
+                        # Le verrou te rend la main : si tu l'as active,
+                        # le PC ne peut plus imposer de profil.
+                        if (not verrouille and valeur in manager.order
+                                and valeur != manager.name):
+                            manager.index = manager.order.index(valeur)
+                            if keyboard:
+                                keyboard.cancel()
+                            afficher(True)
+                            print("Profil (auto) :", manager.name)
+                    elif genre == EVT_DOCUMENT:
+                        dernier_auto = now
+                        display.set_document(valeur)
+                    elif genre == EVT_RECHARGER:
+                        recharger_profils()
 
             # --- Fin de la garde de démarrage -----------------------
             if not arme and ticks_diff(now, demarre) >= C.BOOT_GUARD_MS:
@@ -684,9 +746,17 @@ def run():
                     # --- 2. Changement de profil ---------------------
                     precedent = "PREVIOUS" in appuyes
                     suivant = "NEXT" in appuyes
-                    # Les deux TTP touchés ensemble : on ne fait rien, on
-                    # ne saurait pas dans quel sens aller.
-                    if precedent != suivant:
+                    # Les deux TTP touchés EN MEME TEMPS : on bascule le
+                    # verrou. Profil verrouillé = le PC ne peut plus le
+                    # changer tout seul, tu gardes la main.
+                    if ((precedent or suivant)
+                            and controls.items["PREVIOUS"].active()
+                            and controls.items["NEXT"].active()):
+                        verrouille = not verrouille
+                        print("Verrouillage du profil :",
+                              "ACTIF" if verrouille else "inactif")
+                        afficher(False)
+                    elif precedent != suivant:
                         manager.move(1 if suivant else -1)
                         if keyboard:
                             # On annule la macro en cours : hors de question
@@ -729,14 +799,20 @@ def run():
             # seulement quand il change (un redessin coûte 8 tours).
             if ticks_diff(now, dernier_controle) >= 250:
                 dernier_controle = now
-                if keyboard is None:
+                auto = (dernier_auto is not None
+                        and ticks_diff(now, dernier_auto) < C.AUTO_TIMEOUT_MS)
+                if verrouille:
+                    etat = "LOCK"          # tu as verrouillé le profil
+                elif keyboard is None:
                     etat = "OFF"
                 elif keyboard.fault:
                     etat = "ERR"
-                elif keyboard.ready():
-                    etat = "HID"
-                else:
+                elif not keyboard.ready():
                     etat = "..."
+                elif auto:
+                    etat = "AUTO"          # le PC pilote les profils
+                else:
+                    etat = "HID"
                 if etat != etat_affiche:
                     etat_affiche = etat
                     display.set_etat(etat)
@@ -1869,6 +1945,273 @@ class Portail:
 
 ---
 
+## device/link.py
+
+`258 lignes - sha256 62296a0381d8a160`
+
+```python
+# -*- coding: utf-8 -*-
+"""
+link.py - Le dialogue avec le PC par le port serie USB.
+
+=====================================================================
+A QUOI CA SERT
+=====================================================================
+Ton macropad expose DEUX choses sur le meme cable USB :
+
+  * un clavier HID, qui tape dans la fenetre active ;
+  * un port serie (celui du REPL), jusqu'ici inutilise par le firmware.
+
+Ce module se sert de ce second canal pour parler avec un petit programme
+qui tourne sur le PC (tools/macropad_auto.py). Ce programme :
+
+  * regarde quelle application est au premier plan et le dit au macropad,
+    qui change alors de profil tout seul ;
+  * envoie le nom du document ouvert, que l'ecran affiche ;
+  * sert une page de configuration sur http://127.0.0.1:8765, et transmet
+    tes modifications au macropad, qui les applique SANS redemarrer.
+
+=====================================================================
+POURQUOI LA LECTURE NE BLOQUE JAMAIS
+=====================================================================
+Lire une ligne sur un port serie, normalement, ca attend. Si on faisait
+cela dans la boucle principale, le macropad se figerait des que le PC ne
+dit rien - c'est-a-dire tout le temps.
+
+On utilise donc select.poll() qui repond "y a-t-il un caractere pret ?"
+sans jamais attendre, et on lit caractere par caractere. Deux precautions :
+
+  * on lit AU PLUS 256 caracteres par tour de boucle, pour qu'un gros
+    envoi de configuration (2 a 3 ko) s'etale sur quelques tours au lieu
+    de bloquer les touches pendant 40 ms ;
+  * on ne se sert jamais de readline(), qui attendrait le passage a la
+    ligne meme si le message est incomplet.
+
+=====================================================================
+LE PROTOCOLE, EN CLAIR
+=====================================================================
+Une commande par ligne. Du PC vers le macropad :
+
+  P:CIVIL3D          le logiciel actif correspond a ce profil
+  T:Projet_A12.dwg   nom du document a afficher (vide = efface)
+  ?VER               demande l'etat du macropad
+  ?CFG               demande la configuration complete
+  !CFGBEGIN          debut d'un envoi de configuration
+  !C:<morceau>       un morceau de JSON (on decoupe pour ne pas saturer)
+  !CFGEND            fin de l'envoi : on verifie, on enregistre, on applique
+  !RELOAD            relire profils.json sans redemarrer
+
+Du macropad vers le PC, toujours prefixe par # pour que le script les
+distingue des messages de debogage ordinaires :
+
+  #VER:...  #CFGBEGIN  #C:<morceau>  #CFGEND  #OK:...  #KO:<raison>
+
+Aucun caractere de controle n'est utilise : Ctrl-C continue donc
+d'interrompre le programme normalement, tu ne perds pas cette porte de
+sortie.
+"""
+
+import json
+
+import config as C
+import store
+
+# Evenements rendus a main.py
+EVT_PROFIL = "profil"        # le PC demande un profil
+EVT_DOCUMENT = "document"    # nom du document a afficher
+EVT_RECHARGER = "recharger"  # la configuration a change, il faut la relire
+
+_MAX_PAR_TOUR = 256          # caracteres lus au maximum par tour de boucle
+_MAX_LIGNE = 512             # au-dela, la ligne est jetee (protection RAM)
+_MAX_CONFIG = 8192           # taille maximale d'une configuration recue
+_TAILLE_MORCEAU = 180        # taille des morceaux envoyes au PC
+
+
+class SourceStdin:
+    """Lecture non bloquante du port serie (le REPL) sous MicroPython."""
+
+    def __init__(self):
+        import select
+        import sys
+        self._sys = sys
+        self._poll = select.poll()
+        self._poll.register(sys.stdin, select.POLLIN)
+
+    def lire(self, maximum):
+        morceaux = []
+        while len(morceaux) < maximum and self._poll.poll(0):
+            caractere = self._sys.stdin.read(1)
+            if not caractere:
+                break
+            morceaux.append(caractere)
+        return "".join(morceaux)
+
+
+class Link:
+    """Analyse les lignes venant du PC et repond."""
+
+    def __init__(self, nb_touches, source=None, sortie=None):
+        self.nb_touches = nb_touches
+        self.actif = False
+        self.source = source
+        self.sortie = sortie or print
+        self._tampon = ""        # ligne en cours de reception
+        self._config = None      # configuration en cours de reception
+        self.dernier_profil = None
+        self.document = ""
+
+        if self.source is None:
+            try:
+                self.source = SourceStdin()
+            except Exception as exc:
+                print("[link] port serie indisponible :", exc)
+                return
+        self.actif = True
+
+    # ------------------------------------------------------------------
+    def service(self):
+        """A appeler a chaque tour de boucle. Retourne une liste d'evenements."""
+        if not self.actif:
+            return ()
+        try:
+            recu = self.source.lire(_MAX_PAR_TOUR)
+        except Exception as exc:
+            print("[link] lecture impossible :", exc)
+            self.actif = False
+            return ()
+        if not recu:
+            return ()
+
+        evenements = []
+        for caractere in recu:
+            if caractere == "\n":
+                ligne, self._tampon = self._tampon, ""
+                evenement = self._traiter(ligne.strip())
+                if evenement:
+                    evenements.append(evenement)
+            elif caractere != "\r":
+                if len(self._tampon) < _MAX_LIGNE:
+                    self._tampon += caractere
+                else:
+                    self._tampon = ""     # ligne aberrante : on la jette
+        return evenements
+
+    # ------------------------------------------------------------------
+    def _traiter(self, ligne):
+        if not ligne:
+            return None
+
+        if ligne.startswith("P:"):
+            self.dernier_profil = ligne[2:].strip().upper()
+            return (EVT_PROFIL, self.dernier_profil)
+
+        if ligne.startswith("T:"):
+            self.document = ligne[2:].strip()
+            return (EVT_DOCUMENT, self.document)
+
+        if ligne == "?VER":
+            self.sortie("#VER:macropad %d touches, layout %s"
+                        % (self.nb_touches, C.KEYBOARD_LAYOUT))
+            return None
+
+        if ligne == "?CFG":
+            self._envoyer_config()
+            return None
+
+        if ligne == "!CFGBEGIN":
+            self._config = []
+            return None
+
+        if ligne.startswith("!C:"):
+            if self._config is not None:
+                morceau = ligne[3:]
+                total = sum(len(m) for m in self._config)
+                if total + len(morceau) <= _MAX_CONFIG:
+                    self._config.append(morceau)
+                else:
+                    self._config = None
+                    self.sortie("#KO:configuration trop volumineuse")
+            return None
+
+        if ligne == "!CFGEND":
+            return self._recevoir_config()
+
+        if ligne == "!RELOAD":
+            self.sortie("#OK:rechargement")
+            return (EVT_RECHARGER, None)
+
+        return None
+
+    # ------------------------------------------------------------------
+    def _envoyer_config(self):
+        """Envoie la configuration au PC, decoupee en morceaux."""
+        try:
+            profils, ordre, titres, origine = store.charger(self.nb_touches)
+            blocs = {}
+            for nom, macros in profils.items():
+                touches = []
+                for label, actions in macros:
+                    kind, valeur = store.action_vers_json(actions)
+                    touches.append({"label": label, "type": kind,
+                                    "valeur": valeur})
+                blocs[nom] = {"titre": titres.get(nom, nom), "touches": touches}
+            texte = json.dumps({"ordre": ordre, "profils": blocs,
+                                "touches": self.nb_touches,
+                                "origine": origine})
+        except Exception as exc:
+            self.sortie("#KO:lecture impossible : %s" % exc)
+            return
+
+        self.sortie("#CFGBEGIN")
+        for debut in range(0, len(texte), _TAILLE_MORCEAU):
+            self.sortie("#C:" + texte[debut:debut + _TAILLE_MORCEAU])
+        self.sortie("#CFGEND")
+
+    def _recevoir_config(self):
+        """Verifie et enregistre la configuration recue du PC."""
+        if self._config is None:
+            self.sortie("#KO:aucun envoi en cours")
+            return None
+        texte = "".join(self._config)
+        self._config = None
+
+        try:
+            data = json.loads(texte)
+        except Exception as exc:
+            self.sortie("#KO:JSON invalide : %s" % exc)
+            return None
+
+        try:
+            ordre = [str(n) for n in data["ordre"]]
+            profils = {}
+            titres = {}
+            for nom, bloc in data["profils"].items():
+                macros = []
+                for touche in bloc["touches"][:self.nb_touches]:
+                    actions = store.action_depuis_json(
+                        touche.get("type", "none"), touche.get("valeur", ""))
+                    macros.append((str(touche.get("label", ""))[:6], actions))
+                while len(macros) < self.nb_touches:
+                    macros.append(("", []))
+                profils[str(nom)] = macros
+                titres[str(nom)] = str(bloc.get("titre", nom))
+        except Exception as exc:
+            self.sortie("#KO:donnees illisibles : %s" % exc)
+            return None
+
+        # store.enregistrer refuse toute macro qui ne serait pas tapable :
+        # impossible d'enregistrer depuis le PC une configuration qui
+        # planterait au demarrage suivant.
+        ok, raison = store.enregistrer(profils, ordre, titres, self.nb_touches)
+        if ok:
+            self.sortie("#OK:configuration enregistree")
+            return (EVT_RECHARGER, None)
+        self.sortie("#KO:" + raison)
+        return None
+```
+
+---
+
 ## device/hid_keyboard.py
 
 `331 lignes - sha256 57bb32c7edef95ef`
@@ -2211,7 +2554,7 @@ def create_interface():
 
 ## device/display.py
 
-`260 lignes - sha256 b36ab16e2212fc09`
+`280 lignes - sha256 e0f42e8fbedea4c8`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2280,6 +2623,7 @@ class Display:
         self.titre = ""
         self.macros = []
         self.etat = ""
+        self.document = ""          # nom du fichier ouvert, envoye par le PC
         self.pastilles = (0, 0)     # (index du profil courant, nombre total)
         self.splash_until = None
         self.pending_page = 8       # 8 = rien à envoyer ; 0 = tout à renvoyer
@@ -2345,7 +2689,13 @@ class Display:
             y = _LIGNES_Y[index // 2]
             self._pastille_touche(x, y, index + 1, self.macros[index][0])
         o.hline(0, _SEPARATEUR_Y, 128, 1)
-        self._carrousel()
+        # En bas : le nom du document si le PC nous l'envoie, sinon la
+        # position dans la liste des profils. Le nom du fichier est plus
+        # informatif, il a donc la priorite.
+        if self.document:
+            o.text(self.document[:16], 2, _PASTILLES_Y - 1, 1)
+        else:
+            self._carrousel()
 
     def _texte_double(self, texte):
         """Écrit un texte en police doublée, centré.
@@ -2406,6 +2756,19 @@ class Display:
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
+
+    def set_document(self, texte):
+        """Nom du document affiche en bas de l'ecran (envoye par le PC)."""
+        texte = (texte or "")[:16]
+        if texte == self.document:
+            return
+        self.document = texte
+        if self.oled and self.splash_until is None:
+            try:
+                self._vue_principale()
+                self.pending_page = 0
+            except Exception as exc:
+                self.disable(exc)
 
     def set_etat(self, etat):
         """Petit texte en haut à droite : HID, SAFE, ..."""

@@ -669,7 +669,7 @@ class PageWebDeConfiguration(unittest.TestCase):
         self.assertFalse(resultat["ok"])
 
     def test_retour_usine(self):
-        import json as J, store
+        import store
         profils, ordre = store.defauts()
         store.enregistrer(profils, ordre, {}, 6)
         self.assertEqual(store.charger(6)[3], "fichier")
@@ -678,6 +678,172 @@ class PageWebDeConfiguration(unittest.TestCase):
 
     def test_chemin_inconnu(self):
         self.assertIn(b"404", self._requete("GET", "/nimportequoi"))
+
+
+
+class LiaisonSerieAvecLePC(unittest.TestCase):
+    """Tests du protocole serie : detection auto et configuration par USB."""
+
+    class FausseSource:
+        """Imite le port serie : on lui donne du texte, elle le rend."""
+
+        def __init__(self):
+            self.file = ""
+
+        def envoyer(self, texte):
+            self.file += texte
+
+        def lire(self, maximum):
+            morceau = self.file[:maximum]
+            self.file = self.file[len(morceau):]
+            return morceau
+
+    def setUp(self):
+        clock[0] = 0
+        try:
+            import os
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    def _lien(self):
+        import link
+        source = self.FausseSource()
+        sorties = []
+        lien = link.Link(6, source=source, sortie=sorties.append)
+        return lien, source, sorties
+
+    # --- detection automatique -----------------------------------------
+    def test_changement_de_profil_demande_par_le_pc(self):
+        import link
+        lien, source, _ = self._lien()
+        source.envoyer("P:CIVIL3D\n")
+        self.assertEqual(lien.service(), [(link.EVT_PROFIL, "CIVIL3D")])
+
+    def test_nom_du_document(self):
+        import link
+        lien, source, _ = self._lien()
+        source.envoyer("T:Projet_A12.dwg\n")
+        self.assertEqual(lien.service(),
+                         [(link.EVT_DOCUMENT, "Projet_A12.dwg")])
+        self.assertEqual(lien.document, "Projet_A12.dwg")
+
+    def test_ligne_coupee_en_deux_envois(self):
+        # Le PC envoie souvent par morceaux : la ligne doit se reconstituer.
+        import link
+        lien, source, _ = self._lien()
+        source.envoyer("P:BLEN")
+        self.assertEqual(lien.service(), [])      # rien tant qu'il manque \n
+        source.envoyer("DER\n")
+        self.assertEqual(lien.service(), [(link.EVT_PROFIL, "BLENDER")])
+
+    def test_lecture_bornee_par_tour_de_boucle(self):
+        # Un gros envoi ne doit pas monopoliser la boucle principale :
+        # au plus 256 caracteres sont lus par appel a service().
+        lien, source, _ = self._lien()
+        source.envoyer("x" * 1000 + "\n")
+        lien.service()
+        self.assertGreaterEqual(len(source.file), 1000 - 256)
+
+    def test_commande_inconnue_ignoree(self):
+        lien, source, sorties = self._lien()
+        source.envoyer("BONJOUR\n?RIEN\n")
+        self.assertEqual(lien.service(), [])
+        self.assertEqual(sorties, [])
+
+    def test_version(self):
+        lien, source, sorties = self._lien()
+        source.envoyer("?VER\n")
+        lien.service()
+        self.assertTrue(sorties[0].startswith("#VER:"))
+        self.assertIn("FR_AZERTY", sorties[0])
+
+    # --- lecture de la configuration par le PC --------------------------
+    def test_le_pc_lit_la_configuration(self):
+        import json as J
+        lien, source, sorties = self._lien()
+        source.envoyer("?CFG\n")
+        lien.service()
+        self.assertEqual(sorties[0], "#CFGBEGIN")
+        self.assertEqual(sorties[-1], "#CFGEND")
+        texte = "".join(l[3:] for l in sorties if l.startswith("#C:"))
+        data = J.loads(texte)
+        self.assertEqual(data["touches"], 6)
+        self.assertEqual(data["ordre"], list(C.PROFILES_ORDER))
+        self.assertEqual(data["profils"]["CIVIL3D"]["touches"][0]["valeur"],
+                         "_MATCHPROP")
+
+    # --- ecriture de la configuration par le PC -------------------------
+    def _envoyer_config(self, lien, source, data):
+        import json as J
+        texte = J.dumps(data)
+        source.envoyer("!CFGBEGIN\n")
+        for debut in range(0, len(texte), 60):
+            source.envoyer("!C:" + texte[debut:debut + 60] + "\n")
+        source.envoyer("!CFGEND\n")
+        evenements = []
+        for _ in range(200):          # plusieurs tours, lecture bornee
+            evenements += list(lien.service())
+        return evenements
+
+    def test_le_pc_ecrit_la_configuration(self):
+        import json as J, link, store
+        lien, source, sorties = self._lien()
+        source.envoyer("?CFG\n")
+        lien.service()
+        data = J.loads("".join(l[3:] for l in sorties if l.startswith("#C:")))
+        data["profils"]["CIVIL3D"]["touches"][0] = {
+            "label": "TALUS", "type": "text_enter", "valeur": "_GRADING"}
+
+        sorties.clear()
+        evenements = self._envoyer_config(lien, source, data)
+        self.assertIn((link.EVT_RECHARGER, None), evenements)
+        self.assertTrue(any(s.startswith("#OK:") for s in sorties), sorties)
+
+        profils, ordre, titres, origine = store.charger(6)
+        self.assertEqual(origine, "fichier")
+        self.assertEqual(profils["CIVIL3D"][0][0], "TALUS")
+
+    def test_macro_intapable_refusee_par_le_lien(self):
+        import json as J, link, store
+        lien, source, sorties = self._lien()
+        source.envoyer("?CFG\n")
+        lien.service()
+        data = J.loads("".join(l[3:] for l in sorties if l.startswith("#C:")))
+        data["profils"]["WORD"]["touches"][0] = {
+            "label": "KO", "type": "combo", "valeur": "CTRL+TOUCHE_BIDON"}
+
+        sorties.clear()
+        evenements = self._envoyer_config(lien, source, data)
+        self.assertNotIn((link.EVT_RECHARGER, None), evenements)
+        self.assertTrue(any(s.startswith("#KO:") for s in sorties), sorties)
+        # Rien n'a ete ecrit : on reste sur les profils d'usine.
+        self.assertEqual(store.charger(6)[3], "usine")
+
+    def test_json_casse_refuse(self):
+        lien, source, sorties = self._lien()
+        source.envoyer("!CFGBEGIN\n!C:{pas du json\n!CFGEND\n")
+        for _ in range(20):
+            lien.service()
+        self.assertTrue(any(s.startswith("#KO:") for s in sorties), sorties)
+
+    def test_rechargement_demande(self):
+        import link
+        lien, source, sorties = self._lien()
+        source.envoyer("!RELOAD\n")
+        self.assertEqual(lien.service(), [(link.EVT_RECHARGER, None)])
+        self.assertTrue(sorties[0].startswith("#OK:"))
+
+    def test_configuration_trop_volumineuse_refusee(self):
+        lien, source, sorties = self._lien()
+        source.envoyer("!CFGBEGIN\n")
+        for _ in range(80):
+            source.envoyer("!C:" + "x" * 150 + "\n")
+        for _ in range(400):
+            lien.service()
+        self.assertTrue(any("volumineuse" in s for s in sorties), sorties)
 
 
 if __name__=='__main__': unittest.main(verbosity=2)

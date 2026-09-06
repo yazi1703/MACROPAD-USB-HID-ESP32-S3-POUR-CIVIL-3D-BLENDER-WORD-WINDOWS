@@ -18,7 +18,9 @@ capacitives pour changer de profil, un écran OLED SH1106, et un gros bouton
 | vérifier le brochage broche par broche | [`docs/02-cablage.md`](docs/02-cablage.md) |
 | cocher que tout est bon | [`docs/04-checklist.md`](docs/04-checklist.md) |
 | savoir ce qui a été corrigé et pourquoi | [`docs/06-corrections.md`](docs/06-corrections.md) |
-| **modifier les macros sans coder** | maintenir B2 au RESET, puis `http://192.168.4.1` — voir [`docs/07`](docs/07-mode-configuration.md) |
+| **que le macropad suive le logiciel actif** | [`docs/08-detection-auto.md`](docs/08-detection-auto.md) — le script PC |
+| **modifier les macros depuis le PC** | lancer `pc/macropad_auto.py`, puis `http://127.0.0.1:8765` |
+| modifier les macros sans PC (téléphone) | maintenir B2 au RESET, puis `http://192.168.4.1` — voir [`docs/07`](docs/07-mode-configuration.md) |
 | modifier les macros d'usine | `device/profiles.py` |
 | modifier les broches ou les réglages | `device/config.py` |
 
@@ -80,6 +82,12 @@ Ce ne sont que les valeurs d'usine : **tout se change depuis la page web**
 Le gros bouton **ESC** agit dans tous les profils : il annule la macro en
 cours, envoie Échap, et déclenche un flash lumineux.
 
+**Et le macropad peut suivre le logiciel que tu utilises.** Un petit script
+sur le PC lui dit quelle application est au premier plan : tu cliques dans
+Civil 3D, le profil bascule seul, et l'écran affiche le nom du dessin
+ouvert. Touche les deux TTP223 ensemble pour verrouiller et reprendre la
+main. Voir [`docs/08`](docs/08-detection-auto.md).
+
 > **Réserve, que tu as validée :** les raccourcis Word ci-dessus sont ceux
 > de Word en **anglais**. Sur un Word **français**, Gras se fait avec
 > `Ctrl+G` et non `Ctrl+B`. La variante française est déjà écrite en
@@ -104,6 +112,7 @@ cours, envoie Échap, et déclenche un flash lumineux.
 │   ├── profiles.py               macros d'usine (repli)
 │   ├── store.py                  lecture/écriture de profils.json
 │   ├── portal.py                 point d'accès WiFi + page web
+│   ├── link.py                   dialogue série avec le PC
 │   ├── layouts.py                AZERTY / QWERTY, traduction des caractères
 │   ├── hid_keyboard.py           envoi des rapports USB, file d'attente
 │   ├── inputs.py                 anti-rebond des entrées
@@ -113,6 +122,9 @@ cours, envoie Échap, et déclenche un flash lumineux.
 │   ├── diag.py                   diagnostic, n'envoie jamais de touche
 │   ├── runtime.py                mémoire partagée boot.py / main.py
 │   └── lib/usb/device/           bibliothèque USB officielle (MIT)
+├── pc/                           >>> À LANCER SUR LE PC, pas sur la carte
+│   ├── macropad_auto.py          détection du logiciel actif + config USB
+│   └── macropad_auto.bat         lanceur Windows
 ├── docs/                         documentation détaillée
 ├── tests/test_logic.py           38 tests exécutables sur PC
 └── licenses/                     licences des composants tiers
@@ -138,7 +150,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 59 tests ... OK
+→ Ran 78 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport
