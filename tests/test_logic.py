@@ -81,11 +81,19 @@ class Logic(unittest.TestCase):
             for _, gestes in macros:
                 for actions in gestes.values():
                     self.assertTrue(compile_actions(actions,'FR_AZERTY'))
-        # B1, B2 et B4 de CIVIL3D ecrivent une commande _XXX suivie d'Entree
-        for index in (0,1,3):
+        # B2, B3 et B4 de CIVIL3D ecrivent une commande _XXX suivie d'Entree
+        # (B1 est desormais le presse-papiers, commun a tous les profils).
+        for index in (1,2,3):
             seq=compile_actions(PROFILES['CIVIL3D'][index][1]['court'],'FR_AZERTY')
             self.assertEqual(seq[0],(37,)); self.assertEqual(seq[-1],(40,))
         self.assertEqual(compile_actions([('combo',('CTRL','Z'))],'FR_AZERTY'),[(-1,26)])
+        # La touche 1 est le presse-papiers dans TOUS les profils.
+        for nom, macros in PROFILES.items():
+            label, gestes = macros[0]
+            self.assertEqual(label, 'COPIER', nom)
+            self.assertEqual(gestes['court'], [('combo',('CTRL','C'))], nom)
+            self.assertEqual(gestes['double'], [('combo',('CTRL','V'))], nom)
+            self.assertEqual(gestes['long'], [('combo',('CTRL','Z'))], nom)
     def test_invalid_text_atomic(self):
         t=Transport(); k=HIDKeyboard(t); k.tick(0)
         with self.assertRaises(ValueError): k.submit([('text','ABC€')])
@@ -182,7 +190,9 @@ class Logic(unittest.TestCase):
         def simulated_sleep(ms):
             clock[0]+=ms
             # Chronologie physique : appui macro, changement profil, ESC.
-            Pin.levels[4]=0 if 2600 <= clock[0] < 2660 else 1
+            # On se sert de B2 (GPIO5, _HATCH) : B1 est le presse-papiers,
+            # et son double appui retarde volontairement l'appui court.
+            Pin.levels[5]=0 if 2600 <= clock[0] < 2660 else 1
             Pin.levels[11]=1 if 2700 <= clock[0] < 2780 else 0
             Pin.levels[14]=0 if 2900 <= clock[0] < 2960 else 1
             if clock[0] >= 3200: raise KeyboardInterrupt()
@@ -652,10 +662,12 @@ class PageWebDeConfiguration(unittest.TestCase):
         self.assertEqual(data["ordre"], list(C.PROFILES_ORDER))
         civil = data["profils"]["CIVIL3D"]["touches"]
         self.assertEqual(len(civil), 6)
-        self.assertEqual(civil[0]["court"]["valeur"], "_MATCHPROP")
-        self.assertEqual(civil[0]["court"]["type"], "text_enter")
+        self.assertEqual(civil[2]["court"]["valeur"], "_MATCHPROP")
+        self.assertEqual(civil[2]["court"]["type"], "text_enter")
         # Les combinaisons sont lisibles dans le formulaire.
-        self.assertEqual(civil[2]["court"]["valeur"], "CTRL+Z")
+        self.assertEqual(civil[0]["court"]["valeur"], "CTRL+C")
+        self.assertEqual(civil[0]["double"]["valeur"], "CTRL+V")
+        self.assertEqual(civil[0]["long"]["valeur"], "CTRL+Z")
         # L'appui long de B3 retablit (Ctrl+Y).
         self.assertEqual(civil[2]["long"]["valeur"], "CTRL+Y")
         # La table des logiciels voyage avec la configuration.
@@ -812,7 +824,7 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         self.assertEqual(data["touches"], 6)
         self.assertEqual(data["ordre"], list(C.PROFILES_ORDER))
         self.assertEqual(
-            data["profils"]["CIVIL3D"]["touches"][0]["court"]["valeur"],
+            data["profils"]["CIVIL3D"]["touches"][2]["court"]["valeur"],
             "_MATCHPROP")
 
     # --- ecriture de la configuration par le PC -------------------------
@@ -969,14 +981,18 @@ class GestesCourtLongDouble(unittest.TestCase):
     def test_configurer_depuis_les_macros(self):
         import profiles as P
         self.G.configurer(P.PROFILES['CIVIL3D'])
-        # B3 ANNUL a un appui long (retablir), pas de double.
+        # B3 MATCH a un appui long (retablir), pas de double.
         self.assertTrue(self.G.a_long[2])
         self.assertFalse(self.G.a_double[2])
         # B5 ZOOM a un double appui.
         self.assertTrue(self.G.a_double[4])
-        # B1 MATCH n'a que l'appui court : aucun retard, aucune surveillance.
-        self.assertFalse(self.G.a_long[0])
-        self.assertFalse(self.G.a_double[0])
+        # B1 est le presse-papiers : les trois gestes sont occupes.
+        self.assertTrue(self.G.a_long[0])
+        self.assertTrue(self.G.a_double[0])
+        # B2 HACHUR n'a que l'appui court : aucun retard, aucune
+        # surveillance. C'est ce qui garde les touches instantanees.
+        self.assertFalse(self.G.a_long[1])
+        self.assertFalse(self.G.a_double[1])
 
 
 class ValeursUsineSansPiege(unittest.TestCase):
@@ -1139,7 +1155,7 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         self.assertEqual(vu["touche1_label"], "ZZZ")
         self.assertEqual(vu["touche1_valeur"], "TESTVAL")
         # La touche 6 ne doit surtout pas avoir bouge.
-        self.assertEqual(vu["derniere_touche_label"], "ANNUL")
+        self.assertEqual(vu["derniere_touche_label"], "MOVE")
         # Meme verification sur la table des logiciels.
         self.assertEqual(vu["app2_abrege"], "AbRg")
         self.assertEqual(vu["app1_abrege"], "C3D")

@@ -292,7 +292,7 @@ LED_RETURN_MS = 350     # retour progressif du flash vers la respiration
 
 ## device/profiles.py
 
-`210 lignes - sha256 34cb7214bae98caa`
+`250 lignes - sha256 81e7e817abc72f16`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -378,16 +378,41 @@ def K(label, court, long=None, double=None):
     return (label, gestes)
 
 
+# =====================================================================
+# LA TOUCHE 1 EST LA MEME PARTOUT
+# =====================================================================
+# Copier / coller / annuler : les trois gestes les plus utilises de toute
+# l'informatique, et ils marchent dans absolument tous les logiciels. Les
+# mettre sur la meme touche dans tous les profils, c'est un reflexe que tu
+# n'as plus jamais a reapprendre - comme ESC, qui est deja global.
+#
+#   appui court  -> Ctrl+C   copier
+#   double appui -> Ctrl+V   coller
+#   appui long   -> Ctrl+Z   annuler
+#
+# A savoir : c'est la SEULE touche a avoir un double appui dans les
+# valeurs d'usine. Une touche qui en a un attend GESTE_DOUBLE_MS (260 ms)
+# avant de conclure "c'etait un appui court" - ici, avant de copier. Sur
+# une touche ou tu veux zero attente, laisse la colonne "double" vide et
+# sers-toi de l'appui long, qui lui ne coute rien.
+def presse_papiers():
+    return K("COPIER", [("combo", ("CTRL", "C"))],
+             long=[("combo", ("CTRL", "Z"))],
+             double=[("combo", ("CTRL", "V"))])
+
+
 PROFILES = {
 
     # -----------------------------------------------------------------
     "BLENDER": [
-        K("MOVE",   [("key", "G")]),
+        presse_papiers(),
         K("ROT",    [("key", "R")]),
         K("SCALE",  [("key", "S")]),
         K("TAB",    [("key", "TAB")]),
         K("EXTRUD", [("key", "E")]),
-        K("ANNUL",  [("combo", ("CTRL", "Z"))],
+        # G (deplacer) est la touche la plus utilisee de Blender : elle
+        # n'a pas de double appui, donc elle part sans la moindre attente.
+        K("MOVE",   [("key", "G")],
           long=[("combo", ("CTRL", "SHIFT", "Z"))]),      # retablir
     ],
 
@@ -395,15 +420,19 @@ PROFILES = {
     # Le "_" devant les commandes AutoCAD force la commande INTERNATIONALE :
     # _MATCHPROP fonctionne meme sur un Civil 3D installe en francais.
     "CIVIL3D": [
-        K("MATCH", [("text_enter", "_MATCHPROP")]),
-        K("HATCH", [("text_enter", "_HATCH")]),
-        K("ANNUL", [("combo", ("CTRL", "Z"))],
+        presse_papiers(),
+        K("HACHUR", [("text_enter", "_HATCH")]),
+        K("MATCH",  [("text_enter", "_MATCHPROP")],
           long=[("combo", ("CTRL", "Y"))]),                # retablir
-        K("ISOLE", [("text_enter", "_ISOLATEOBJECTS")],
+        K("ISOLE",  [("text_enter", "_ISOLATEOBJECTS")],
           long=[("text_enter", "_UNISOLATEOBJECTS")]),     # tout remontrer
-        K("ZOOM",  [("text_enter", "_ZOOM")],
-          double=[("text_enter", "_REGEN")]),               # regenerer
-        K("ENREG", [("combo", ("CTRL", "S"))]),
+        # "_ZOOM E" en une seule ligne : dans la ligne de commande
+        # AutoCAD, l'espace vaut Entree. Le E choisit donc l'option
+        # Etendu, et tu vois tout le dessin d'un seul appui. Si ta
+        # version ne suit pas, remets simplement "_ZOOM".
+        K("ZOOM",   [("text_enter", "_ZOOM E")],
+          double=[("text_enter", "_REGEN")]),              # regenerer
+        K("ENREG",  [("combo", ("CTRL", "S"))]),
     ],
 
     # -----------------------------------------------------------------
@@ -411,22 +440,33 @@ PROFILES = {
     # ANGLAIS. Sur un Word FRANCAIS, Gras se fait avec Ctrl+G et non
     # Ctrl+B. Tu peux corriger cela en trente secondes depuis une page web.
     "WORD": [
+        presse_papiers(),
         K("GRAS",   [("combo", ("CTRL", "B"))]),
         K("ITAL",   [("combo", ("CTRL", "I"))]),
-        K("ENREG",  [("combo", ("CTRL", "S"))]),
-        K("ANNUL",  [("combo", ("CTRL", "Z"))],
-          long=[("combo", ("CTRL", "Y"))]),
         K("SOULIG", [("combo", ("CTRL", "U"))]),
-        K("REFAIR", [("combo", ("CTRL", "Y"))]),
+        K("ENREG",  [("combo", ("CTRL", "S"))],
+          long=[("key", "F12")]),                          # enregistrer sous
+        # L'equivalent Word de MATCHPROP : copier une mise en forme, puis
+        # l'appliquer ailleurs. Peu connu, et il fait gagner un temps fou.
+        K("FORMAT", [("combo", ("CTRL", "SHIFT", "C"))],
+          long=[("combo", ("CTRL", "Y"))],                 # refaire
+          double=[("combo", ("CTRL", "SHIFT", "V"))]),     # appliquer
     ],
 
     # -----------------------------------------------------------------
     "WINDOWS": [
-        K("EXPLOR", [("combo", ("WIN", "E"))]),
+        presse_papiers(),
         K("ALTTAB", [("combo", ("ALT", "TAB"))]),
-        K("BUREAU", [("combo", ("WIN", "D"))]),
-        K("TACHES", [("combo", ("CTRL", "SHIFT", "ESC"))]),
-        K("PRESSE", [("combo", ("WIN", "V"))]),
+        K("EXPLOR", [("combo", ("WIN", "E"))],
+          long=[("combo", ("WIN", "D"))]),                 # afficher le bureau
+        # Verrouiller est sur un appui LONG : impossible de verrouiller
+        # l'ecran par megarde en voulant ouvrir le gestionnaire.
+        K("TACHES", [("combo", ("CTRL", "SHIFT", "ESC"))],
+          long=[("combo", ("WIN", "L"))]),                 # verrouiller
+        # Win+V = historique du presse-papiers (a activer une fois dans
+        # Windows). Win+H = dictee vocale, tres peu connue.
+        K("PRESSE", [("combo", ("WIN", "V"))],
+          long=[("combo", ("WIN", "H"))]),                 # dictee
         K("CAPTUR", [("combo", ("WIN", "SHIFT", "S"))]),
     ],
 }

@@ -78,15 +78,40 @@ BLENDER  →  CIVIL3D  →  WORD  →  WINDOWS  →  BLENDER
 
 |  | BLENDER | CIVIL 3D | WORD | WINDOWS |
 |---|---|---|---|---|
-| **B1** | `G` | `_MATCHPROP` + Entrée | Ctrl+B | Win+E |
-| **B2** | `R` | `_HATCH` + Entrée | Ctrl+I | Alt+Tab |
-| **B3** | `S` | Ctrl+Z | Ctrl+S | Win+D |
-| **B4** | `Tab` | `_ISOLATEOBJECTS` + Entrée | Ctrl+Z | Ctrl+Maj+Échap |
-| **B5** | `E` | `_ZOOM` + Entrée | Ctrl+U | Win+V |
-| **B6** | Ctrl+Z | Ctrl+S | Ctrl+Y | Win+Maj+S |
+| **B1** | **Ctrl+C** | **Ctrl+C** | **Ctrl+C** | **Ctrl+C** |
+| **B2** | `R` | `_HATCH` + Entrée | Ctrl+B | Alt+Tab |
+| **B3** | `S` | `_MATCHPROP` + Entrée | Ctrl+I | Win+E |
+| **B4** | `Tab` | `_ISOLATEOBJECTS` + Entrée | Ctrl+U | Ctrl+Maj+Échap |
+| **B5** | `E` | `_ZOOM E` + Entrée | Ctrl+S | Win+V |
+| **B6** | `G` | Ctrl+S | Ctrl+Maj+C | Win+Maj+S |
 
-Chaque touche connaît en plus un **appui long** et un **double appui** —
-`Ctrl+Y` sur l'appui long de B3, `_REGEN` sur le double appui de B5, etc.
+**La touche 1 est la même dans tous les profils** — copier / coller /
+annuler, comme ESC qui est déjà global :
+
+| Geste | B1, partout |
+|---|---|
+| appui court | **Ctrl+C** copier |
+| double appui | **Ctrl+V** coller |
+| appui long | **Ctrl+Z** annuler |
+
+Les autres appuis longs et doubles des valeurs d'usine :
+
+| | Appui long | Double appui |
+|---|---|---|
+| **BLENDER** B6 `G` | Ctrl+Maj+Z rétablir | — |
+| **CIVIL 3D** B3 MATCH | Ctrl+Y rétablir | — |
+| **CIVIL 3D** B4 ISOLE | `_UNISOLATEOBJECTS` | — |
+| **CIVIL 3D** B5 ZOOM | — | `_REGEN` |
+| **WORD** B5 ENREG | F12 enregistrer sous | — |
+| **WORD** B6 FORMAT | Ctrl+Y refaire | Ctrl+Maj+V appliquer la mise en forme |
+| **WINDOWS** B3 EXPLOR | Win+D bureau | — |
+| **WINDOWS** B4 TACHES | Win+L verrouiller | — |
+| **WINDOWS** B5 PRESSE | Win+H dictée vocale | — |
+
+> **À retenir pour tes propres macros :** seule une touche qui a un
+> **double appui** attend (260 ms) avant de conclure « c'était un appui
+> court ». L'appui **long**, lui, ne coûte rien. Sur tes touches les plus
+> utilisées, laisse la colonne « double » vide.
 L'écran affiche les trois colonnes en permanence, et **saute sur la touche
 que tu viens d'utiliser en la surlignant** :
 
