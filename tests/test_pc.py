@@ -7,6 +7,7 @@ et quel nom de document envoyer. C'est la partie ou une erreur passerait
 inapercue.
 """
 
+import io
 import os
 import pathlib
 import sys
@@ -208,6 +209,86 @@ class TableLueSurLaCarte(unittest.TestCase):
             [{"exe": "acad.exe", "profil": "CIVIL3D", "abrege": "C3D"}])
         self.assertTrue(self.table.depuis_la_carte(config["apps"]))
         self.assertFalse(self.table.depuis_la_carte(config["apps"]))
+
+
+class DemarrageAutomatiqueWindows(unittest.TestCase):
+    """Le raccourci du dossier de demarrage : on teste ce qui est verifiable
+    sans Windows, c'est-a-dire les chemins et le script PowerShell produit."""
+
+    def setUp(self):
+        import demarrage_windows
+        self.DW = demarrage_windows
+
+    def test_dossier_de_demarrage(self):
+        env = {"APPDATA": os.path.join("C:\\Users", "yazid", "AppData",
+                                       "Roaming")}
+        dossier = self.DW.dossier_demarrage(env)
+        self.assertEqual(
+            dossier,
+            os.path.join(env["APPDATA"], "Microsoft", "Windows", "Start Menu",
+                         "Programs", "Startup"))
+        self.assertTrue(self.DW.chemin_raccourci(env).endswith("Macropad.lnk"))
+
+    def test_sans_appdata_message_clair(self):
+        with self.assertRaises(RuntimeError):
+            self.DW.dossier_demarrage({})
+
+    def test_apostrophes_doublees_pas_les_antislash(self):
+        # PowerShell : dans une chaine entre apostrophes, seul ' s'echappe.
+        # Un antislash doit rester tel quel, sinon les chemins Windows
+        # seraient massacres.
+        self.assertEqual(self.DW._texte_ps("C:\\Users\\yazid"),
+                         "'C:\\Users\\yazid'")
+        self.assertEqual(self.DW._texte_ps("D:\\Dossier d'Yves"),
+                         "'D:\\Dossier d''Yves'")
+
+    def test_script_powershell_complet(self):
+        script = self.DW.commande_powershell(
+            "C:\\Startup\\Macropad.lnk",
+            cible="C:\\Projet\\pc\\macropad_auto.bat",
+            dossier="C:\\Projet\\pc")
+        for morceau in ("CreateShortcut('C:\\Startup\\Macropad.lnk')",
+                        "$r.TargetPath = 'C:\\Projet\\pc\\macropad_auto.bat'",
+                        "$r.Arguments = '--journal'",
+                        "$r.WorkingDirectory = 'C:\\Projet\\pc'",
+                        "$r.WindowStyle = 7",
+                        "$r.Save()"):
+            self.assertIn(morceau, script)
+
+    def test_hors_windows_ne_touche_a_rien(self):
+        import contextlib
+        with contextlib.redirect_stdout(io.StringIO()) as sortie:
+            code = self.DW.main(["--installer"])
+        self.assertEqual(code, 1)
+        self.assertIn("Windows", sortie.getvalue())
+
+
+class JournalDuCompagnon(unittest.TestCase):
+    """Sans console visible, le journal est le seul temoin."""
+
+    def test_ecrit_dans_les_deux_sorties(self):
+        console, fichier = io.StringIO(), io.StringIO()
+        double = MA._Double(console, fichier)
+        double.write("bonjour")
+        double.flush()
+        self.assertEqual(console.getvalue(), "bonjour")
+        self.assertEqual(fichier.getvalue(), "bonjour")
+
+    def test_une_console_absente_ne_casse_rien(self):
+        # Lance sans console (pythonw), sys.__stdout__ peut etre None ou
+        # inutilisable : le journal doit continuer a fonctionner.
+        class Cassee:
+            def write(self, texte):
+                raise ValueError("pas de console")
+
+            def flush(self):
+                raise ValueError("pas de console")
+
+        fichier = io.StringIO()
+        double = MA._Double(Cassee(), fichier)
+        double.write("toujours la")
+        double.flush()
+        self.assertEqual(fichier.getvalue(), "toujours la")
 
 
 if __name__ == "__main__":

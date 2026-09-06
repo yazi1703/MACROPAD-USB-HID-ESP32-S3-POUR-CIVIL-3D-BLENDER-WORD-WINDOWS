@@ -4,3 +4,5 @@ __pycache__/
 # Fichiers ecrits par la carte ou par les tests
 profils.json
 stats.json
+pc/macropad_apps.txt
+pc/macropad_auto.log

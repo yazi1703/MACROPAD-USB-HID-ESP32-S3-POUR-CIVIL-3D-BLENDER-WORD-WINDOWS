@@ -196,3 +196,15 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 [ ] ajouter un logiciel dans la page : la détection le prend en compte
 [ ] le compteur d'usage monte quand on tape (et survit à un RESET)
 ```
+
+## Démarrage automatique du compagnon (V1)
+
+```
+[ ] demarrage_windows.bat, choix 1 : « Installe : ...Macropad.lnk »
+[ ] le raccourci est bien visible dans Win+R -> shell:startup
+[ ] après un redémarrage de Windows, le profil suit le logiciel sans rien lancer
+[ ] pc/macropad_auto.log se remplit à chaque session
+[ ] macropad débranché : le script attend au lieu de s'arrêter
+[ ] macropad rebranché : reconnexion, profil et nom de fichier renvoyés
+[ ] choix 2 : le raccourci disparaît et le compagnon ne démarre plus seul
+```

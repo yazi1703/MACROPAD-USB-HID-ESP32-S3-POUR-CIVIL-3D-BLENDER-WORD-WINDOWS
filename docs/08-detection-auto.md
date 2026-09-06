@@ -28,6 +28,24 @@ Il fait deux choses :
 py -m pip install pyserial
 ```
 
+**C'est l'étape qu'on oublie**, et le script te le dit clairement s'il
+manque :
+
+```
+==============================================================
+  pyserial n'est pas installe : ce script ne peut pas parler
+  au macropad sans lui.
+
+  Ouvre une invite de commandes et tape :
+
+      py -m pip install pyserial
+==============================================================
+```
+
+Si `py` n'est pas reconnu, c'est que Python n'est pas installé (ou pas
+dans le PATH) : reprends l'installation depuis python.org **en cochant
+« Add Python to PATH »**.
+
 C'est la seule dépendance. Tout le reste utilise la bibliothèque standard
 de Python : l'accès à l'API Windows passe par `ctypes`, sans `pywin32`.
 
@@ -216,7 +234,62 @@ fichier JSON. Garde-la : c'est ta seule copie hors de la carte.
 
 ---
 
-## 8.7 Le protocole, si tu veux bricoler
+## 8.7 Démarrer tout seul avec Windows
+
+Double-clique sur **`pc/demarrage_windows.bat`** et choisis **1** :
+
+```
+Demarrage automatique du compagnon du macropad
+----------------------------------------------
+Demarrage automatique : inactif
+
+  1. Installer   (lancer au demarrage de Windows)
+  2. Desinstaller
+  3. Ne rien faire
+Ton choix [1/2/3] :
+```
+
+Ce que ça fait, exactement : **un raccourci `Macropad.lnk` dans ton
+dossier de démarrage**, celui que tu ouvrirais toi-même avec `Win+R` puis
+`shell:startup`. Rien d'autre — pas de service Windows, pas de tâche
+planifiée, rien dans la base de registre, aucun droit administrateur. Le
+choix **2** le retire ; supprimer le fichier à la main revient au même.
+
+Le raccourci lance `macropad_auto.bat` :
+
+* **en fenêtre réduite**, pour ne pas t'encombrer l'écran à chaque
+  ouverture de session (la fenêtre reste dans la barre des tâches) ;
+* avec l'option **`--journal`**, qui écrit tout dans
+  **`pc/macropad_auto.log`**. C'est là qu'il faut regarder le jour où la
+  détection ne démarre pas : sans console visible, c'est le seul témoin.
+
+### Deux robustesses qui vont avec
+
+Un lancement au démarrage de Windows arrive **avant** que l'USB du
+macropad soit énuméré. Le script ne s'arrête donc plus quand la carte
+n'est pas là :
+
+```
+Macropad absent : aucun port Espressif (VID 0x303A) trouve.
+  On attend qu'il soit branche (port USB NATIF).
+```
+
+Il attend, et se connecte tout seul dès que la carte apparaît. **Même
+chose en cours de route** : débranche le macropad, rebranche-le, le
+script se reconnecte et lui renvoie le profil et le nom du fichier —
+la carte a redémarré, elle ne savait plus où elle en était.
+
+En ligne de commande, si tu préfères :
+
+```bat
+py demarrage_windows.py --installer
+py demarrage_windows.py --desinstaller
+py demarrage_windows.py --etat
+```
+
+---
+
+## 8.8 Le protocole, si tu veux bricoler
 
 Une commande par ligne, texte pur. Tu peux tout faire à la main depuis
 n'importe quel terminal série.
@@ -248,7 +321,7 @@ le firmware normalement**, tu ne perds pas cette porte de sortie.
 
 ---
 
-## 8.8 Si ça ne marche pas
+## 8.9 Si ça ne marche pas
 
 | Symptôme | Cause probable |
 |---|---|
@@ -260,3 +333,6 @@ le firmware normalement**, tu ne perds pas cette porte de sortie.
 | L'écran affiche `LOCK` | tu as verrouillé le profil : touche les deux TTP223 ensemble |
 | La page ne s'ouvre pas | le script n'est pas lancé, ou le port 8765 est déjà pris |
 | `le macropad n'a pas repondu` | `LINK_ENABLED = False` dans `config.py`, ou `main.py` ne tourne pas |
+| `No module named 'serial'` | pyserial manque : `py -m pip install pyserial` |
+| Rien ne se passe au démarrage de Windows | ouvre `pc/macropad_auto.log` : tout y est écrit |
+| La fenêtre du compagnon me gêne | elle est réduite ; pour la cacher tout à fait, remplace `macropad_auto.bat` par `pythonw` dans les propriétés du raccourci — mais tu perds l'affichage en direct |

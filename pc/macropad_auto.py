@@ -83,6 +83,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 DOSSIER = os.path.dirname(os.path.abspath(__file__))
 FICHIER_APPS = os.path.join(DOSSIER, "macropad_apps.txt")
+FICHIER_JOURNAL = os.path.join(DOSSIER, "macropad_auto.log")
+JOURNAL_MAX = 200000    # octets : au-dela on repart d'un fichier vide
 VID_ESPRESSIF = 0x303A
 PORT_WEB = 8765
 ABREGE_MAX = 7          # place disponible en bas a gauche de l'ecran
@@ -120,6 +122,88 @@ winword.exe = WORD = Wrd
 # Profil utilise pour tout le reste :
 * = WINDOWS = Win
 """
+
+
+# =====================================================================
+# 0. La seule dependance : pyserial
+# =====================================================================
+def verifier_pyserial():
+    """Dit clairement quoi faire si pyserial manque. True = tout va bien.
+
+    C'est LA erreur du premier lancement. Sans ce controle, Python affiche
+    un « ModuleNotFoundError: No module named 'serial' » suivi de dix
+    lignes de traceback, ce qui n'aide personne.
+    """
+    try:
+        import serial               # noqa: F401
+        return True
+    except ImportError:
+        pass
+    print()
+    print("=" * 62)
+    print("  pyserial n'est pas installe : ce script ne peut pas parler")
+    print("  au macropad sans lui.")
+    print()
+    print("  Ouvre une invite de commandes et tape :")
+    print()
+    print("      py -m pip install pyserial")
+    print()
+    print("  Puis relance ce script.")
+    print()
+    print("  Si « py » n'est pas reconnu, installe Python depuis")
+    print("  python.org en COCHANT « Add Python to PATH ».")
+    print()
+    print("  Pour essayer la detection sans macropad et sans pyserial :")
+    print("      py macropad_auto.py --simuler")
+    print("=" * 62)
+    print()
+    return False
+
+
+# =====================================================================
+# 0 bis. Le journal : indispensable quand le script demarre tout seul
+# =====================================================================
+class _Double:
+    """Ecrit a la fois dans la console et dans le fichier journal.
+
+    Quand Windows lance ce script au demarrage, sa fenetre est reduite et
+    tu ne la regardes jamais. Sans journal, une erreur passerait
+    totalement inapercue. Avec, il te suffit d'ouvrir macropad_auto.log.
+    """
+
+    def __init__(self, console, fichier):
+        self.console, self.fichier = console, fichier
+
+    def write(self, texte):
+        for sortie in (self.console, self.fichier):
+            try:
+                sortie.write(texte)
+            except Exception:
+                pass            # une console absente ne doit rien casser
+        return len(texte)
+
+    def flush(self):
+        for sortie in (self.console, self.fichier):
+            try:
+                sortie.flush()
+            except Exception:
+                pass
+
+
+def ouvrir_journal(chemin=FICHIER_JOURNAL):
+    """Redirige l'affichage vers la console ET le fichier. Retourne le fichier."""
+    try:
+        if os.path.exists(chemin) and os.path.getsize(chemin) > JOURNAL_MAX:
+            os.remove(chemin)       # on ne laisse pas grossir sans fin
+        fichier = open(chemin, "a", encoding="utf-8", buffering=1)
+    except OSError as exc:
+        print("Journal impossible (%s), on continue sans." % exc)
+        return None
+    fichier.write("\n===== %s =====\n"
+                  % time.strftime("%Y-%m-%d %H:%M:%S"))
+    sys.stdout = _Double(sys.__stdout__, fichier)
+    sys.stderr = _Double(sys.__stderr__, fichier)
+    return fichier
 
 
 # =====================================================================
@@ -367,17 +451,26 @@ class Macropad:
 
     def __init__(self, port=None, simuler=False):
         self.simuler = simuler
+        self.port_demande = port      # ce que tu as impose avec --port
         self.port = port
         self.serie = None
         self.verrou = threading.Lock()
+        self.generation = 0           # +1 a chaque (re)connexion reussie
+        self._absence_signalee = False
         if not simuler:
-            self.ouvrir()
+            # On n'abandonne PAS si la carte n'est pas la : au demarrage de
+            # Windows, ce script peut partir avant que l'USB du macropad
+            # soit reconnu. On attend, et on se connecte des qu'il arrive.
+            self.assurer()
 
     # ------------------------------------------------------------------
     @staticmethod
     def trouver_port():
         """Cherche le port USB natif de l'ESP32-S3 (fabricant Espressif)."""
-        from serial.tools import list_ports
+        try:
+            from serial.tools import list_ports
+        except ImportError:
+            return None
         candidats = []
         for infos in list_ports.comports():
             if infos.vid == VID_ESPRESSIF:
@@ -386,28 +479,82 @@ class Macropad:
             return candidats[0]
         return None
 
-    def ouvrir(self):
-        import serial
-        if self.port is None:
-            self.port = self.trouver_port()
-        if self.port is None:
-            raise SystemExit(
-                "Aucun port Espressif trouve.\n"
-                "Branche le port USB NATIF du macropad, ou precise le port :\n"
-                "    py macropad_auto.py --port COM7")
-        self.serie = serial.Serial(self.port, 115200, timeout=0.3)
-        print("Macropad connecte sur", self.port)
+    def assurer(self):
+        """Ouvre le port si ce n'est pas deja fait. True = on est connecte.
+
+        Cette methode ne leve jamais d'exception : elle est appelee a chaque
+        tour de boucle, et l'absence du macropad est une situation normale
+        (pas encore branche, debranche, ou Thonny qui tient le port).
+        """
+        if self.simuler or self.serie is not None:
+            return True
+        try:
+            import serial
+        except ImportError:
+            self._signaler_absence("pyserial n'est pas installe "
+                                   "(py -m pip install pyserial).")
+            return False
+        port = self.port_demande or self.trouver_port()
+        if port is None:
+            self._signaler_absence(
+                "Macropad absent : aucun port Espressif (VID 0x303A) trouve.")
+            return False
+        try:
+            self.serie = serial.Serial(port, 115200, timeout=0.3)
+        except Exception as exc:
+            self._signaler_absence("Port %s indisponible (%s)." % (port, exc))
+            return False
+        self.port = port
+        self.generation += 1
+        self._absence_signalee = False
+        print("Macropad connecte sur", port)
+        return True
+
+    # Ancien nom, garde parce qu'il est explicite dans les traces.
+    ouvrir = assurer
+
+    def _signaler_absence(self, message):
+        """Ne se plaint qu'une fois : ce script tourne peut-etre toute la
+        journee, il ne doit pas remplir la console de la meme phrase."""
+        if self._absence_signalee:
+            return
+        self._absence_signalee = True
+        print(message)
+        print("  On attend qu'il soit branche (port USB NATIF).")
+        print("  Si Thonny est connecte a ce port, deconnecte-le.")
+        print("  Ctrl-C pour arreter.")
+
+    def _perdu(self, exc):
+        """Le cable a ete debranche, ou la carte a redemarre."""
+        try:
+            if self.serie is not None:
+                self.serie.close()
+        except Exception:
+            pass
+        self.serie = None
+        self._absence_signalee = False
+        print("Macropad deconnecte (%s). On attend son retour." % exc)
 
     # ------------------------------------------------------------------
     def _ecrire(self, ligne):
         if self.simuler:
             print("  -> %s" % ligne)
             return
-        self.serie.write((ligne + "\n").encode())
+        try:
+            self.serie.write((ligne + "\n").encode())
+        except Exception as exc:
+            self._perdu(exc)
+            raise
 
     def envoyer(self, ligne):
         with self.verrou:
-            self._ecrire(ligne)
+            if not self.assurer():
+                return False
+            try:
+                self._ecrire(ligne)
+            except Exception:
+                return False        # _perdu a deja explique ce qui se passe
+            return True
 
     def _lire_reponse(self, fin, delai=3.0):
         """Lit jusqu'au marqueur de fin. Ignore les messages de debogage."""
@@ -416,7 +563,11 @@ class Macropad:
         lignes = []
         limite = time.time() + delai
         while time.time() < limite:
-            brut = self.serie.readline()
+            try:
+                brut = self.serie.readline()
+            except Exception as exc:
+                self._perdu(exc)
+                raise
             if not brut:
                 continue
             ligne = brut.decode("utf-8", "replace").strip()
@@ -439,6 +590,8 @@ class Macropad:
                                            "abrege": "Win"},
                                  "liste": []},
                         "origine": "simulation"}
+            if not self.assurer():
+                raise IOError("macropad non connecte")
             self.serie.reset_input_buffer()
             self._ecrire("?CFG")
             self._lire_reponse("#CFGBEGIN")
@@ -453,14 +606,23 @@ class Macropad:
             if self.simuler:
                 self._ecrire("!CFGBEGIN ... %d octets ... !CFGEND" % len(texte))
                 return True, ""
-            self.serie.reset_input_buffer()
-            self._ecrire("!CFGBEGIN")
-            for debut in range(0, len(texte), 160):
-                self._ecrire("!C:" + texte[debut:debut + 160])
-            self._ecrire("!CFGEND")
+            if not self.assurer():
+                return False, "macropad non connecte"
+            try:
+                self.serie.reset_input_buffer()
+                self._ecrire("!CFGBEGIN")
+                for debut in range(0, len(texte), 160):
+                    self._ecrire("!C:" + texte[debut:debut + 160])
+                self._ecrire("!CFGEND")
+            except Exception as exc:
+                return False, "macropad deconnecte (%s)" % exc
             limite = time.time() + 5.0
             while time.time() < limite:
-                brut = self.serie.readline()
+                try:
+                    brut = self.serie.readline()
+                except Exception as exc:
+                    self._perdu(exc)
+                    return False, "macropad deconnecte (%s)" % exc
                 if not brut:
                     continue
                 ligne = brut.decode("utf-8", "replace").strip()
@@ -743,7 +905,16 @@ def main():
                            help="afficher ce qui serait envoye, sans macropad")
     analyseur.add_argument("--periode", type=float, default=0.4,
                            help="intervalle de detection en secondes")
+    analyseur.add_argument("--journal", action="store_true",
+                           help="ecrire aussi dans macropad_auto.log "
+                                "(utilise par le demarrage automatique)")
     options = analyseur.parse_args()
+
+    if options.journal:
+        ouvrir_journal()
+
+    if not options.simuler and not verifier_pyserial():
+        return 1
 
     fenetre = FenetreActive()
     if not fenetre.disponible:
@@ -764,10 +935,20 @@ def main():
 
     dernier_profil = None
     dernier_bas = None
+    generation = macropad.generation
     prochaine_sync = time.time() + PERIODE_SYNC
     try:
         while True:
             maintenant = time.time()
+
+            # Le macropad vient d'etre (re)branche : il a redemarre, il ne
+            # sait plus quel profil afficher. On oublie ce qu'on croyait
+            # lui avoir dit, et on relit sa table des logiciels.
+            if macropad.generation != generation:
+                generation = macropad.generation
+                dernier_profil = dernier_bas = None
+                prochaine_sync = maintenant
+
             if maintenant >= prochaine_sync:
                 # On redemande la table a la carte : elle a pu changer
                 # depuis le portail WiFi, sans que ce script le sache.
@@ -782,25 +963,27 @@ def main():
             document = nom_document(titre, programme)
 
             if profil != dernier_profil:
-                dernier_profil = profil
                 print("%-22s -> %s" % (programme or "(inconnu)", profil))
-                macropad.envoyer("P:" + profil)
+                # On ne retient l'envoi comme fait que s'il est parti : si
+                # le cable est debranche, il repartira a la reconnexion.
+                if macropad.envoyer("P:" + profil):
+                    dernier_profil = profil
 
             # L'ecran recoit "abrege|nom du fichier". L'abrege reste fixe en
             # bas a gauche, le nom defile a cote. On n'envoie que si quelque
             # chose a change : inutile de repeter la meme ligne 2 fois par
             # seconde.
             bas = "%s|%s" % (abrege, document)
-            if bas != dernier_bas:
+            if bas != dernier_bas and macropad.envoyer("T:" + bas):
                 dernier_bas = bas
-                macropad.envoyer("T:" + bas)
 
             time.sleep(options.periode)
     except KeyboardInterrupt:
         print("\nArret.")
     finally:
         serveur.shutdown()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

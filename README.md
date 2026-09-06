@@ -25,7 +25,8 @@ ouvert, compte les appuis, et se configure entièrement depuis une page web
 | **comprendre l'écran et les trois gestes** | [`docs/09-ecran-et-gestes.md`](docs/09-ecran-et-gestes.md) |
 | savoir ce qui a été corrigé et pourquoi | [`docs/06-corrections.md`](docs/06-corrections.md) |
 | **que le macropad suive le logiciel actif** | [`docs/08-detection-auto.md`](docs/08-detection-auto.md) — le script PC |
-| **modifier les macros depuis le PC** | lancer `pc/macropad_auto.py`, puis `http://127.0.0.1:8765` |
+| **modifier les macros depuis le PC** | lancer `pc/macropad_auto.bat`, puis `http://127.0.0.1:8765` |
+| **que le compagnon démarre avec Windows** | `pc/demarrage_windows.bat`, choix 1 — voir [`docs/08.7`](docs/08-detection-auto.md) |
 | modifier les macros sans PC (téléphone) | maintenir B2 au RESET, puis `http://192.168.4.1` — voir [`docs/07`](docs/07-mode-configuration.md) |
 | modifier les macros d'usine | `device/profiles.py` |
 | modifier les broches ou les réglages | `device/config.py` |
@@ -113,7 +114,10 @@ cours, envoie Échap, et déclenche un flash lumineux.
 sur le PC lui dit quelle application est au premier plan : tu cliques dans
 Civil 3D, le profil bascule seul, et l'écran affiche le nom du dessin
 ouvert. Touche les deux TTP223 ensemble pour verrouiller et reprendre la
-main. Voir [`docs/08`](docs/08-detection-auto.md).
+main. Il peut **démarrer tout seul avec Windows**
+(`pc/demarrage_windows.bat`), attend patiemment que le macropad soit
+branché et se reconnecte tout seul s'il est débranché. Voir
+[`docs/08`](docs/08-detection-auto.md).
 
 > **Réserve, que tu as validée :** les raccourcis Word ci-dessus sont ceux
 > de Word en **anglais**. Sur un Word **français**, Gras se fait avec
@@ -153,16 +157,19 @@ main. Voir [`docs/08`](docs/08-detection-auto.md).
 │   └── lib/usb/device/           bibliothèque USB officielle (MIT)
 ├── pc/                           >>> À LANCER SUR LE PC, pas sur la carte
 │   ├── macropad_auto.py          détection du logiciel actif + config USB
-│   ├── macropad_auto.bat         lanceur Windows
-│   └── macropad_apps.txt         table de secours (créée au 1er lancement)
+│   ├── macropad_auto.bat         lanceur Windows (double-clic)
+│   ├── demarrage_windows.py      installe/retire le démarrage automatique
+│   ├── demarrage_windows.bat     le même, en double-clic
+│   ├── macropad_apps.txt         table de secours (créée au 1er lancement)
+│   └── macropad_auto.log         journal (créé si --journal)
 ├── tools/                        >>> OUTILS DE DÉVELOPPEMENT (PC)
 │   ├── page_config.html          la page de configuration, source unique
 │   ├── injecter_page.py          l'injecte dans portal.py et macropad_auto.py
 │   └── generer_code_complet.py   régénère CODE_COMPLET.md
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             94 tests du firmware, exécutables sur PC
-│   └── test_pc.py                7 tests du compagnon Windows
+│   ├── test_logic.py             83 tests du firmware, exécutables sur PC
+│   └── test_pc.py                25 tests du compagnon Windows
 └── licenses/                     licences des composants tiers
 ```
 
@@ -186,7 +193,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 101 tests ... OK
+→ Ran 108 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport
