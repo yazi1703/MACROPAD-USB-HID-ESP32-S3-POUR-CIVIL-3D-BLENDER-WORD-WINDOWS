@@ -285,6 +285,53 @@ Si elle reste sombre ou éteinte, deux solutions :
 Pour ce montage à 8 mA, le BC547 reste le choix le plus sûr : l'IRFZ44N est
 prévu pour 49 A, il est surdimensionné d'un facteur 6000.
 
+#### Cas rencontré sur ce montage : l'IRFZ44N ne s'ouvre pas à 3,3 V
+
+Le risque décrit ci-dessus **s'est effectivement produit**. Symptômes : LED
+totalement éteinte quel que soit le rapport cyclique, alors que tout le
+reste est bon.
+
+**Les trois tests qui isolent le coupable en cinq minutes, sans rien
+dessouder :**
+
+1. **Pontage drain-source** (relier la broche du milieu à celle de droite) :
+   si la LED s'allume, alors le +5 V, la résistance série et la LED sont
+   bons. Le problème est donc le transistor ou sa commande.
+
+2. **Continuité de la chaîne de grille**, sans multimètre :
+
+   ```python
+   from machine import Pin
+   print(Pin(15, Pin.IN, Pin.PULL_UP).value())
+   ```
+
+   Le tirage interne (~45 kΩ) se bat contre la 10 kΩ externe. Un **0**
+   prouve que GPIO15 → 220 Ω → grille → 10 kΩ → GND est continu. Un **1**
+   signale une coupure.
+
+3. **Preuve par le raisonnement sur la diode interne.** Un MOSFET N possède
+   une diode intrinsèque de la source vers le drain. Si drain et source
+   étaient inversés, cette diode serait passante et **la LED resterait
+   allumée en permanence**, grille ou pas. Une LED totalement éteinte prouve
+   donc que l'orientation drain/source est correcte.
+
+Quand ces trois points sont vérifiés, il ne reste qu'une explication : la
+grille reçoit bien 3,3 V, mais c'est insuffisant pour ouvrir ce transistor.
+
+**Test décisif, trente secondes.** Débranche le fil qui va à GPIO15, puis
+touche son extrémité (celle qui part vers la 220 Ω) sur la broche **5V** de
+la carte. Aucun risque : une grille ne consomme pas de courant continu.
+
+* la LED s'allume → **confirmé**, c'est bien un problème de seuil ;
+* la LED reste éteinte → le transistor est mort, ou il ne s'agit pas d'un
+  IRFZ44N.
+
+**Correctif : passer au BC547** (voir § 5.4), ou à un MOSFET *logic level*
+type IRLZ44N. Le BC547 est un transistor bipolaire : il n'a pas de seuil de
+grille, 3,3 V suffisent toujours à le commander.
+
+---
+
 ### Différence 3 — identifier les broches, sans se tromper
 
 Sur un IRFZ44N en boîtier TO-220, **face marquée vers toi, pattes vers le
