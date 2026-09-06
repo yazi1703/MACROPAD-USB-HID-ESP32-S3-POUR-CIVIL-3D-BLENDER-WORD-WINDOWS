@@ -83,6 +83,55 @@ fait « bip ») ou en ohms.
 
 Si un seul de ces points échoue, **ne branche pas**. Cherche d'abord.
 
+### ⚠️ Remplacer un MOSFET par un BC547 : le brochage n'est PAS le même
+
+Piège classique, rencontré sur ce montage. On ne peut **pas** échanger le
+composant en laissant les fils dans les mêmes trous.
+
+```
+   IRFZ44N (face marquée vers toi)      BC547 (face plate vers toi)
+        G  |  D  |  S                        C  |  B  |  E
+      grille drain source                collecteur base émetteur
+```
+
+La **broche du milieu** est le **drain** sur le MOSFET, mais la **base** sur
+le BC547. Ce ne sont pas du tout les mêmes fonctions : le drain transporte
+le courant de la LED, la base reçoit la commande.
+
+Si tu remplaces le composant sans rien recâbler, tu obtiens :
+
+| Fil | Allait sur | Arrive maintenant sur | Correct ? |
+|---|---|---|---|
+| GPIO15 via la résistance | grille (gauche) | **collecteur** | ❌ |
+| cathode de la LED | drain (milieu) | **base** | ❌ |
+| GND | source (droite) | émetteur | ✅ |
+| 10 kΩ vers GND | grille (gauche) | **collecteur** | ❌ |
+
+Trois fils sur quatre sont faux. Le câblage correct pour le BC547 :
+
+```
+   cathode LED  -> COLLECTEUR  (broche de gauche)
+   GPIO15 -[2,2 kΩ]-> BASE     (broche du MILIEU)
+   10 kΩ           -> entre la BASE (milieu) et GND
+   GND             -> ÉMETTEUR (broche de droite)
+```
+
+Note bien que **la 10 kΩ doit être déplacée elle aussi** : elle était entre
+la grille et GND, elle doit maintenant être entre la **base** et GND.
+
+### Le test de pontage change lui aussi
+
+Pour court-circuiter un transistor et vérifier ce qu'il y a en amont :
+
+* **MOSFET** : ponter **milieu ↔ droite** (drain ↔ source) ;
+* **BC547** : ponter les **deux broches EXTÉRIEURES** (collecteur ↔ émetteur).
+  Ponter le milieu sur une extérieure relierait la **base**, ce qui ne
+  court-circuite rien du tout — et forcerait même le transistor à se
+  bloquer.
+
+Un pontage fait sur les mauvaises broches ne prouve rien : il ne faut pas
+en conclure que l'amont est en panne.
+
 ### BC547 ou BC557 ? Ne pas les confondre
 
 Ils se ressemblent — même boîtier TO-92, même taille, numéros voisins — mais
