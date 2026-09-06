@@ -207,6 +207,49 @@ hasard.
 Avec un BC547 c'était un confort. Avec un MOSFET, **c'est obligatoire** :
 10 kΩ entre la grille et GND.
 
+#### Le piège classique : 10 kΩ sur la GRILLE, pas sur la SOURCE
+
+Les deux résistances aboutissent à GND, ce qui prête à confusion. Mais
+électriquement elles n'ont rien à voir.
+
+```
+   CORRECT                             FAUX
+   -------                             ----
+   GPIO15 --[220Ω]--+-- G              GPIO15 --[220Ω]-- G
+                    |
+                 [10 kΩ]
+                    |
+                   GND
+                                       S --[10 kΩ]-- GND     <-- ERREUR
+   S ------------- GND
+   (fil direct, rien entre)
+```
+
+**Pourquoi la version fausse ne marche pas.** Si la 10 kΩ est *en série*
+avec la source, tout le courant de la LED doit la traverser. Pour y faire
+passer 8 mA, il faudrait `0,008 × 10000 = 80 V` à ses bornes. On n'en a
+que 5.
+
+Le montage se met alors à s'auto-étrangler : dès qu'un peu de courant
+passe, la source monte en tension, donc `Vgs = Vgrille − Vsource` diminue,
+donc le transistor se referme. Le point d'équilibre se situe autour de
+`(3,3 − Vgs(th)) / 10000`, soit **quelques dizaines de microampères**.
+La LED reste éteinte, ou luit à peine dans le noir.
+
+C'est ce qu'on appelle une résistance de dégénérescence de source. Utile
+dans un amplificateur, catastrophique dans un interrupteur.
+
+**Aucun risque de casse** : on parle de microampères. C'est juste
+inopérant.
+
+**Vérification au multimètre, hors tension :**
+
+* entre la broche **droite (source)** et GND → **continuité franche**,
+  0 Ω. Si tu lis 10 kΩ, la résistance est au mauvais endroit.
+* entre la broche **gauche (grille)** et GND → **10 kΩ**.
+
+---
+
 ### Différence 2 — l'IRFZ44N n'est pas un modèle « logic level »
 
 C'est le vrai point faible de ce choix. Sa fiche technique donne une
