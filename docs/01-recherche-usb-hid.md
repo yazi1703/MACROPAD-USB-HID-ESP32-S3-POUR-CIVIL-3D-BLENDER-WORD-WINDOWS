@@ -169,6 +169,30 @@ silencieux n'a ete fait.
 * Telechargement : page officielle `ESP32_GENERIC_S3` du site micropython.org,
   section *Firmware*, ligne **SPIRAM_OCT**.
 
+
+### Les deux variantes fonctionnent — et la variante standard est meme preferable
+
+La variante `SPIRAM_OCT` active les 8 Mo de PSRAM de la puce R8. La variante
+**standard** ne les active pas : `gc.mem_free()` renvoie alors environ
+**224 000 octets** au lieu de plusieurs millions.
+
+Detail utile pour comprendre : la variante standard du S3 embarque le
+fragment `boards/sdkconfig.spiram_quad`, c'est-a-dire une PSRAM en mode
+**quad**. Sur une carte N16R8 dont la PSRAM est **octale**, cette
+initialisation echoue silencieusement et la PSRAM reste simplement
+inutilisee. La carte fonctionne parfaitement, avec sa seule RAM interne.
+
+**Est-ce genant pour ce projet ? Non, et c'est meme un avantage.**
+
+* 224 Ko de RAM interne sont tres largement suffisants : le firmware complet
+  en consomme de l'ordre de 60 Ko. Ce macropad n'a aucun usage de la PSRAM.
+* Surtout, le bug corrige en v1.27.0 ne concernait que les cartes **avec
+  PSRAM active** : sans PSRAM, les tampons USB sont forcement en RAM interne
+  accessible au DMA, et toute cette classe de problemes disparait.
+
+Conclusion : si `gc.mem_free()` te renvoie ~224 000, **ne reflashe pas**,
+continue. La seule exigence reelle reste la version : **v1.27.0 minimum**.
+
 ### Flash
 
 Branchez le **port USB-UART** de la carte (celui du pont serie, voir

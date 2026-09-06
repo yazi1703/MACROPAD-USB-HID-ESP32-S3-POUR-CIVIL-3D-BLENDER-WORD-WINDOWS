@@ -25,10 +25,11 @@ capacitives pour changer de profil, un écran OLED SH1106, et un gros bouton
 
 ## Les trois choses à ne pas rater
 
-1. **MicroPython v1.27.0 minimum** (v1.29.0 recommandée), variante
-   `ESP32_GENERIC_S3-SPIRAM_OCT`. En dessous, sur une carte à PSRAM comme
+1. **MicroPython v1.27.0 minimum.** En dessous, sur une carte à PSRAM comme
    la N16R8, le clavier s'énumère normalement sous Windows et **aucune
    touche n'arrive jamais**. C'est un bug documenté, corrigé en v1.27.0.
+   La variante `SPIRAM_OCT` **et** la variante standard conviennent toutes
+   les deux : seule la version compte.
 
 2. **Les TTP223 et l'OLED s'alimentent en 3,3 V, jamais en 5 V.** Leurs
    sorties recopient leur tension d'alimentation : en 5 V, ils détruiraient

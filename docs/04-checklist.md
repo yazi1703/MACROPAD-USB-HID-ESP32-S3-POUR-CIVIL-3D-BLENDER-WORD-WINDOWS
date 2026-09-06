@@ -29,7 +29,7 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 ```
 [ ] ESP32-S3 détecté par Windows
 [ ] les deux ports USB-C identifiés (natif = HID, UART = flash et Thonny)
-[ ] MicroPython installé, variante ESP32_GENERIC_S3-SPIRAM_OCT
+[ ] MicroPython installé (SPIRAM_OCT ou variante standard : les deux conviennent)
 [ ] version >= 1.27.0  (INDISPENSABLE : bug des rapports HID vides sur PSRAM)
 [ ] diag.run() affiche machine.USBDevice disponible : True
 [ ] REPL fonctionnel dans Thonny

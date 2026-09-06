@@ -88,8 +88,12 @@ Rien de branché sauf l'USB.
 * `Plateforme : esp32` ;
 * `machine.USBDevice disponible : True` — si c'est `False`, ce n'est pas le
   bon firmware, rien de la suite ne fonctionnera ;
-* une mention `Octal-SPIRAM` quelque part dans les informations, qui
-  confirme la bonne variante.
+* la quantité de RAM libre. **Les deux cas sont bons :**
+  * plusieurs millions d'octets → variante `SPIRAM_OCT`, la PSRAM est active ;
+  * environ **224 000** octets → variante standard, la PSRAM n'est pas
+    activée. **Ce n'est pas un problème**, c'est même préférable ici : le
+    firmware consomme ~60 Ko, et le bug des rapports HID vides ne touchait
+    que les cartes à PSRAM active. Ne reflashe pas.
 
 Teste aussi le redémarrage :
 

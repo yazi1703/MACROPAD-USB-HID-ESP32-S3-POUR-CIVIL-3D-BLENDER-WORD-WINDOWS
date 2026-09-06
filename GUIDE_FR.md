@@ -63,7 +63,9 @@ Les commentaires du code écrit pour ce projet sont en français. Les fichiers t
 
 **ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin**.
 
-[Télécharger le binaire officiel](https://micropython.org/resources/firmware/ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin). Vérifier également sa présence dans la rubrique « Support for Octal-SPIRAM » de la [page de téléchargement S3](https://micropython.org/download/ESP32_GENERIC_S3/). Ne pas prendre `.app-bin`, `.uf2`, une preview, ou la variante standard sans SPIRAM octale.
+[Télécharger le binaire officiel](https://micropython.org/resources/firmware/ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin). Vérifier également sa présence dans la rubrique « Support for Octal-SPIRAM » de la [page de téléchargement S3](https://micropython.org/download/ESP32_GENERIC_S3/). Ne pas prendre `.app-bin`, `.uf2`, ni une preview.
+
+**[CORRIGÉ] La variante standard convient aussi.** Elle n'active pas la PSRAM : `gc.mem_free()` renvoie alors environ 224 000 octets au lieu de plusieurs millions. Ce n'est **pas** un défaut pour ce projet — le firmware complet consomme de l'ordre de 60 Ko, et le bug des rapports HID vides corrigé en v1.27.0 ne concernait que les cartes à PSRAM active. Sans PSRAM, toute cette classe de problèmes disparaît. Si ta carte est déjà flashée avec la variante standard, **ne reflashe pas**. La seule exigence réelle est la version : **v1.27.0 minimum**. Détail dans `docs/01-recherche-usb-hid.md`.
 
 N16R8 correspond normalement à 16 Mo de flash et 8 Mo de PSRAM octale sur ce module. Confirmer la flash avec `esptool flash-id` et l'identification/quantité de mémoire au REPL. La capacité totale de flash n'est pas la taille garantie du système de fichiers, qui dépend du partitionnement du binaire.
 
@@ -320,7 +322,7 @@ Faire ensuite 20 à 30 pressions par touche, alterner rapidement NEXT/PREVIOUS, 
 - [ ] ESP32-S3 détecté par Windows
 - [ ] Bon port USB natif identifié (droite « USB » sur la photo)
 - [ ] Erreur D+/D− du visuel prise en compte
-- [ ] MicroPython 1.29.0 SPIRAM_OCT installé
+- [ ] MicroPython >= 1.27.0 installé (SPIRAM_OCT ou variante standard)
 - [ ] REPL fonctionnel
 - [ ] GPIO vérifiés ; nappe caméra vide
 - [ ] OLED détecté
