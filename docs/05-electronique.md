@@ -1,0 +1,361 @@
+# 5. Électronique expliquée — et surtout : ce qui risque de cramer
+
+Document écrit pour quelqu'un qui débute. Chaque règle est suivie de son
+**pourquoi**, parce qu'une règle qu'on comprend, on ne l'oublie pas.
+
+---
+
+## 5.1 Les trois règles d'or
+
+### Règle 1 — Rien de plus de 3,3 V sur une broche GPIO
+
+L'ESP32-S3 fonctionne en 3,3 V. Sa fiche technique donne une tension
+maximale absolue de **3,6 V** sur une entrée. Au-delà, on ne détruit pas
+forcément la puce d'un coup : on l'abîme lentement, et la panne arrive
+plus tard, de façon incompréhensible.
+
+C'est pour cette raison que **les TTP223 doivent être alimentés en 3,3 V et
+jamais en 5 V**. Ces modules recopient leur tension d'alimentation sur leur
+sortie OUT. Alimentés en 5 V, ils enverraient 5 V directement dans GPIO10
+et GPIO11. C'est l'erreur la plus fréquente sur ce genre de montage, et
+c'est une erreur définitive.
+
+Même chose pour l'OLED : il accepte 3,3 V et 5 V côté alimentation, mais
+ses broches SDA et SCL suivent la tension d'alimentation. **Alimenté en
+5 V, il enverrait 5 V dans GPIO8 et GPIO9.** On l'alimente donc en 3,3 V.
+
+### Règle 2 — Jamais de LED directement sur un GPIO
+
+Un GPIO d'ESP32-S3 peut fournir environ **40 mA au maximum absolu**, et on
+recommande de rester sous 20 mA. Une LED sans résistance se comporte
+presque comme un court-circuit une fois sa tension de seuil atteinte :
+elle tirerait plusieurs centaines de milliampères. Résultat : la broche
+grille, parfois en emportant sa voisine.
+
+D'où le transistor BC547 : il sert d'interrupteur commandé. Le GPIO ne
+fournit qu'**1,2 mA** pour commander la base, et c'est le +5 V de l'USB qui
+fournit le courant de la LED, à travers la résistance de 330 ohms.
+
+### Règle 3 — On ne modifie jamais un câblage sous tension
+
+Débranche l'USB avant de toucher un fil. Deux raisons :
+
+1. Un contact fugitif entre le +5 V et un fil de signal met 5 V sur un
+   GPIO pendant quelques millisecondes. C'est suffisant.
+2. Un court-circuit entre 3V3 et GND fait travailler le régulateur de la
+   carte en surcharge ; il chauffe très vite et peut lâcher.
+
+---
+
+## 5.2 Tableau des pannes destructrices
+
+| Erreur | Ce qui se passe | Ce qui meurt | Comment l'éviter |
+|---|---|---|---|
+| TTP223 alimenté en 5 V | 5 V sur GPIO10/11 | la broche, puis la puce | fil VCC sur **3V3**, jamais sur 5V |
+| OLED alimenté en 5 V | 5 V sur SDA/SCL | GPIO8 et GPIO9 | fil VCC sur **3V3** |
+| LED branchée en direct sur GPIO15 | courant non limité | la broche GPIO | passer par le BC547 + 330 Ω |
+| Résistance 330 Ω oubliée | la LED voit 5 V | LED **et** BC547 (max 100 mA) | vérifier avant la mise sous tension |
+| BC547 avec E et C inversés | la jonction base-émetteur est en inverse (claquage vers 6 V) | le transistor, en silence | identifier E/B/C à la fiche technique **ou** au multimètre |
+| Fil du +5 V qui touche le fil GPIO14 | 5 V sur une entrée | la broche | connecteur détrompé + résistance série 1 kΩ (voir 5.5) |
+| Quelque chose branché sur GPIO19/20 | on parasite les données USB | l'USB, parfois la broche | ne rien y connecter, jamais |
+| 3V3 relié à 5V | le régulateur est mis en conflit | le régulateur de la carte | vérifier au multimètre avant de brancher |
+| Condensateur électrolytique à l'envers | il chauffe, gonfle, puis éclate | le condensateur, et ce qui est autour | respecter la bande blanche (le « − ») |
+| Deux ports USB sur **deux ordinateurs différents** | les masses ne sont pas au même potentiel | la carte | les deux ports sur **le même PC**, ou un seul |
+| Fer à souder sur une carte alimentée | fuites de courant par la panne | la puce | souder toujours hors tension |
+
+---
+
+## 5.3 Vérifications au multimètre AVANT la première mise sous tension
+
+Câble USB **débranché**. Multimètre en position continuité (le symbole qui
+fait « bip ») ou en ohms.
+
+```
+[ ] entre 3V3 et GND        -> PAS de bip  (une résistance de plusieurs
+                               kilo-ohms est normale, un bip = court-circuit)
+[ ] entre 5V  et GND        -> PAS de bip
+[ ] entre 5V  et 3V3        -> PAS de bip
+[ ] entre GPIO4 et GND      -> bip SEULEMENT quand tu appuies sur B1
+[ ] idem GPIO5/6/7 et B2/B3/B4
+[ ] entre GPIO14 et GND     -> bip SEULEMENT quand tu appuies sur ESC
+[ ] entre GPIO19 ou GPIO20 et n'importe quoi -> rien, ces broches sont libres
+```
+
+Si un seul de ces points échoue, **ne branche pas**. Cherche d'abord.
+
+### Identifier les pattes du BC547
+
+Le brochage d'un boîtier TO-92 **change selon le fabricant**. Ne te fie
+jamais à « face plate vers toi, c'est C-B-E » : c'est vrai pour certains,
+faux pour d'autres, et une inversion émetteur/collecteur abîme le
+transistor de façon invisible.
+
+Deux méthodes fiables :
+
+**Méthode 1 — le marquage.** Lis le texte complet sur la face plate
+(par exemple `BC547B` + un logo ou un code fabricant), et cherche la fiche
+technique de ce fabricant précis. Envoie-moi le marquage exact, je te
+confirme le brochage.
+
+**Méthode 2 — le multimètre, position test de diode.** Sur un NPN comme le
+BC547, la **base** est la seule patte qui, avec la pointe **rouge** posée
+dessus, fait apparaître une tension d'environ 0,6 à 0,7 V vers **les deux
+autres** pattes. Une fois la base identifiée, il reste à distinguer
+émetteur et collecteur : la mesure base→émetteur donne une tension
+légèrement **plus élevée** que base→collecteur (quelques dizaines de
+millivolts d'écart). En cas de doute, un testeur de composants à quelques
+euros donne directement E/B/C.
+
+### Identifier l'anode de la LED
+
+En position test de diode : la LED s'allume faiblement quand la pointe
+**rouge** est sur l'**anode**. L'anode va vers la résistance de 330 Ω, donc
+vers le +5 V. La cathode va vers le collecteur du transistor.
+
+---
+
+## 5.4 Le montage de la LED, expliqué pas à pas
+
+```
+   +5 V (venant de l'USB)
+        |
+      [330 Ω]        <-- c'est CETTE résistance qui protège tout le montage
+        |
+       LED 1 W       <-- anode en haut, cathode en bas
+        |
+        C  (collecteur)
+        |
+   B --|<   BC547, transistor NPN
+        |
+        E  (émetteur)
+        |
+       GND
+
+   GPIO15 ---[2,2 kΩ]---+--- B
+                        |
+                     [10 kΩ]
+                        |
+                       GND
+```
+
+**Ce que fait chaque composant :**
+
+- **330 Ω** : limite le courant. Sans elle, la LED verrait 5 V et tirerait
+  un courant destructeur. Avec elle, et une LED rouge dont la tension de
+  seuil est d'environ 2,1 V :
+  `I = (5 − 2,1 − 0,2) / 330 = 8,2 mA`.
+  La LED est prévue pour 1 W, elle dissipe ici **17 mW**. Elle ne chauffera
+  pas, même à 100 % de PWM. C'est exactement l'effet veilleuse voulu.
+
+- **BC547** : interrupteur commandé. Quand GPIO15 est à 3,3 V, il laisse
+  passer le courant ; à 0 V, il le bloque. Il supporte 100 mA, on en
+  utilise 8,2 : marge d'un facteur 12.
+
+- **2,2 kΩ** : limite le courant qui entre dans la base.
+  `Ib = (3,3 − 0,7) / 2200 = 1,18 mA`. Sans elle, la base se comporterait
+  comme une diode directe et le GPIO se retrouverait quasiment en
+  court-circuit.
+
+- **10 kΩ entre base et masse** : maintient le transistor bloqué quand le
+  GPIO n'est pas encore configuré, c'est-à-dire pendant le reset et le
+  démarrage. Sans elle, la LED peut s'allumer brièvement au boot. Elle
+  consomme 0,07 mA sur les 1,18, il reste 1,11 mA pour la base : largement
+  assez (il en faut 0,82 pour saturer).
+
+**Si ta LED est blanche, bleue ou verte**, sa tension de seuil est plus
+haute (environ 3,2 V) et le courant tombe à 4,8 mA : elle paraîtra sombre.
+Descends alors à **220 Ω** (7,3 mA) ou **150 Ω** (10,7 mA). On reste très
+loin du watt et de tout échauffement.
+
+---
+
+## 5.5 Le câble du bouton ESC : le point le plus risqué du montage
+
+Ton câble porte quatre fils : **+5 V, GND, GPIO14, GPIO15**. Le danger est
+qu'un +5 V vienne toucher un fil de signal, par exemple lors d'un
+branchement à chaud, d'un connecteur mal enfiché, ou d'un fil qui se
+dessoude dans le boîtier.
+
+### Protection recommandée, avec les résistances que tu as déjà
+
+**a) Déplace la résistance de 2,2 kΩ côté macropad.**
+
+Ta version actuelle la place dans le boîtier du bouton. Mets-la plutôt
+juste à la sortie de GPIO15, sur la carte. Le fonctionnement est
+rigoureusement identique, mais le fil du câble se retrouve **derrière** la
+résistance : si du 5 V le touche, le courant qui atteint le GPIO est limité
+à `(5 − 3,3) / 2200 = 0,77 mA`, ce que les diodes de protection internes de
+l'ESP32 absorbent sans difficulté. Cette simple permutation transforme un
+accident destructeur en non-événement.
+
+**b) Ajoute 1 kΩ en série sur GPIO14, côté macropad.**
+
+```
+GPIO14 ---[1 kΩ]--- fil du câble --- contact ESC --- GND
+```
+
+Même raisonnement : un 5 V accidentel sur le fil ne fait plus passer que
+`(5 − 3,3) / 1000 = 1,7 mA`. En fonctionnement normal, la résistance ne
+gêne pas : le contact tire la ligne à la masse et le niveau bas mesuré
+vaut environ 0,07 V, très loin du seuil de basculement.
+
+**c) Choisis un connecteur détrompé** (JST, Molex, DIN…) qu'il est
+impossible de brancher à l'envers ou décalé d'un cran. Et branche ou
+débranche toujours **hors tension**.
+
+Avec (a) + (b), ton câble devient tolérant aux fautes. Ce sont deux
+résistances, tu les as.
+
+---
+
+## 5.6 Où mettre des condensateurs
+
+Un condensateur de découplage est un petit réservoir d'énergie placé au
+plus près d'un composant. Quand celui-ci consomme un pic de courant, il
+puise dans le réservoir au lieu de faire chuter la tension de toute la
+carte.
+
+| Valeur | Où | Pourquoi | Indispensable ? |
+|---|---|---|---|
+| **100 nF** | entre VCC et GND du module **OLED**, au plus près de ses broches | un OLED qui se fige après plusieurs heures vient très souvent de là | non pour le prototype, oui pour la version définitive |
+| **100 nF** | entre VCC et GND de **chaque TTP223** | stabilise le seuil de détection capacitive et supprime les faux touchers | non, mais fortement conseillé |
+| **10 nF à 100 nF** | entre **GPIO14 et GND**, côté macropad | filtre les parasites captés par le câble du bouton ESC | seulement si tu constates des ESC fantômes |
+| **10 à 47 µF** électrolytique, ≥ 10 V | entre **+5 V et GND dans le boîtier ESC** | évite un léger scintillement de la LED sur un câble long | seulement si tu observes le scintillement |
+| **aucun** | sur **D+ / D− (GPIO19/20)** | un condensateur y déforme les signaux USB et casse l'énumération | **à ne jamais faire** |
+
+**Le condensateur électrolytique a une polarité.** Une bande claire sur le
+flanc marque la patte **négative**, qui va vers GND. À l'envers, il chauffe,
+gonfle et finit par éclater. Les condensateurs céramiques de 100 nF, eux,
+n'ont pas de polarité et se montent dans n'importe quel sens.
+
+Ordre de grandeur pratique : le 100 nF traite les parasites rapides, le
+10 µF traite les creux de tension lents. **Ils ne se remplacent pas l'un
+l'autre**, ils se complètent.
+
+---
+
+## 5.7 Où mettre des diodes, et où ne surtout pas en mettre
+
+### Diode classique (1N4148, 1N4007)
+
+- **Pas nécessaire dans ce montage.** On met une diode de roue libre en
+  parallèle d'un relais ou d'un moteur, parce qu'une bobine renvoie une
+  surtension quand on la coupe. Une LED n'est pas une bobine : il n'y a
+  rien à renvoyer.
+
+- **Utile si un jour tu alimentes le macropad autrement que par l'USB** :
+  une diode en série sur le + de l'alimentation externe protège contre une
+  inversion de polarité. Coût : environ 0,7 V de chute (0,3 V avec une
+  Schottky).
+
+- **À ne pas faire** : mettre une diode en série avec le contact du bouton
+  ESC en croyant le protéger. Elle empêcherait la ligne de descendre
+  franchement à 0 V et le bouton deviendrait capricieux.
+
+- Si tu veux un écrêtage sur GPIO14 sans zener, la version classique est
+  deux diodes de signal (1N4148) : une de GPIO14 vers 3V3 (cathode côté
+  3V3) et une de GND vers GPIO14 (cathode côté GPIO14). Combinées à la
+  résistance de 1 kΩ du § 5.5, elles renvoient toute surtension vers
+  l'alimentation. C'est exactement ce que font déjà les diodes internes de
+  l'ESP32 : ce montage n'est utile que si tu veux une marge supplémentaire.
+
+### Diode Zener
+
+Une zener se monte **à l'envers** d'une diode normale : la cathode (bande)
+vers le **plus**. Elle laisse passer dès que la tension dépasse sa valeur
+nominale, ce qui plafonne la tension.
+
+- **Usage possible ici** : une zener 3,3 V entre GPIO14 et GND, cathode
+  côté GPIO14, **obligatoirement associée à la résistance série de 1 kΩ**
+  du § 5.5.
+
+- **Le piège** : une zener de 3,3 V n'est pas franche. À 3,3 V pile, elle
+  conduit déjà un peu (quelques dizaines de microampères). Or la résistance
+  de tirage interne de l'ESP32 vaut environ 45 kΩ et ne fournit que 73 µA :
+  la zener pourrait tirer la ligne vers le bas et faire croire à un appui
+  permanent. **Si tu montes cette zener, ajoute impérativement un tirage
+  externe de 4,7 kΩ entre GPIO14 et 3V3**, qui fournit alors 700 µA et
+  reprend le dessus.
+
+- **Erreur fatale** : brancher une zener directement entre 3V3 et GND sans
+  résistance série. Elle devient un court-circuit dès le seuil dépassé,
+  chauffe et grille en quelques secondes.
+
+- **Mon avis** : pour cette V0, la résistance série de 1 kΩ suffit
+  largement. Garde tes zeners pour un montage où tu auras vraiment une
+  source de tension supérieure à 3,3 V à maîtriser.
+
+---
+
+## 5.8 Vérification particulière à ta carte : le quartz 32 kHz sur GPIO15
+
+Sur l'ESP32-S3, GPIO15 et GPIO16 sont aussi les broches prévues pour un
+quartz horloger de 32,768 kHz (`XTAL_32K_P` et `XTAL_32K_N`). La plupart
+des cartes de développement ne montent pas ce quartz, mais **certaines
+oui**.
+
+Si ta carte en possède un, GPIO15 est chargée par le quartz et ses
+condensateurs : le signal PWM sera déformé, et le quartz peut souffrir.
+
+**Comment vérifier en trente secondes**, sans rien souder :
+
+1. Regarde la carte à côté du module : cherche un petit boîtier métallique
+   allongé, souvent marqué `32.768` ou `32K`.
+2. Ou fais le test logiciel, avant de câbler la LED :
+
+```python
+>>> from machine import Pin, PWM
+>>> p = PWM(Pin(15), freq=2000, duty_u16=32768)
+```
+
+Branche provisoirement une LED ordinaire avec une résistance de 1 kΩ entre
+GPIO15 et GND : elle doit s'allumer à mi-luminosité. Si rien ne se passe ou
+si la carte se comporte bizarrement, GPIO15 est occupée.
+
+**Solution de repli si GPIO15 est prise :** utilise **GPIO21**, **GPIO47**
+ou **GPIO48** (vérifie sur la sérigraphie de ta carte que la broche est
+libre et qu'elle n'est pas prise par la LED RGB de la carte). Il suffit
+alors de changer une seule ligne dans `config.py` :
+
+```python
+LED_PIN = 21
+```
+
+---
+
+## 5.9 Ordre de branchement recommandé
+
+Ne câble jamais tout d'un coup. Cet ordre correspond exactement aux tests
+de `docs/03-tests-progressifs.md` :
+
+```
+1. carte seule                    -> test 1
+2. + OLED                         -> test 2
+3. + les 4 switches               -> test 3
+4. + les 2 TTP223                 -> test 4
+5. + le contact ESC (sans LED)    -> test 5
+6. + l'étage LED / BC547          -> test 6
+7. seulement ensuite : le clavier -> test 7
+```
+
+À chaque étape : **débranche l'USB, câble, revérifie au multimètre,
+rebranche, teste.** Si une étape échoue, tu sais exactement quel fil est en
+cause, parce que c'est le seul que tu viens d'ajouter.
+
+---
+
+## 5.10 Consommation, et ce qu'on ne peut pas affirmer
+
+| Élément | Ordre de grandeur |
+|---|---|
+| OLED SH1106 en 3,3 V | < 11 mA (annonce du fabricant) |
+| 2 × TTP223 | quelques mA, davantage si le module porte un voyant |
+| LED ESC via le BC547 | 8 mA en crête, environ 1,5 mA en moyenne avec le PWM |
+| **Sous-total des périphériques** | **environ 20 à 25 mA** |
+
+**Ce chiffre ne comprend pas la carte ESP32-S3 elle-même** : processeur,
+PSRAM, régulateur, pont USB-série et voyants s'y ajoutent, et cela dépend
+du modèle. Un port USB fournit au minimum 500 mA : on est très loin d'un
+problème. Mais je ne peux pas t'annoncer une consommation totale mesurée
+sans l'avoir mesurée. Si tu as un petit testeur USB à afficheur, branche-le
+et tu auras la vraie valeur en trois secondes.

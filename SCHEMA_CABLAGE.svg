@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1130" viewBox="0 0 1400 1130">
+<rect width="1400" height="1130" fill="#f8fafc"/>
+<style>text{font-family:Arial,sans-serif;fill:#172b45}.small{font-size:17px}.label{font-size:20px}.title{font-size:30px;font-weight:bold}.wire{fill:none;stroke:#2563eb;stroke-width:3}.box{fill:white;stroke:#94a3b8;stroke-width:2}</style>
+<text x="45" y="52" class="title">MACROPAD ESP32-S3 • CÂBLAGE V0</text>
+<text x="45" y="86" class="label">USB natif à droite sur la photo fournie • Nappe caméra vide • Tous les GND communs</text>
+<rect x="450" y="140" width="285" height="730" rx="8" class="box"/>
+<text x="480" y="178" class="label">ESP32-S3 N16R8</text>
+<text x="480" y="205" class="small">GPIO = numéro imprimé</text>
+<rect x="45" y="155" width="245" height="155" rx="8" class="box"/>
+<text x="65" y="188" class="label">OLED SH1106 128 × 64</text>
+<text x="65" y="225" class="label">SDA</text>
+<path d="M290,220 L450,220" fill="none" stroke="#2563eb" stroke-width="3"/>
+<text x="470" y="225" class="label">GPIO8</text>
+<text x="65" y="260" class="label">SCL</text>
+<path d="M290,255 L450,255" fill="none" stroke="#2563eb" stroke-width="3"/>
+<text x="470" y="260" class="label">GPIO9</text>
+<text x="65" y="287" class="small">VCC → 3V3 ; GND → GND</text>
+<rect x="45" y="340" width="245" height="120" rx="8" class="box"/>
+<text x="65" y="372" class="label">TTP223 PREVIOUS</text>
+<text x="65" y="405" class="label">OUT</text>
+<path d="M290,400 L450,400" fill="none" stroke="#2563eb" stroke-width="3"/>
+<text x="470" y="405" class="label">GPIO10</text>
+<text x="65" y="440" class="small">VCC → 3V3 ; GND → GND</text>
+<rect x="45" y="490" width="245" height="120" rx="8" class="box"/>
+<text x="65" y="522" class="label">TTP223 NEXT</text>
+<text x="65" y="555" class="label">OUT</text>
+<path d="M290,550 L450,550" fill="none" stroke="#2563eb" stroke-width="3"/>
+<text x="470" y="555" class="label">GPIO11</text>
+<text x="65" y="590" class="small">VCC → 3V3 ; GND → GND</text>
+<text x="470" y="650" class="label">GPIO4</text>
+<path d="M320,645 L450,645" fill="none" stroke="#2563eb" stroke-width="3"/>
+<path d="M160,645 L245,645" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="245" cy="645" r="4" fill="#172b45"/>
+<path d="M245,645 L285,627" fill="none" stroke="#172b45" stroke-width="3"/>
+<circle cx="310" cy="645" r="4" fill="#172b45"/>
+<path d="M310,645 L320,645" fill="none" stroke="#2563eb" stroke-width="3"/>
+<text x="330" y="631" class="small">B1</text>
+<path d="M160,645 L160,850" fill="none" stroke="#475569" stroke-width="3"/>
+<text x="470" y="705" class="label">GPIO5</text>
+<path d="M320,700 L450,700" fill="none" stroke="#2563eb" stroke-width="3"/>
+<path d="M160,700 L245,700" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="245" cy="700" r="4" fill="#172b45"/>
+<path d="M245,700 L285,682" fill="none" stroke="#172b45" stroke-width="3"/>
+<circle cx="310" cy="700" r="4" fill="#172b45"/>
+<path d="M310,700 L320,700" fill="none" stroke="#2563eb" stroke-width="3"/>
+<text x="330" y="686" class="small">B2</text>
+<path d="M160,700 L160,850" fill="none" stroke="#475569" stroke-width="3"/>
+<text x="470" y="760" class="label">GPIO6</text>
+<path d="M320,755 L450,755" fill="none" stroke="#2563eb" stroke-width="3"/>
+<path d="M160,755 L245,755" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="245" cy="755" r="4" fill="#172b45"/>
+<path d="M245,755 L285,737" fill="none" stroke="#172b45" stroke-width="3"/>
+<circle cx="310" cy="755" r="4" fill="#172b45"/>
+<path d="M310,755 L320,755" fill="none" stroke="#2563eb" stroke-width="3"/>
+<text x="330" y="741" class="small">B3</text>
+<path d="M160,755 L160,850" fill="none" stroke="#475569" stroke-width="3"/>
+<text x="470" y="815" class="label">GPIO7</text>
+<path d="M320,810 L450,810" fill="none" stroke="#2563eb" stroke-width="3"/>
+<path d="M160,810 L245,810" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="245" cy="810" r="4" fill="#172b45"/>
+<path d="M245,810 L285,792" fill="none" stroke="#172b45" stroke-width="3"/>
+<circle cx="310" cy="810" r="4" fill="#172b45"/>
+<path d="M310,810 L320,810" fill="none" stroke="#2563eb" stroke-width="3"/>
+<text x="330" y="796" class="small">B4</text>
+<path d="M160,810 L160,850" fill="none" stroke="#475569" stroke-width="3"/>
+<text x="113" y="882" class="small">GND</text>
+<text x="460" y="903" class="small">B1 maintenu + RESET = SAFE MODE</text>
+<rect x="855" y="160" width="500" height="710" rx="8" class="box"/>
+<text x="880" y="196" class="label">BOÎTIER ESC EXTERNE</text>
+<text x="880" y="226" class="small">Quatre conducteurs ; transistor dans le bouton</text>
+<text x="650" y="277" class="small">5V</text>
+<path d="M735,290 L910,290" fill="none" stroke="#dc2626" stroke-width="3"/>
+<text x="756" y="278" class="small">1</text>
+<text x="650" y="407" class="small">GPIO15</text>
+<path d="M735,420 L910,420" fill="none" stroke="#2563eb" stroke-width="3"/>
+<text x="756" y="408" class="small">4</text>
+<text x="650" y="637" class="small">GPIO14</text>
+<path d="M735,650 L910,650" fill="none" stroke="#2563eb" stroke-width="3"/>
+<text x="756" y="638" class="small">3</text>
+<text x="650" y="777" class="small">GND</text>
+<path d="M735,790 L910,790" fill="none" stroke="#2563eb" stroke-width="3"/>
+<text x="756" y="778" class="small">2</text>
+<path d="M910,290 L925,290" fill="none" stroke="#dc2626" stroke-width="3"/>
+<rect x="925" y="278" width="80" height="24" fill="white" stroke="#172b45" stroke-width="2"/>
+<text x="925" y="268" class="small">330 Ω</text>
+<path d="M1005,290 L1050,290" fill="none" stroke="#dc2626" stroke-width="3"/>
+<rect x="1050" y="263" width="180" height="54" rx="8" class="box"/>
+<text x="1065" y="286" class="small">LED 1 W</text>
+<text x="1065" y="309" class="small">anode +   cathode −</text>
+<path d="M1230,290 L1280,290" fill="none" stroke="#2563eb" stroke-width="3"/>
+<path d="M1280,290 L1280,363" fill="none" stroke="#2563eb" stroke-width="3"/>
+<text x="1290" y="353" class="small">C</text>
+<rect x="1200" y="363" width="110" height="135" rx="8" class="box"/>
+<text x="1213" y="397" class="small">BC547</text>
+<text x="1213" y="433" class="label">B</text>
+<text x="1263" y="482" class="label">E</text>
+<rect x="920" y="408" width="80" height="24" fill="white" stroke="#172b45" stroke-width="2"/>
+<text x="920" y="398" class="small">2,2 kΩ</text>
+<path d="M910,420 L920,420" fill="none" stroke="#2563eb" stroke-width="3"/>
+<path d="M1000,420 L1200,420" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="1090" cy="420" r="5" fill="#172b45"/>
+<path d="M1090,420 L1090,510" fill="none" stroke="#2563eb" stroke-width="3"/>
+<rect x="1078" y="510" width="24" height="70" fill="white" stroke="#172b45" stroke-width="2"/>
+<text x="1110" y="553" class="small">10 kΩ</text>
+<path d="M1090,580 L1090,590" fill="none" stroke="#475569" stroke-width="3"/>
+<path d="M1090,590 L1280,590" fill="none" stroke="#475569" stroke-width="3"/>
+<circle cx="1280" cy="590" r="5" fill="#172b45"/>
+<path d="M1280,498 L1280,790" fill="none" stroke="#475569" stroke-width="3"/>
+<circle cx="1280" cy="790" r="5" fill="#172b45"/>
+<path d="M910,790 L1315,790" fill="none" stroke="#475569" stroke-width="3"/>
+<text x="950" y="825" class="small">Retour GND commun</text>
+<path d="M910,650 L980,650" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="980" cy="650" r="5" fill="#172b45"/>
+<path d="M980,650 L1040,625" fill="none" stroke="#172b45" stroke-width="3"/>
+<circle cx="1070" cy="650" r="5" fill="#172b45"/>
+<path d="M1070,650 L1160,650" fill="none" stroke="#2563eb" stroke-width="3"/>
+<path d="M1160,650 L1160,790" fill="none" stroke="#475569" stroke-width="3"/>
+<circle cx="1160" cy="790" r="5" fill="#172b45"/>
+<text x="938" y="613" class="small">SWITCH ESC</text>
+<text x="885" y="900" class="small">E/B/C : connexions logiques seulement.</text>
+<text x="885" y="925" class="small">Vérifier la datasheet de TON BC547.</text>
+<rect x="45" y="945" width="1310" height="140" rx="8" class="box"/>
+<text x="65" y="980" class="label">USB : GPIO19 = D− ; GPIO20 = D+. Aucune connexion ajoutée sur ces broches.</text>
+<text x="65" y="1017" class="small">Le pinout fourni inverse D+ et D−. Le port UART sert au REPL / flash ; le HID passe par le port USB natif.</text>
+<text x="65" y="1053" class="small">Résistances : 330 Ω + 2,2 kΩ + 10 kΩ, 1/4 W. La 330 Ω reste obligatoire, même avec un PWM faible.</text>
+</svg>

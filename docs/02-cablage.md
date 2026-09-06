@@ -1,4 +1,4 @@
-# 2. Cablage : verification du brochage, schemas et electronique
+# 2. Cablage : verification du brochage et schemas
 
 ## 2.1 Verdict sur le brochage propose
 
@@ -183,157 +183,28 @@ Vue simplifiee du seul etage LED :
                       GND
 ```
 
-## 2.5 Verification electrique du montage BC547 + LED
+## 2.5 Electronique : voir le document dedie
 
-Le montage est **correct**. Voici pourquoi, chiffres a l'appui.
+Tout ce qui concerne l'electronique proprement dite est regroupe dans
+**[`05-electronique.md`](05-electronique.md)** :
 
-### Courant dans la LED
+* les trois regles d'or et le tableau des pannes destructrices ;
+* les verifications au multimetre **avant** la premiere mise sous tension ;
+* comment identifier les pattes E/B/C du BC547 et l'anode de la LED ;
+* le calcul complet du montage (8,2 mA dans une LED prevue pour 1 W) ;
+* la protection du cable deporte : **2,2 kOhm cote macropad** et **1 kOhm en
+  serie sur GPIO14** ;
+* ou placer condensateurs, diodes et diodes Zener, et ou surtout pas ;
+* la verification du quartz 32 kHz eventuel sur GPIO15.
 
-La LED est en collecteur commun bas ("low-side switch"), ce qui est la bonne
-topologie avec un NPN.
+Liste des resistances a prevoir :
 
-Avec une LED **rouge** (Vf ~ 2,1 V) et un BC547 sature (Vce_sat ~ 0,2 V) :
+| Quantite | Valeur | Role |
+|---|---|---|
+| 1 | **330 Ohm** 1/4 W | limitation du courant de la LED ESC |
+| 1 | **2,2 kOhm** | resistance de base du BC547, **a monter cote macropad** |
+| 1 | **10 kOhm** | maintien de la base a la masse pendant le boot |
+| 1 | **1 kOhm** | protection en serie sur l'entree GPIO14 |
 
-```
-I = (5 V - 2,1 V - 0,2 V) / 330 Ohm = 2,7 / 330 = 8,2 mA
-```
-
-* Puissance dissipee dans la LED : 8,2 mA x 2,1 V = **17 mW**, sur une LED
-  prevue pour 1 W. Elle ne chauffera pas, meme legerement. C'est exactement
-  l'usage "veilleuse" que vous vouliez.
-* Puissance dans la resistance : (8,2 mA)^2 x 330 = **22 mW** -> une resistance
-  1/4 W convient largement.
-* Duree de vie : a 3 % du courant nominal, elle est pratiquement illimitee.
-
-Avec une LED **blanche, bleue ou verte** (Vf ~ 3,2 V) :
-
-```
-I = (5 - 3,2 - 0,2) / 330 = 4,8 mA
-```
-Cela reste visible mais nettement plus faible. Si le rendu vous parait trop
-sombre, descendez a **220 Ohm** (~7,3 mA) ou **150 Ohm** (~10,7 mA) : on reste
-tres loin du 1 W et de tout echauffement.
-
-### Commande de la base
-
-```
-Ib = (3,3 V - 0,7 V) / 2200 Ohm = 1,18 mA
-```
-dont environ 0,07 mA part dans la resistance de 10 kOhm (0,7 V / 10 k), soit
-**Ib utile ~ 1,11 mA**.
-
-Pour saturer franchement un transistor, on vise un gain force d'environ 10 :
-
-```
-Ib necessaire = 8,2 mA / 10 = 0,82 mA     <     1,11 mA disponible
-```
-
-Le transistor est donc bien sature, avec de la marge. Le GPIO ne fournit que
-1,18 mA, tres loin de sa limite (40 mA sur ESP32-S3).
-
-La resistance de **10 kOhm entre base et masse est utile** : elle garantit que
-le transistor reste bloque quand le GPIO est en haute impedance, c'est-a-dire
-pendant le reset et le boot de l'ESP32. Sans elle, la LED pourrait s'allumer
-brievement au demarrage. Gardez-la.
-
-### Limites a respecter (BC547)
-
-| Parametre | Limite BC547 | Notre usage | Marge |
-|---|---|---|---|
-| Ic max | 100 mA | 8,2 mA | x12 |
-| Vce max | 45 V | 5 V | x9 |
-| Puissance | 500 mW | 8,2 mA x 0,2 V = 1,6 mW | x300 |
-
-Aucun radiateur, aucune precaution thermique.
-
-### Brochage du BC547 : A VERIFIER AVANT DE SOUDER
-
-**Je ne vous donnerai pas l'ordre des pattes de memoire.** Le brochage d'un
-boitier TO-92 varie selon le fabricant et la reference, et une inversion
-collecteur/emetteur produit un montage qui a l'air de fonctionner tout en
-degradant le transistor.
-
-Faites l'une de ces trois verifications :
-
-1. **Lisez le marquage** sur la face plate du boitier (par exemple `BC547B`,
-   `BC547C`, suivi d'un code fabricant) et cherchez la fiche technique
-   correspondante ;
-2. **testez au multimetre** en position "test de diode" : sur un NPN, la base
-   est la seule patte qui conduit vers les deux autres quand la pointe rouge
-   (+) est dessus ;
-3. **dites-moi la reference exacte et le marquage complet** et je vous indique
-   le brochage sur cette base.
-
-Le brochage le plus courant pour un BC547 en TO-92, face plate vers vous et
-pattes vers le bas, est C-B-E de gauche a droite — **mais ne cablez pas sur
-cette phrase seule, verifiez d'abord.**
-
-### Le cable a 4 conducteurs
-
-Vos 4 conducteurs (+5 V, GND, GPIO14, GPIO15) suffisent, le montage est bon.
-
-Un point d'attention : la ligne ESC (GPIO14) est en haute impedance (le pull-up
-interne de l'ESP32 vaut environ 45 kOhm) et elle chemine a cote d'un signal PWM
-a 1 kHz. Sur un cable long, une diaphonie est theoriquement possible.
-
-**Solution recommandee, sans condensateur** (vous n'en avez pas de 100 nF) :
-ajoutez une **resistance de 4,7 kOhm entre GPIO14 et +3,3 V**, cote macropad.
-Ce pull-up externe rend la ligne environ dix fois plus "raide" que le pull-up
-interne et supprime le probleme. L'anti-rebond logiciel de 15 ms fait le reste.
-
-Si vous avez un condensateur de 1 nF a 100 nF sous la main, un exemplaire entre
-GPIO14 et GND, cote carte, apporte le meme benefice.
-
-## 2.6 Liste exacte des resistances necessaires
-
-| Quantite | Valeur | Role | Obligatoire ? |
-|---|---|---|---|
-| 1 | **330 Ohm** (1/4 W) | limitation du courant de la LED ESC | **oui** |
-| 1 | **2,2 kOhm** | resistance de base du BC547 | **oui** |
-| 1 | **10 kOhm** | maintien de la base a la masse (blocage au boot) | fortement conseillee |
-| 1 | 4,7 kOhm | pull-up externe de la ligne ESC (anti-diaphonie du cable) | conseillee si cable > 50 cm |
-
-Variantes possibles pour le 330 Ohm : 220 Ohm ou 150 Ohm si votre LED est
-blanche / bleue et vous parait trop sombre.
-
-**Aucune autre resistance n'est necessaire** : les quatre touches, le bouton
-ESC et les deux TTP223 utilisent les pull-up/pull-down internes de l'ESP32-S3
-(configures par le firmware dans `inputs.py`).
-
-## 2.7 Alimentation et consommation
-
-Tout est alimente par l'USB du PC (500 mA disponibles au minimum).
-
-| Element | Consommation typique |
-|---|---|
-| ESP32-S3, Wi-Fi et BLE inactifs | 40 a 60 mA |
-| OLED SH1106 1,3", en 3,3 V | < 11 mA (annonce constructeur) |
-| 2 x TTP223 | ~ 2 x 3 mA au repos |
-| LED ESC via BC547 | 8 mA en crete, **~ 1,5 mA en moyenne** (PWM 4-25 %) |
-| **Total** | **environ 75 a 90 mA** |
-
-C'est tres confortable pour un port USB. La LED, en particulier, consomme en
-moyenne moins qu'une diode temoin classique grace au PWM.
-
-### A propos des condensateurs de 100 nF
-
-**Le prototype fonctionne sans.** Vous n'avez pas besoin d'en acheter pour
-commencer :
-
-* la carte ESP32-S3 possede deja ses propres condensateurs de decouplage ;
-* les modules OLED et TTP223 du commerce en integrent generalement un ;
-* les courants en jeu sont faibles et il n'y a aucune commutation rapide de
-  puissance.
-
-Pour la **version definitive**, si vous en achetez, placez-en :
-
-1. **un 100 nF entre VCC et GND du module OLED**, au plus pres de ses broches :
-   c'est le peripherique le plus sensible aux micro-coupures d'alimentation
-   (un OLED qui se fige apres plusieurs heures vient souvent de la) ;
-2. **un 100 nF sur chaque TTP223**, entre VCC et GND, pour stabiliser le seuil
-   de detection capacitive et eviter les declenchements parasites ;
-3. eventuellement **un 10 uF electrolytique sur le +5 V** dans le boitier du
-   bouton ESC, si vous constatez un scintillement de la LED lors des appuis.
-
-Aucun de ces trois n'est necessaire au fonctionnement, ce sont des ameliorations
-de fiabilite a long terme.
+Variantes : 220 Ohm ou 150 Ohm au lieu de 330 Ohm si ta LED est blanche ou
+bleue et te parait trop sombre.

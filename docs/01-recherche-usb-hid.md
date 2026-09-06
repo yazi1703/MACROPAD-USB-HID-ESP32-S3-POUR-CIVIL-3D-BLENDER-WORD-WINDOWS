@@ -162,9 +162,10 @@ silencieux n'a ete fait.
   Verifie dans `ports/esp32/boards/ESP32_GENERIC_S3/board.json` :
   `"variants": {"SPIRAM_OCT": "Support for Octal-SPIRAM"}`.
   La variante `FLASH_4M` est marquee obsolete et ne vous concerne pas.
-* Version : **v1.27.0 minimum**. Au moment de la redaction, la derniere
-  version stable est **v1.29.0 (aout 2026)**, basee sur ESP-IDF v5.5.2 : c'est
-  celle a prendre.
+* Version : **v1.27.0 minimum, v1.29.0 recommandee** (aout 2026, ESP-IDF
+  v5.5.2). C'est la version retenue par le projet et figee dans
+  `DEPENDENCIES.lock.json` :
+  `ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin`.
 * Telechargement : page officielle `ESP32_GENERIC_S3` du site micropython.org,
   section *Firmware*, ligne **SPIRAM_OCT**.
 
@@ -193,32 +194,30 @@ python -m esptool --chip esp32s3 --port COM5 --baud 460800 ^
 
 ### Installation de la bibliotheque USB HID
 
-Elle n'est pas incluse dans le firmware, il faut la copier sur la carte.
-La methode officielle passe par `mpremote`, **depuis le PC, sans Wi-Fi** :
+**Rien a installer : elle est deja dans le projet.**
 
-```bat
-pip install mpremote
-mpremote connect COM6 mip install usb-device-keyboard
+Les quatre fichiers officiels sont fournis, non modifies, dans
+`device/lib/usb/device/` : `__init__.py`, `core.py`, `hid.py`, `keyboard.py`.
+Leurs empreintes SHA-256 sont figees dans `DEPENDENCIES.lock.json` et leur
+licence MIT est reproduite dans `licenses/`.
+
+Il suffit donc de copier le dossier `lib` sur la carte avec Thonny, en
+respectant l'arborescence :
+
+```
+/lib/usb/device/__init__.py
+/lib/usb/device/core.py
+/lib/usb/device/hid.py
+/lib/usb/device/keyboard.py
 ```
 
-`mip` installe automatiquement les dependances (`usb-device`, `usb-device-hid`)
-dans `/lib/usb/device/` sur la carte. Verification :
+Aucun acces reseau n'est necessaire sur la carte, et aucune version ne peut
+changer dans ton dos.
 
-```
-mpremote connect COM6 fs ls /lib/usb/device
-```
-
-Vous devez y voir au minimum `core.py`, `hid.py` et `keyboard.py`.
-
-**Methode de secours sans `mpremote`** : telechargez a la main ces trois
-fichiers depuis GitHub et copiez-les avec Thonny dans `/lib/usb/device/`
-(creez les dossiers `lib`, `usb`, `device`) :
-
-* `micropython/usb/usb-device/usb/device/core.py`
-* `micropython/usb/usb-device-hid/usb/device/hid.py`
-* `micropython/usb/usb-device-keyboard/usb/device/keyboard.py`
-
-depuis <https://github.com/micropython/micropython-lib>.
+*Pour information seulement*, la methode officielle par telechargement
+serait `pip install mpremote` puis
+`mpremote connect COMx mip install usb-device-keyboard`. Elle n'est pas
+utilisee ici.
 
 ---
 

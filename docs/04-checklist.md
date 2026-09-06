@@ -1,117 +1,137 @@
 # 4. Checklist finale
 
-A imprimer ou a garder ouverte pendant le montage. Suivez l'ordre : chaque
-bloc suppose le precedent valide.
+À cocher **sur ton matériel**. Rien ici ne peut être validé depuis un PC.
+Suis l'ordre : chaque bloc suppose le précédent validé.
+
+## Avant la première mise sous tension — multimètre, USB débranché
+
+```
+[ ] entre 3V3 et GND : pas de court-circuit
+[ ] entre 5V et GND  : pas de court-circuit
+[ ] entre 5V et 3V3  : pas de court-circuit
+[ ] GPIO4/5/6/7 vers GND : continuité SEULEMENT quand on appuie sur B1..B4
+[ ] GPIO14 vers GND : continuité SEULEMENT quand on appuie sur ESC
+[ ] rien n'est branché sur GPIO19 ni GPIO20
+[ ] OLED alimenté en 3V3, PAS en 5V
+[ ] les deux TTP223 alimentés en 3V3, PAS en 5V
+[ ] pattes E/B/C du BC547 identifiées (datasheet ou multimètre)
+[ ] anode de la LED identifiée, orientée vers la résistance de 330 Ω
+[ ] résistance de 330 Ω bien présente en série avec la LED
+[ ] résistance de 2,2 kΩ montée CÔTÉ MACROPAD, en sortie de GPIO15
+[ ] résistance de 10 kΩ entre base et GND
+[ ] résistance de 1 kΩ en série sur GPIO14
+[ ] connecteur du câble ESC détrompé, impossible à décaler
+[ ] quartz 32 kHz sur GPIO15 : absent (ou LED_PIN déplacé)
+```
 
 ## Firmware et environnement
 
 ```
-[ ] ESP32-S3 detecte par Windows
-[ ] les deux ports USB-C identifies (natif = HID, UART = flash et Thonny)
-[ ] bon port USB identifie pour le flash
-[ ] MicroPython installe, variante ESP32_GENERIC_S3-SPIRAM_OCT
-[ ] version MicroPython >= 1.27.0  (INDISPENSABLE : bug HID sur cartes a PSRAM)
-[ ] "Octal-SPIRAM" confirme par diag.info()
+[ ] ESP32-S3 détecté par Windows
+[ ] les deux ports USB-C identifiés (natif = HID, UART = flash et Thonny)
+[ ] MicroPython installé, variante ESP32_GENERIC_S3-SPIRAM_OCT
+[ ] version >= 1.27.0  (INDISPENSABLE : bug des rapports HID vides sur PSRAM)
+[ ] diag.run() affiche machine.USBDevice disponible : True
 [ ] REPL fonctionnel dans Thonny
-[ ] bibliotheque usb-device-keyboard installee dans /lib/usb/device
-[ ] fichiers du firmware televerses a la racine de la carte
-[ ] GPIO verifies (aucune broche de strapping, de flash, de PSRAM ni d'USB)
+[ ] dossier /lib/usb/device/ présent avec ses quatre fichiers
+[ ] fichiers du dossier device/ copiés à la RACINE de la carte
+[ ] HID_ENABLED est resté à False jusqu'au test 7
 ```
 
-## Ecran
+## Écran
 
 ```
-[ ] OLED detecte au scan I2C (0x3C ou 0x3D)
-[ ] SH1106 affiche correctement, sans decalage horizontal
-[ ] la vue a quatre cases est lisible
-[ ] le nom du profil apparait en gros caracteres au changement
+[ ] OLED détecté au scan I2C (0x3C ou 0x3D)
+[ ] texte lisible et non décalé
+[ ] le nom du profil apparaît en gros au changement, puis la liste revient
 ```
 
-## Entrees
+## Entrées
 
 ```
-[ ] B1 fonctionnel
-[ ] B2 fonctionnel
-[ ] B3 fonctionnel
-[ ] B4 fonctionnel
-[ ] un appui franc = exactement 1 evenement
-[ ] TTP PREVIOUS fonctionnel
-[ ] TTP NEXT fonctionnel
+[ ] B1 fonctionnel      [ ] B2 fonctionnel
+[ ] B3 fonctionnel      [ ] B4 fonctionnel
+[ ] un appui franc = exactement 1 événement
+[ ] maintien de 5 s = aucune répétition
+[ ] TTP PREVIOUS fonctionnel, en mode momentané (pas bascule)
+[ ] TTP NEXT fonctionnel, en mode momentané
 [ ] doigt maintenu sur un TTP = 1 seul changement de profil
-[ ] navigation circulaire des profils OK dans les deux sens
-[ ] ESC mecanique detecte
+[ ] navigation circulaire OK dans les deux sens
+[ ] ESC mécanique détecté
+[ ] aucun ESC fantôme en bougeant le câble
 ```
 
-## LED du bouton ESC
+## LED
 
 ```
-[ ] brochage E/B/C du BC547 verifie (datasheet ou multimetre) AVANT soudure
-[ ] BC547 correctement cable (emetteur a la masse, collecteur vers la LED)
-[ ] resistance 330 Ohm en serie avec la LED presente
-[ ] resistance 2,2 kOhm sur la base presente
-[ ] resistance 10 kOhm base-masse presente
-[ ] LED eteinte pendant le reset de la carte (grace au 10 kOhm)
-[ ] LED fonctionne sans chauffer anormalement, y compris a 100 %
-[ ] resistance 330 Ohm froide au toucher
-[ ] PWM fonctionne (paliers 5 / 20 / 50 / 100 % distincts)
-[ ] respiration LED fonctionne, sans a-coup ni scintillement
-[ ] flash ESC fonctionne, avec retour progressif a la respiration
+[ ] LED éteinte pendant le RESET de la carte (rôle du 10 kΩ)
+[ ] paliers 5 % / 20 % / 100 % bien distincts
+[ ] LED froide au toucher, y compris à 100 %
+[ ] résistance de 330 Ω froide au toucher
+[ ] respiration fluide, sans à-coup ni scintillement
+[ ] flash ESC visible, avec retour progressif à la respiration
 ```
 
-## USB HID
+## Clavier USB
 
 ```
-[ ] peripherique USB HID reconnu par Windows (rubrique Claviers)
-[ ] une lettre de test arrive dans le Bloc-notes
-[ ] Escape fonctionne
-[ ] Ctrl+Z fonctionne
-[ ] Win+E fonctionne
-[ ] Alt+Tab fonctionne et libere bien la fenetre
-[ ] Ctrl+Shift+Echap ouvre le Gestionnaire des taches
-[ ] aucune touche modificatrice HID ne reste bloquee apres une macro
+[ ] périphérique USB HID reconnu (Gestionnaire de périphériques > Claviers)
+[ ] le port COM du REPL reste accessible en même temps
+[ ] HID_TEST = LETTER : une seule lettre « a » par appui
+[ ] maintenir B1 n'écrit pas une deuxième lettre
+[ ] HID_TEST = ESC : Échap fonctionne
+[ ] HID_TEST = UNDO : Ctrl+Z fonctionne
+[ ] Win+E ouvre l'Explorateur
+[ ] Alt+Tab change de fenêtre ET relâche bien Alt
+[ ] Ctrl+Maj+Échap ouvre le Gestionnaire des tâches
+[ ] aucune touche modificatrice ne reste bloquée après une macro
 ```
 
 ## Disposition clavier
 
 ```
-[ ] disposition Windows verifiee (FRA ou ENG dans la barre des taches)
-[ ] KEYBOARD_LAYOUT de config.py aligne sur Windows
-[ ] clavier FR AZERTY verifie : diag.test_keymap("_MATCHPROP") donne 0x25 / 0x00
-[ ] _MATCHPROP ecrit correctement dans le Bloc-notes
-[ ] _HATCH ecrit correctement
-[ ] _ISOLATEOBJECTS ecrit correctement
+[ ] disposition Windows vérifiée (FRA ou ENG dans la barre des tâches)
+[ ] KEYBOARD_LAYOUT aligné sur Windows
+[ ] diag.keymap("_MATCHPROP") donne bien touche 37 sans Maj
+[ ] _MATCHPROP écrit correctement, Verr. Maj ÉTEINT
+[ ] _MATCHPROP écrit correctement, Verr. Maj ALLUMÉ   <- la correction n° 1
+[ ] _HATCH écrit correctement
+[ ] _ISOLATEOBJECTS écrit correctement
+[ ] ENTER part bien après chaque commande
 ```
 
-## Profils en situation reelle
+## Profils en situation réelle
 
 ```
-[ ] profil Civil3D fonctionnel (les 4 commandes passent dans Civil 3D)
-[ ] profil Blender fonctionnel (G / R / S / Tab)
-[ ] profil Word fonctionnel
-[ ] profil Windows fonctionnel
-[ ] raccourcis Word adaptes si votre Word est en francais (Ctrl+G au lieu de Ctrl+B)
+[ ] profil Civil3D : les 4 commandes passent dans Civil 3D
+[ ] profil Blender : G / R / S / Tab
+[ ] profil Word : les 4 raccourcis
+[ ] raccourcis Word adaptés si ton Word est en FRANÇAIS (Ctrl+G, pas Ctrl+B)
+[ ] profil Windows : les 4 raccourcis
+[ ] ESC fonctionne dans TOUS les profils
+[ ] ESC interrompt bien une commande en cours d'écriture
 ```
 
 ## Comportement global
 
 ```
-[ ] SAFE MODE fonctionne (B1 maintenu au demarrage)
-[ ] en SAFE MODE, aucune touche n'est envoyee, meme en appuyant partout
-[ ] aucun bouton ne se repete involontairement
-[ ] OLED et LED ne ralentissent pas les entrees
-[ ] ESC reste instantane meme pendant l'ecriture d'une commande longue
-[ ] ESC interrompt bien la frappe en cours
-[ ] main.py renomme et demarrage automatique valide
-[ ] fonctionnement general stable apres plusieurs heures
+[ ] SAFE MODE fonctionne (B1 maintenu pendant le RESET)
+[ ] en SAFE MODE, aucune frappe possible même en appuyant partout
+[ ] aucun bouton ne se répète involontairement
+[ ] l'écran et la LED ne provoquent aucun raté d'entrée
+[ ] débranchement / rebranchement : aucune macro ne repart toute seule
+[ ] Ctrl-C dans Thonny : le port COM reste disponible  <- la correction n° 4
+[ ] une macro juste après un changement de profil part bien <- correction n° 3
+[ ] fonctionnement stable après plusieurs heures
 ```
 
-## Points a surveiller sur la duree
+## À surveiller dans la durée
 
 ```
-[ ] l'OLED ne se fige pas apres plusieurs heures
-    (si oui : ajouter un condensateur 100 nF sur son alimentation)
-[ ] pas de declenchement capacitif parasite des TTP223
-    (si oui : 100 nF sur leur alimentation, eloigner les cables)
-[ ] pas de detection ESC parasite quand la LED clignote
-    (si oui : pull-up externe 4,7 kOhm sur GPIO14)
+[ ] l'OLED ne se fige pas après plusieurs heures
+    (sinon : 100 nF entre VCC et GND du module)
+[ ] pas de faux touchers sur les TTP223
+    (sinon : 100 nF sur leur alimentation, éloigner les câbles)
+[ ] pas de scintillement de la LED sur câble long
+    (sinon : 10 à 47 µF entre 5 V et GND dans le boîtier ESC, polarité !)
 ```
