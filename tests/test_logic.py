@@ -1120,6 +1120,31 @@ class PageDeConfigurationIntacte(unittest.TestCase):
                          len(configuration["apps"]["liste"]) + 2)
         self.assertFalse(vu["texte_vide"])
 
+    def test_une_saisie_va_bien_sur_la_touche_ou_on_la_tape(self):
+        """Le deuxieme bug reel : tout finissait sur la derniere touche.
+
+        En JavaScript, « var » appartient a la fonction et non au bloc.
+        La variable de boucle etait donc partagee par les six touches, et
+        chaque champ modifiait la derniere. A l'ecran tout paraissait
+        normal - le texte tape s'affiche bien dans la case - mais rien
+        n'arrivait a la bonne touche.
+
+        Le test tape dans le libelle et dans la valeur de la touche 1,
+        modifie l'abrege du deuxieme logiciel, enregistre, et regarde ce
+        qui part reellement sur le port serie."""
+        import store
+        vu = self._construire(store.vers_json(6))
+
+        self.assertTrue(vu["envoye"], "l'enregistrement n'a rien envoye")
+        self.assertEqual(vu["touche1_label"], "ZZZ")
+        self.assertEqual(vu["touche1_valeur"], "TESTVAL")
+        # La touche 6 ne doit surtout pas avoir bouge.
+        self.assertEqual(vu["derniere_touche_label"], "ANNUL")
+        # Meme verification sur la table des logiciels.
+        self.assertEqual(vu["app2_abrege"], "AbRg")
+        self.assertEqual(vu["app1_abrege"], "C3D")
+        self.assertIn("Enregistre", vu["message"])
+
     def test_la_page_previent_quand_elle_n_a_rien_recu(self):
         """Macropad absent ou mode --simuler : il faut le DIRE.
 

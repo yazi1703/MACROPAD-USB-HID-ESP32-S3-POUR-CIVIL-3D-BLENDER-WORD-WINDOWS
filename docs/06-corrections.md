@@ -321,7 +321,7 @@ navigateur. L'injecteur refuse en plus toute page qu'un tel littéral ne
 pourrait pas contenir, et **relit ce qu'il vient d'écrire** pour vérifier
 que Python le comprend bien à l'identique.
 
-**Les tests ajoutés** (`PageDeConfigurationIntacte`, 5 tests) :
+**Les tests ajoutés** (`PageDeConfigurationIntacte`, 6 tests) :
 
 | Test | Ce qu'il empêche |
 |---|---|
@@ -341,6 +341,66 @@ plus, le test échoue avant que tu n'ouvres le navigateur.
 macropad débranché, ou compagnon lancé avec `--simuler` — elle l'écrit
 maintenant en toutes lettres, avec quoi vérifier. Une page vide ne doit
 jamais laisser croire à un projet cassé.
+
+## Correction 12 — Tout ce qu'on tapait finissait sur la touche 6 (trouvée à l'usage)
+
+**Le symptôme.** La page s'affiche correctement, tu modifies le libellé ou
+la macro d'une touche, tu enregistres… et rien ne change. Pire : c'est la
+**dernière touche du profil** qui a changé, sans que tu l'aies demandé.
+Trompeur au possible, parce que le texte que tu tapes s'affiche bien dans
+sa case — c'est la case du navigateur, elle, qui fonctionne.
+
+**La cause.** Une ligne de JavaScript, et un piège classique du langage :
+
+```js
+for (var i = 0; i < N; i++) {
+  var k = p.touches[i];                     // <-- ici
+  GESTES.forEach(function (g) {
+    ... inp(k.label, 6, function (v) { k.label = v; });
+  });
+}
+```
+
+En JavaScript, `var` appartient à la **fonction**, pas au bloc. Il n'y a
+donc **qu'une seule** variable `k` pour les six touches. Les dix-huit
+petites fonctions « quand on tape, écris ici » créées dans la boucle ne
+gardent pas une copie de `k` : elles gardent **la variable elle-même**.
+Quand tu tapes, la boucle est finie depuis longtemps et `k` vaut la
+dernière touche. Tous les champs écrivaient donc au même endroit.
+
+**La correction.** Sortir le contenu de la boucle dans une fonction :
+
+```js
+for (var i = 0; i < N; i++) ligne(p, i, tb, mx);
+
+function ligne(p, i, tb, mx) {
+  var k = p.touches[i];        // une variable par appel, donc par touche
+  ...
+}
+```
+
+Chaque appel a sa propre variable `k`. C'est la façon la plus sûre de
+régler ce piège sans dépendre d'un JavaScript récent.
+
+**Au passage.** Le nom d'un profil se renommait à **chaque frappe**, ce qui
+redessinait la page et faisait perdre le curseur au milieu du mot. Il est
+maintenant pris en compte quand tu **quittes** le champ.
+
+**Le test ajouté** (`test_une_saisie_va_bien_sur_la_touche_ou_on_la_tape`).
+Il fait tourner la page hors navigateur, **tape** dans le libellé et la
+valeur de la touche 1, modifie l'abrégé du deuxième logiciel, clique sur
+Enregistrer, puis inspecte **ce qui part réellement** vers le macropad :
+
+| Vérifié | Attendu |
+|---|---|
+| libellé de la touche 1 | `ZZZ` — ce qui a été tapé |
+| valeur de son appui court | `TESTVAL` |
+| libellé de la touche 6 | inchangé |
+| abrégé du 2e logiciel | modifié |
+| abrégé du 1er logiciel | inchangé |
+
+Exécuté contre la version d'avant, ce test échoue : il rapporte `MOVE` pour
+la touche 1, et `ZZZ` sur la touche 6. Le bug est donc bien attrapé.
 
 ## Ce qui n'a PAS été touché
 

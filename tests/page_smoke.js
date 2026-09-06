@@ -1,20 +1,28 @@
 // ---------------------------------------------------------------------
 // page_smoke.js - Fait tourner le JavaScript de la page de configuration
-// hors navigateur, avec un DOM minimal, et verifie qu'elle se construit.
+// hors navigateur, avec un DOM minimal, et verifie qu'elle FONCTIONNE.
 //
-// Un controle de syntaxe (node --check) ne dit pas si la page FONCTIONNE.
-// Ici on lui donne une vraie configuration, on la laisse se dessiner, et
-// on compte ce qu'elle a produit. Une erreur pendant le rendu - un champ
-// absent, une propriete mal orthographiee - fait echouer ce test.
+// Deux bugs reels ont motive ce fichier :
+//
+//   1. un antislash mal interprete cassait tout le script : la page
+//      s'affichait vide, sans le moindre message ;
+//   2. une variable « var » declaree dans une boucle etait partagee par
+//      les six touches : tout ce qu'on tapait dans un profil finissait
+//      dans la derniere touche.
+//
+// Aucun des deux n'etait visible sans ouvrir un navigateur. Maintenant si.
 //
 //     node page_smoke.js <script.js> <configuration.json>
+//
+// Ecrit sur la sortie standard un JSON decrivant ce que la page a produit
+// et ou ont atterri les saisies. C'est tests/test_logic.py qui juge.
 // ---------------------------------------------------------------------
 const fs = require('fs');
 
 const script = fs.readFileSync(process.argv[2], 'utf8');
 const donnees = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
 
-// --- un DOM juste assez complet -------------------------------------
+// --- un DOM juste assez complet --------------------------------------
 function Element(tag) {
   this.tag = tag;
   this.children = [];
@@ -24,10 +32,7 @@ function Element(tag) {
   this.textContent = '';
   this.value = '';
 }
-Element.prototype.appendChild = function (n) {
-  this.children.push(n);
-  return n;
-};
+Element.prototype.appendChild = function (n) { this.children.push(n); return n; };
 Element.prototype.setAttribute = function (k, v) { this.attrs[k] = v; };
 Object.defineProperty(Element.prototype, 'firstChild', {
   get: function () { return this.children[0]; }
@@ -51,12 +56,14 @@ const document = {
 };
 const window = { scrollTo: function () {} };
 const location = { reload: function () {} };
-function confirm() { return false; }
+function confirm() { return true; }
 const URL = { createObjectURL: function () { return 'blob:x'; } };
 function Blob() {}
 
+let envoye = null;               // ce que la page a POSTE au macropad
 function fetch(url, options) {
   if (options && options.method === 'POST') {
+    if (options.body) { envoye = JSON.parse(options.body); }
     return Promise.resolve({ json: function () {
       return Promise.resolve({ ok: true, raison: '' }); } });
   }
@@ -64,55 +71,82 @@ function fetch(url, options) {
     return Promise.resolve(donnees); } });
 }
 
-// --- on execute la page ---------------------------------------------
+// On execute la page, en se donnant au passage un acces a ses fonctions :
+// le petit ajout ci-dessous est dans la meme portee que le script.
 new Function('document', 'window', 'fetch', 'URL', 'Blob', 'confirm',
-             'location', script)(
+             'location',
+             script + '\n;globalThis.__page={D:function(){return D;},' +
+                      'save:save};')(
   document, window, fetch, URL, Blob, confirm, location);
 
-// --- puis on regarde ce qu'elle a fabrique ---------------------------
+// --- outils d'inspection ---------------------------------------------
 function compter(noeud, tag) {
   let total = noeud.tag === tag ? 1 : 0;
-  noeud.children.forEach(function (enfant) { total += compter(enfant, tag); });
+  noeud.children.forEach(function (e) { total += compter(e, tag); });
   return total;
 }
 function texte(noeud) {
   let sortie = noeud.textContent || '';
-  noeud.children.forEach(function (enfant) { sortie += texte(enfant); });
+  noeud.children.forEach(function (e) { sortie += texte(e); });
   return sortie;
+}
+function champs(noeud, sortie) {
+  sortie = sortie || [];
+  if (noeud.tag === 'input') { sortie.push(noeud); }
+  noeud.children.forEach(function (e) { champs(e, sortie); });
+  return sortie;
+}
+function saisir(champ, valeur) {
+  champ.value = valeur;
+  if (champ.oninput) { champ.oninput(); }
+  else if (champ.onchange) { champ.onchange(); }
 }
 
 setTimeout(function () {
   const profs = registre.profs;
   const nbProfils = (donnees.ordre || []).length;
-  const resultat = {
+  const nbTouches = donnees.touches || 6;
+
+  const vu = {
     cartes: profs.children.length,
     lignes: compter(profs, 'tr'),
-    champs: compter(profs, 'input') + compter(registre.apps, 'input'),
     listes: compter(profs, 'select'),
     src: registre.src.textContent,
     cnt: registre.cnt.textContent,
     apps: compter(registre.apps, 'tr'),
     texte_vide: texte(profs).indexOf('Aucun profil') >= 0
   };
-  console.log(JSON.stringify(resultat));
 
-  const attendu = nbProfils * (donnees.touches || 6) * 3;
   if (nbProfils > 0) {
-    if (resultat.cartes !== nbProfils) {
-      throw new Error('cartes de profil : ' + resultat.cartes +
-                      ' au lieu de ' + nbProfils);
-    }
-    // Une ligne d'en-tete par profil, puis une ligne par geste.
-    if (resultat.lignes !== attendu + nbProfils) {
-      throw new Error('lignes du tableau : ' + resultat.lignes +
-                      ' au lieu de ' + (attendu + nbProfils));
-    }
-    if (resultat.listes !== attendu) {
-      throw new Error('listes deroulantes : ' + resultat.listes +
-                      ' au lieu de ' + attendu);
-    }
-    if (!resultat.src) { throw new Error("l'origine n'est pas affichee"); }
-  } else if (!resultat.texte_vide) {
-    throw new Error('aucun profil, et aucun message pour le dire');
+    // ---- on tape dans les champs de la PREMIERE touche ---------------
+    // Par carte : nom interne, titre, puis par touche un libelle suivi
+    // des trois valeurs de gestes.
+    const c = champs(profs.children[0]);
+    saisir(c[2], 'ZZZ');            // libelle de la touche 1
+    saisir(c[3], 'TESTVAL');        // valeur de son appui court
+
+    // ---- et dans le deuxieme logiciel de la table -------------------
+    const ca = champs(registre.apps);
+    if (ca.length >= 6) { saisir(ca[5], 'AbRg'); }   // abrege du 2e
+
+    // ---- puis on enregistre, et on regarde ce qui part --------------
+    globalThis.__page.save();
+
+    setTimeout(function () {
+      const D = globalThis.__page.D();
+      const p = envoye ? envoye.profils[envoye.ordre[0]] : null;
+      vu.envoye = !!envoye;
+      vu.touche1_label = p ? p.touches[0].label : null;
+      vu.touche1_valeur = p ? p.touches[0].court.valeur : null;
+      vu.derniere_touche_label = p ? p.touches[nbTouches - 1].label : null;
+      vu.app2_abrege = (envoye && envoye.apps.liste[1])
+        ? envoye.apps.liste[1].abrege : null;
+      vu.app1_abrege = (envoye && envoye.apps.liste[0])
+        ? envoye.apps.liste[0].abrege : null;
+      vu.message = registre.msg.textContent;
+      console.log(JSON.stringify(vu));
+    }, 0);
+  } else {
+    console.log(JSON.stringify(vu));
   }
 }, 0);

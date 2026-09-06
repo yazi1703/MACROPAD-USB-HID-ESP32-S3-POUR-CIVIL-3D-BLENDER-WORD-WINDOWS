@@ -727,8 +727,13 @@ function el(tag,attrs,kids){var e=document.createElement(tag);
  (kids||[]).forEach(function(c){
   e.appendChild(typeof c=="string"?document.createTextNode(c):c);});
  return e;}
-function inp(val,max,cb){var i=el("input");i.value=val||"";
- if(max)i.maxLength=max;i.oninput=function(){cb(i.value);};return i;}
+// fin=true : on previent quand tu QUITTES le champ, pas a chaque
+// frappe. Indispensable pour le nom d'un profil, qui redessine la page.
+function inp(val,max,cb,fin){var i=el("input");i.value=val||"";
+ if(max)i.maxLength=max;
+ if(fin)i.onchange=function(){cb(i.value);};
+ else i.oninput=function(){cb(i.value);};
+ return i;}
 function sel(val,cb){var s=el("select");TYPES.forEach(function(t){
  var o=el("option",{value:t[0]},[t[1]]);if(t[0]==val)o.selected=true;
  s.appendChild(o);});s.onchange=function(){cb(s.value);render();};return s;}
@@ -754,6 +759,40 @@ function vide(){
   "bouton rouge, ou ajouter un profil ci-dessous."]));
  return c;}
 
+// Une fonction a part, et ce n'est pas cosmetique : en JavaScript,
+// « var » appartient a la FONCTION, pas au bloc. Ecrite dans la boucle,
+// la variable k etait la MEME pour les six touches, si bien que tous les
+// champs finissaient par ecrire dans la derniere. Ici chaque appel a sa
+// propre variable k : chaque champ modifie bien sa touche.
+function ligne(p,i,tb,mx){
+ if(!p.touches[i])p.touches[i]={label:"",usages:0};
+ var k=p.touches[i];
+ GESTES.forEach(function(g,gi){
+  if(!k[g])k[g]={type:"none",valeur:""};
+  var tr=el("tr",{cls:gi==0?"sep":""},[]);
+  if(gi==0)tr.appendChild(el("td",{cls:"k",rowspan:3},["B"+(i+1)]));
+  tr.appendChild(el("td",{cls:"g"},[LIB[g]]));
+  if(gi==0){
+   var cl=el("td",{cls:"lab",rowspan:3},[]);
+   cl.appendChild(inp(k.label,6,function(v){k.label=v;}));
+   tr.appendChild(cl);
+  }
+  var ct=el("td",{cls:"ty"},[]);
+  ct.appendChild(sel(k[g].type,function(v){k[g].type=v;}));
+  tr.appendChild(ct);
+  var cv=el("td",{},[]);
+  cv.appendChild(inp(k[g].valeur,60,function(v){k[g].valeur=v;}));
+  tr.appendChild(cv);
+  if(gi==0){
+   var u=k.usages||0;
+   var box=el("td",{cls:"use",rowspan:3},[String(u)]);
+   var b=el("div",{cls:"bar"});b.style.width=Math.round(60*u/mx)+"px";
+   box.appendChild(b);tr.appendChild(box);
+  }
+  tb.appendChild(tr);
+ });
+}
+
 function render(){
  var zone=document.getElementById("profs");zone.innerHTML="";
  var mx=maxUse();
@@ -761,7 +800,7 @@ function render(){
  D.ordre.forEach(function(nom){
   var p=D.profils[nom];if(!p)return;
   var head=el("div",{cls:"ph"},[]);
-  head.appendChild(inp(nom,20,function(v){ren(nom,v);}));
+  head.appendChild(inp(nom,20,function(v){ren(nom,v);},true));
   head.firstChild.className="grow";head.firstChild.title="nom interne";
   var t=inp(p.titre,16,function(v){p.titre=v;});t.className="grow";
   t.title="titre affiche sur l'ecran";head.appendChild(t);
@@ -770,34 +809,7 @@ function render(){
   var tb=el("table",{},[el("tr",{},[el("th",{},["#"]),el("th",{},["Geste"]),
    el("th",{},["Libelle"]),el("th",{},["Type"]),el("th",{},["Valeur"]),
    el("th",{},["Usage"])])]);
-  for(var i=0;i<N;i++){
-   if(!p.touches[i])p.touches[i]={label:"",usages:0};
-   var k=p.touches[i];
-   GESTES.forEach(function(g,gi){
-    if(!k[g])k[g]={type:"none",valeur:""};
-    var tr=el("tr",{cls:gi==0?"sep":""},[]);
-    if(gi==0){var c=el("td",{cls:"k",rowspan:3},["B"+(i+1)]);tr.appendChild(c);}
-    tr.appendChild(el("td",{cls:"g"},[LIB[g]]));
-    if(gi==0){
-     var cl=el("td",{cls:"lab",rowspan:3},[]);
-     cl.appendChild(inp(k.label,6,function(v){k.label=v;}));
-     tr.appendChild(cl);
-    }
-    var ct=el("td",{cls:"ty"},[]);
-    ct.appendChild(sel(k[g].type,function(v){k[g].type=v;}));
-    tr.appendChild(ct);
-    var cv=el("td",{},[]);
-    cv.appendChild(inp(k[g].valeur,60,function(v){k[g].valeur=v;}));
-    tr.appendChild(cv);
-    if(gi==0){
-     var u=k.usages||0;
-     var box=el("td",{cls:"use",rowspan:3},[String(u)]);
-     var b=el("div",{cls:"bar"});b.style.width=Math.round(60*u/mx)+"px";
-     box.appendChild(b);tr.appendChild(box);
-    }
-    tb.appendChild(tr);
-   });
-  }
+  for(var i=0;i<N;i++)ligne(p,i,tb,mx);
   zone.appendChild(el("div",{cls:"card"},[head,tb]));
  });
  renderApps();
