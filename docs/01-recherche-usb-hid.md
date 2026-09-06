@@ -107,6 +107,28 @@ correspondent exactement au probleme signale, et exactement a votre carte.
 > Windows le verra comme un clavier... et aucune touche n'arrivera jamais.
 > Le symptome est particulierement trompeur, d'ou l'insistance ici.
 
+
+### Confirmation sur matériel réel : le clavier fonctionne
+
+**Constaté le jour du montage**, sur un ESP32-S3 N16R8 avec MicroPython
+**v1.28.0**, variante **standard** `ESP32_GENERIC_S3` (PSRAM non activée) :
+
+* le périphérique s'énumère sous Windows en clavier HID, le REPL CDC
+  restant disponible en parallèle ;
+* un appui sur B1, profil CIVIL3D, a produit **`_MATCHPROP` suivi de la
+  touche Entrée**, dans une fenêtre Windows quelconque ;
+* les rapports HID arrivent donc **avec leur contenu**, ce qui écarte le
+  bug des « blank USB HID reports » pour cette configuration ;
+* la traduction **FR AZERTY est correcte** : le `_` est bien sorti en `_`,
+  et non en `8` (ce qu'aurait donné une mauvaise gestion de la rangée des
+  chiffres) ni en `-` (ce qu'aurait donné une table QWERTY) ;
+* la macro `text_enter` fonctionne intégralement : dix caractères espacés
+  de 24 ms envoyés par la file non bloquante, puis la touche Entrée.
+
+La chaîne complète `machine.USBDevice` → `usb-device-keyboard` →
+`hid_keyboard.py` → `layouts.py` est donc validée en conditions réelles,
+et pas seulement en simulation.
+
 ## 1.4 La bibliotheque a utiliser par-dessus : `usb-device-keyboard`
 
 MicroPython fournit dans `micropython-lib` des paquets Python purs construits

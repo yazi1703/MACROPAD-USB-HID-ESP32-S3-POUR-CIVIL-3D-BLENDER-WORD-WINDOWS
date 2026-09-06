@@ -44,9 +44,17 @@ constatés sur la carte de l'utilisateur, un ESP32-S3 N16R8.
 | Étage LED | paliers PWM 5 / 25 / 50 / 100 % distincts, respiration fluide, aucun échauffement |
 | Traduction clavier | `diag.keymap()` produit bien le `_` en touche 37 sans Maj |
 
-Restent non validés à ce stade : l'énumération USB HID sous Windows et la
-frappe réelle, les deux modules TTP223, la quatrième touche mécanique, la
-rotation des profils et les essais applicatifs Civil 3D / Blender / Word.
+| **Clavier USB HID** | ✅ **énumération sous Windows réussie, frappe réelle confirmée** : un appui sur B1 en profil CIVIL3D a produit `_MATCHPROP` + Entrée dans une fenêtre Windows |
+| **Disposition FR AZERTY** | ✅ le `_` sort bien en `_` (ni `8`, ni `-`) : la table AZERTY et la gestion de la rangée des chiffres sont correctes |
+| Macro `text_enter` | ✅ dix caractères envoyés par la file non bloquante, puis Entrée |
+
+Le bug des « blank USB HID reports » ne se manifeste donc pas sur cette
+configuration (v1.28.0, variante standard sans PSRAM). C'était le seul
+point de la recherche qui restait à démontrer.
+
+Restent non validés à ce stade : les deux modules TTP223, la quatrième
+touche mécanique, la rotation des profils et les essais applicatifs
+Civil 3D / Blender / Word.
 
 ## Non exécuté — à faire sur le matériel
 
