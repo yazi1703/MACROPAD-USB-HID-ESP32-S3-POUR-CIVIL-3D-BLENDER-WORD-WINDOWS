@@ -83,6 +83,38 @@ fait « bip ») ou en ohms.
 
 Si un seul de ces points échoue, **ne branche pas**. Cherche d'abord.
 
+### BC547 ou BC557 ? Ne pas les confondre
+
+Ils se ressemblent — même boîtier TO-92, même taille, numéros voisins — mais
+ce sont des **contraires**.
+
+| | BC547 | BC557 |
+|---|---|---|
+| Type | **NPN** | **PNP** |
+| Commute du côté | de la **masse** (low-side) | du **plus** (high-side) |
+| Pour l'allumer | base **haute** (3,3 V) | base **basse** (0 V) |
+| Notre montage | ✅ **c'est celui-ci** | ❌ ne convient pas |
+
+**Pourquoi le BC557 ne peut pas marcher ici.** Un PNP se monte entre le
++5 V et la charge, et pour le **bloquer** il faut remonter sa base au
+potentiel de son émetteur, donc à **5 V**. Or un GPIO d'ESP32 ne monte qu'à
+3,3 V. La jonction reste alors polarisée en direct de `5 − 3,3 = 1,7 V`,
+largement au-dessus des 0,7 V nécessaires : le transistor **ne se bloque
+jamais**.
+
+Concrètement, avec une résistance de base de 2,2 kΩ, il subsisterait
+`(5 − 0,7 − 3,3) / 2200 = 0,45 mA` de courant de base même à l'état
+« éteint ». La LED ne s'éteindrait jamais complètement et le réglage PWM
+serait inutilisable.
+
+Moyen mnémotechnique : **NPN = interrupteur en bas** (côté GND),
+**PNP = interrupteur en haut** (côté +). Notre LED a sa cathode en bas,
+donc c'est un NPN.
+
+Le BC557 reste utile ailleurs — pour commuter le + d'une charge — mais il
+demande alors d'être piloté lui-même par un NPN, ce qui n'a aucun intérêt
+ici.
+
 ### Identifier les pattes du BC547
 
 Le brochage d'un boîtier TO-92 **change selon le fabricant**. Ne te fie
