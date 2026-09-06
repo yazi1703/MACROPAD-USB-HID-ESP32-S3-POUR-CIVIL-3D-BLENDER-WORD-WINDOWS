@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 108 tests PC réussis ; 21 fichiers Python compilés avec succès.**
+**Résultat : 113 tests PC réussis ; 21 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **21 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 108 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  83 pour le firmware, 25 pour le compagnon Windows.
+- 113 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  88 pour le firmware, 25 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -23,6 +23,8 @@
 ## Ce que couvrent les tests PC
 
 **Base V0.** Navigation dans les deux sens ; anti-rebond, rebonds et maintien ; démarrage avec touche tenue ; retour circulaire des ticks ; 26 lettres FR, underscore, macros et ENTER ; Caps Lock ; refus atomique d'un texte non pris en charge ; pressions/relâchements de Ctrl+Shift+Esc ; ESC au milieu d'Alt+Tab/texte ; endpoint occupé sans perte immédiate ; file bornée ; déconnexion sans reprise de macro ; faute et timeout avec annulation/libération ; respiration, flash et passage des ticks ; SAFE MODE sans initialisation HID et retour REPL ; absence/panne OLED ; une page transmise par tick ; boucle main simulée avec macro Civil3D, NEXT et ESC ; rapports de huit octets produits par la classe officielle KeyboardInterface.
+
+**La page de configuration** (`PageDeConfigurationIntacte`, 5 tests). La page servie par `device/portal.py` et celle servie par `pc/macropad_auto.py` sont comparees a leur source unique `tools/page_config.html` ; le JavaScript est verifie syntaxiquement par `node --check` ; enfin il est **execute hors navigateur** avec un DOM minimal (`tests/page_smoke.js`), une fois avec les valeurs d'usine — on compte alors les cartes de profil, les listes deroulantes et les lignes de logiciels produites — et une fois avec une configuration vide, pour verifier que la page explique pourquoi elle n'a rien a montrer. Ces tests sont nes du bug de la correction 11 : un antislash mal interprete cassait tout le script, et la page restait vide sans le moindre message.
 
 **Ajouts V1.** Les six touches et leurs libellés ; la machine à états des trois gestes (appui court immédiat quand aucun double appui n'est défini, appui court retardé quand il y en a un, double appui, deux appuis trop espacés, appui long déclenché au seuil sans deuxième envoi au relâchement, touches indépendantes) ; l'aller-retour complet de la configuration par page web sans perte ; le refus d'une macro intapable et d'un libellé trop long ; le repli sur les valeurs d'usine pour un fichier corrompu ou incohérent ; **la relecture d'un `profils.json` de version 1**, dont la macro devient l'appui court ; le protocole série ligne par ligne, y compris une ligne coupée en deux envois, la lecture bornée par tour de boucle et une configuration trop volumineuse ; l'absence de séquence à deux actions dans les valeurs d'usine (que la page web tronquerait) ; **l'écran, qui ne doit jamais écrire hors des 128×64 pixels** — quatre profils, splash, surlignage de chaque touche, nom de fichier de 48 caractères en défilement, page WiFi.
 
@@ -161,6 +163,13 @@ test_ticks_wrap ... ok
 test_timeout_cancels_pending ... ok
 test_vendor_report_bytes ... ok
 
+--- PageDeConfigurationIntacte
+test_compagnon_pc_sert_la_meme_page ... ok
+test_la_page_previent_quand_elle_n_a_rien_recu ... ok
+test_la_page_se_construit_avec_de_vraies_donnees ... ok
+test_le_javascript_de_la_page_est_valide ... ok
+test_portail_wifi_sert_la_page_source ... ok
+
 --- PageWebDeConfiguration
 test_api_renvoie_les_profils_usine ... ok
 test_chemin_inconnu ... ok
@@ -223,7 +232,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 108 tests
+Ran 113 tests
 
 OK
 ```

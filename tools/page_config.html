@@ -42,6 +42,9 @@ white-space:pre-wrap;font:13px ui-monospace,monospace}
 .ok{background:#0f2e20;border:1px solid #1d6f47;color:#8ee0b4}
 .ko{background:#33131d;border:1px solid #7d2a3c;color:#f0a6b6}
 .hint{color:#6f7788;font-size:12px;margin:0 0 14px}
+.vide{text-align:center;padding:26px 14px}
+.vide b{display:block;font-size:15px;margin-bottom:8px;color:#e8eaee}
+.vide p{color:#8b94a6;margin:5px 0;font-size:13px}
 </style></head><body>
 <header>
 <h1>Macropad</h1>
@@ -93,9 +96,27 @@ function maxUse(){var m=1;for(var n in D.profils)
  (D.profils[n].touches||[]).forEach(function(t){if(t.usages>m)m=t.usages;});
  return m;}
 
+function vide(){
+ var c=el("div",{cls:"card vide"},[]);
+ c.appendChild(el("b",{},["Aucun profil recu du macropad."]));
+ if(D.origine=="simulation"){
+  c.appendChild(el("p",{},["Le compagnon tourne en mode --simuler : il "+
+   "n'est relie a aucune carte."]));
+  c.appendChild(el("p",{},["Relance-le sans --simuler, macropad branche."]));
+ }else{
+  c.appendChild(el("p",{},["Verifie qu'il est branche sur son port USB "+
+   "NATIF, et que Thonny n'occupe pas ce port."]));
+  c.appendChild(el("p",{},["La console du compagnon dit ce qu'elle voit ; "+
+   "avec --journal, tout est dans macropad_auto.log."]));
+ }
+ c.appendChild(el("p",{},["Tu peux aussi partir des valeurs d'usine avec le "+
+  "bouton rouge, ou ajouter un profil ci-dessous."]));
+ return c;}
+
 function render(){
  var zone=document.getElementById("profs");zone.innerHTML="";
  var mx=maxUse();
+ if(!D.ordre.length){zone.appendChild(vide());renderApps();return;}
  D.ordre.forEach(function(nom){
   var p=D.profils[nom];if(!p)return;
   var head=el("div",{cls:"ph"},[]);

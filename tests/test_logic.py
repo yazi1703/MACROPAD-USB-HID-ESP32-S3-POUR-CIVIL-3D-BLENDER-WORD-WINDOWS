@@ -1,5 +1,5 @@
 """Tests sur PC : temps, GPIO et transport simulés ; aucune validation USB physique."""
-import sys, types, pathlib, unittest, time, runpy
+import ast, json, os, shutil, subprocess, sys, tempfile, types, pathlib, unittest, time, runpy
 from unittest.mock import patch
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT/'device'), str(ROOT/'device/lib')]
@@ -1014,6 +1014,124 @@ class ValeursUsineSansPiege(unittest.TestCase):
         self.assertEqual(apres["apps"], avant["apps"])
         for nom in avant["ordre"]:
             self.assertEqual(apres["profils"][nom], avant["profils"][nom], nom)
+
+
+class PageDeConfigurationIntacte(unittest.TestCase):
+    """La page web est ecrite une seule fois, dans tools/page_config.html,
+    puis recopiee dans les deux serveurs par tools/injecter_page.py.
+
+    Ces tests existent a cause d'un bug reel : la page etait recopiee dans
+    une chaine Python ORDINAIRE, ou l'antislash est un caractere
+    d'echappement. Le \\n d'un message JavaScript devenait un vrai passage
+    a la ligne, la chaine JavaScript n'etait plus fermee, et le navigateur
+    refusait TOUT le script. Resultat : une page qui s'affiche mais reste
+    vide, sans aucun message d'erreur visible. Impossible a deviner.
+    """
+
+    def setUp(self):
+        import re
+        self.re = re
+        self.source = (ROOT / "tools" / "page_config.html").read_text(
+            encoding="utf-8").rstrip("\n")
+
+    def _page_du_fichier(self, chemin):
+        """Relit la page telle que Python la comprendra reellement."""
+        texte = chemin.read_text(encoding="utf-8")
+        trouve = self.re.search(r"PAGE = (r?\"\"\".*?\"\"\")", texte, self.re.S)
+        self.assertIsNotNone(trouve, "PAGE introuvable dans %s" % chemin.name)
+        return ast.literal_eval(trouve.group(1)).rstrip("\n")
+
+    def test_portail_wifi_sert_la_page_source(self):
+        self.assertEqual(self._page_du_fichier(ROOT / "device" / "portal.py"),
+                         self.source,
+                         "device/portal.py a divergé : relance "
+                         "python3 tools/injecter_page.py")
+
+    def test_compagnon_pc_sert_la_meme_page(self):
+        self.assertEqual(
+            self._page_du_fichier(ROOT / "pc" / "macropad_auto.py"),
+            self.source,
+            "pc/macropad_auto.py a divergé : relance "
+            "python3 tools/injecter_page.py")
+
+    def test_le_javascript_de_la_page_est_valide(self):
+        """Le controle qui aurait evite le bug : le script se lit-il ?"""
+        node = shutil.which("node") or shutil.which("nodejs")
+        if not node:
+            self.skipTest("node absent : verification syntaxique impossible")
+        script = self.re.search(r"<script>(.*?)</script>", self.source,
+                                self.re.S)
+        self.assertIsNotNone(script, "la page n'a plus de bloc <script>")
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False,
+                                         encoding="utf-8") as fichier:
+            fichier.write(script.group(1))
+            chemin = fichier.name
+        try:
+            resultat = subprocess.run([node, "--check", chemin],
+                                      capture_output=True, text=True)
+        finally:
+            os.remove(chemin)
+        self.assertEqual(resultat.returncode, 0,
+                         "JavaScript invalide :\n" + resultat.stderr)
+
+    # ------------------------------------------------------------------
+    def _construire(self, configuration):
+        """Fait tourner la page hors navigateur et retourne ce qu'elle a
+        fabrique. Voir tests/page_smoke.js pour le detail."""
+        node = shutil.which("node") or shutil.which("nodejs")
+        if not node:
+            self.skipTest("node absent : rendu de la page non verifiable")
+        script = self.re.search(r"<script>(.*?)</script>", self.source,
+                                self.re.S).group(1)
+        dossier = tempfile.mkdtemp()
+        chemin_js = os.path.join(dossier, "page.js")
+        chemin_cfg = os.path.join(dossier, "cfg.json")
+        with open(chemin_js, "w", encoding="utf-8") as fichier:
+            fichier.write(script)
+        with open(chemin_cfg, "w", encoding="utf-8") as fichier:
+            json.dump(configuration, fichier)
+        resultat = subprocess.run(
+            [node, str(ROOT / "tests" / "page_smoke.js"), chemin_js,
+             chemin_cfg], capture_output=True, text=True)
+        self.assertEqual(resultat.returncode, 0,
+                         "la page n'a pas su se construire :\n"
+                         + resultat.stdout + resultat.stderr)
+        return json.loads(resultat.stdout.strip().split("\n")[-1])
+
+    def test_la_page_se_construit_avec_de_vraies_donnees(self):
+        """Le controle qui compte vraiment : la page se dessine-t-elle ?
+
+        Une page dont le script plante en cours de route s'affiche vide,
+        sans le moindre message. On lui donne donc les valeurs d'usine et
+        on compte ce qu'elle a produit."""
+        import store
+        configuration = store.vers_json(6)
+        vu = self._construire(configuration)
+
+        profils = len(configuration["ordre"])
+        self.assertEqual(vu["cartes"], profils)
+        # Une liste deroulante par geste : 6 touches x 3 gestes par profil.
+        self.assertEqual(vu["listes"], profils * 6 * 3)
+        self.assertIn("source", vu["src"])
+        self.assertIn("appuis", vu["cnt"])
+        # Les logiciels : une ligne d'en-tete, une par logiciel, une pour
+        # le repli.
+        self.assertEqual(vu["apps"],
+                         len(configuration["apps"]["liste"]) + 2)
+        self.assertFalse(vu["texte_vide"])
+
+    def test_la_page_previent_quand_elle_n_a_rien_recu(self):
+        """Macropad absent ou mode --simuler : il faut le DIRE.
+
+        Une page vide et muette fait chercher le probleme au mauvais
+        endroit ; c'est arrive."""
+        vu = self._construire({"ordre": [], "profils": {}, "touches": 6,
+                               "apps": {"repli": {"profil": "WINDOWS",
+                                                  "abrege": "Win"},
+                                        "liste": []},
+                               "origine": "simulation"})
+        self.assertTrue(vu["texte_vide"],
+                        "aucun profil affiche, et rien pour l'expliquer")
 
 
 class AncienFichierDeConfiguration(unittest.TestCase):

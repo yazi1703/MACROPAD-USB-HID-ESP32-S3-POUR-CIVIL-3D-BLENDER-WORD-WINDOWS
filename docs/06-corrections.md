@@ -284,6 +284,64 @@ Les deux premiers échouent sur la version précédente.
 corrections antérieures ne l'avaient ni causé ni révélé. Il a fallu
 l'usage réel pour le faire sortir.
 
+## Correction 11 — La page de configuration restait vide (trouvée à l'usage)
+
+**Le symptôme.** La page s'ouvre, le titre s'affiche, les boutons sont là…
+et il n'y a **rien** : aucun profil, aucune macro, les deux pastilles du
+haut restent sur `...`. Aucun message d'erreur, ni dans la page, ni dans
+la console. Les deux pages étaient touchées, celle du PC comme celle du
+WiFi.
+
+**La cause.** La page est écrite une seule fois dans
+`tools/page_config.html`, puis recopiée dans les deux serveurs par
+`tools/injecter_page.py`, à l'intérieur d'une chaîne Python. Elle y était
+recopiée dans une chaîne **ordinaire**, où l'antislash sert à échapper le
+caractère suivant. Ce bout de JavaScript :
+
+```js
+say(r.ok ? "Enregistre et applique." : "Refuse :\n" + r.raison, r.ok);
+```
+
+devenait, une fois lu par Python :
+
+```js
+say(r.ok ? "Enregistre et applique." : "Refuse :
+" + r.raison, r.ok);
+```
+
+La chaîne JavaScript n'est plus fermée sur sa ligne. Le navigateur
+refuse alors **tout le bloc `<script>`** — pas seulement cette ligne. Rien
+ne s'exécute, donc rien ne se dessine, et comme le code qui affiche les
+erreurs fait lui aussi partie du script, il ne peut même pas se plaindre.
+C'est ce silence qui rend la panne difficile à comprendre.
+
+**La correction.** Le préfixe `r` (chaîne *brute*) : `PAGE = r"""…"""`.
+Python n'interprète plus l'antislash, la page arrive intacte dans le
+navigateur. L'injecteur refuse en plus toute page qu'un tel littéral ne
+pourrait pas contenir, et **relit ce qu'il vient d'écrire** pour vérifier
+que Python le comprend bien à l'identique.
+
+**Les tests ajoutés** (`PageDeConfigurationIntacte`, 5 tests) :
+
+| Test | Ce qu'il empêche |
+|---|---|
+| la page de `portal.py` est identique à sa source | une divergence entre les deux serveurs |
+| celle de `macropad_auto.py` aussi | idem, côté PC |
+| le JavaScript est valide (`node --check`) | exactement le bug ci-dessus |
+| la page se construit avec de vraies données | une erreur pendant le rendu (champ absent, faute de frappe) |
+| la page prévient quand elle n'a rien reçu | une page vide et muette |
+
+Les deux derniers font tourner le JavaScript **hors navigateur**, avec un
+DOM minimal (`tests/page_smoke.js`) : on lui donne les valeurs d'usine, on
+le laisse dessiner, et on compte ce qu'il a produit — 4 cartes de profil,
+72 listes déroulantes, 7 lignes de logiciels. Si la page ne se construit
+plus, le test échoue avant que tu n'ouvres le navigateur.
+
+**Et une amélioration au passage.** Quand la page ne reçoit aucun profil —
+macropad débranché, ou compagnon lancé avec `--simuler` — elle l'écrit
+maintenant en toutes lettres, avec quoi vérifier. Une page vide ne doit
+jamais laisser croire à un projet cassé.
+
 ## Ce qui n'a PAS été touché
 
 - La structure `device/` et les quatre fichiers USB officiels recopiés :
