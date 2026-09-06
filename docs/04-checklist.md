@@ -51,6 +51,8 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 ```
 [ ] B1 fonctionnel      [ ] B2 fonctionnel
 [ ] B3 fonctionnel      [ ] B4 fonctionnel
+[ ] B5 fonctionnel      [ ] B6 fonctionnel
+[ ] GPIO12 et GPIO13 libres sur ta carte (pas pris par la nappe caméra)
 [ ] un appui franc = exactement 1 événement
 [ ] maintien de 5 s = aucune répétition
 [ ] TTP PREVIOUS fonctionnel, en mode momentané (pas bascule)
@@ -134,4 +136,19 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
     (sinon : 100 nF sur leur alimentation, éloigner les câbles)
 [ ] pas de scintillement de la LED sur câble long
     (sinon : 10 à 47 µF entre 5 V et GND dans le boîtier ESC, polarité !)
+```
+
+## Mode configuration WiFi (V1)
+
+```
+[ ] AP_PASSWORD changé dans config.py (au moins 8 caractères)
+[ ] B2 maintenu au RESET : l'écran affiche MODE CONFIG
+[ ] le réseau WiFi MACROPAD apparaît
+[ ] http://192.168.4.1 s'ouvre dans le navigateur
+[ ] les 6 macros de chaque profil s'affichent dans la page
+[ ] une modification s'enregistre et survit au RESET
+[ ] une macro volontairement fausse (CTRL+BIDON) est REFUSÉE avec un message
+[ ] le bouton « Profils d'usine » ramène bien aux valeurs de profiles.py
+[ ] en mode config, aucune touche n'est envoyée (le clavier n'existe pas)
+[ ] profils.json sauvegardé sur le PC une fois la configuration au point
 ```

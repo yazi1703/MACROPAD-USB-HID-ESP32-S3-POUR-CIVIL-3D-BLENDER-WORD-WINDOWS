@@ -33,9 +33,18 @@ Détail de la vérification : docs/02-cablage.md
 # 1. BROCHAGE
 # =====================================================================
 
-# Les quatre touches mécaniques. Chaque interrupteur relie sa broche à GND.
-# B1 (le premier de la liste) sert aussi de bouton SAFE MODE au démarrage.
-BUTTON_PINS = (4, 5, 6, 7)
+# Les touches mécaniques. Chaque interrupteur relie sa broche à GND.
+# L'ordre de la liste donne B1, B2, B3... Il suffit d'ajouter ou de retirer
+# un numéro ici pour changer le nombre de touches : le reste du firmware
+# s'adapte tout seul (écran compris).
+#
+# B1 = SAFE MODE   si maintenu au démarrage (aucun HID ne sera créé)
+# B2 = MODE CONFIG si maintenu au démarrage (WiFi + page web, pas de HID)
+#
+# GPIO12 et GPIO13 sont les deux ajouts pour passer de 4 à 6 touches.
+# VÉRIFIE sur ta carte qu'ils ne sont pas utilisés par le connecteur caméra.
+# Replis sûrs si besoin : 1, 2, 21, 47, 48.
+BUTTON_PINS = (4, 5, 6, 7, 12, 13)
 
 # Les deux modules capacitifs TTP223 qui changent de profil.
 TTP_PREVIOUS_PIN = 10
@@ -101,6 +110,30 @@ HID_ENABLED = False
 # valider le clavier une brique à la fois sans risquer une commande
 # applicative involontaire.
 HID_TEST = None
+
+# =====================================================================
+# 4 bis. MODE CONFIGURATION (WiFi + page web)
+# =====================================================================
+# Maintiens B2 pendant le RESET : le macropad n'crée AUCUN clavier USB,
+# allume son propre réseau WiFi et sert une page web où tu peux modifier
+# les profils et les macros. Un RESET normal applique les changements.
+#
+# POURQUOI UN MODE SÉPARÉ ET PAS DU WIFI EN PERMANENCE
+# Ce boîtier tape dans ton ordinateur. Une radio allumée en permanence
+# permettrait à quelqu'un à portée de reprogrammer ce qu'il tape. Ici la
+# radio ne s'allume que si TU maintiens un bouton, et dans ce mode le
+# clavier USB n'existe même pas.
+SAFE_MODE_BUTTON_INDEX = 0          # index dans BUTTON_PINS : 0 = B1
+CONFIG_MODE_BUTTON_INDEX = 1        # index dans BUTTON_PINS : 1 = B2
+
+AP_SSID = "MACROPAD"                # nom du réseau créé par le macropad
+AP_PASSWORD = "macropad2026"        # >>> CHANGE-MOI <<< 8 caractères minimum
+AP_CHANNEL = 6
+AP_PORT = 80                        # page web sur http://192.168.4.1
+
+# Fichier où sont enregistrés tes profils personnalisés. Tant qu'il
+# n'existe pas, ce sont les profils d'usine de profiles.py qui servent.
+PROFILES_FILE = "profils.json"
 
 # =====================================================================
 # 5. TEMPS ET REACTIVITE (millisecondes)

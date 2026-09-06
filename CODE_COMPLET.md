@@ -18,6 +18,8 @@ de `device/`, pas ce document.
 - [`device/runtime.py`](#deviceruntimepy)
 - [`device/inputs.py`](#deviceinputspy)
 - [`device/layouts.py`](#devicelayoutspy)
+- [`device/store.py`](#devicestorepy)
+- [`device/portal.py`](#deviceportalpy)
 - [`device/hid_keyboard.py`](#devicehidkeyboardpy)
 - [`device/display.py`](#devicedisplaypy)
 - [`device/led.py`](#deviceledpy)
@@ -33,7 +35,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`150 lignes - sha256 a9849560ceb3030a`
+`183 lignes - sha256 47983ec466e68ea8`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -71,9 +73,18 @@ Détail de la vérification : docs/02-cablage.md
 # 1. BROCHAGE
 # =====================================================================
 
-# Les quatre touches mécaniques. Chaque interrupteur relie sa broche à GND.
-# B1 (le premier de la liste) sert aussi de bouton SAFE MODE au démarrage.
-BUTTON_PINS = (4, 5, 6, 7)
+# Les touches mécaniques. Chaque interrupteur relie sa broche à GND.
+# L'ordre de la liste donne B1, B2, B3... Il suffit d'ajouter ou de retirer
+# un numéro ici pour changer le nombre de touches : le reste du firmware
+# s'adapte tout seul (écran compris).
+#
+# B1 = SAFE MODE   si maintenu au démarrage (aucun HID ne sera créé)
+# B2 = MODE CONFIG si maintenu au démarrage (WiFi + page web, pas de HID)
+#
+# GPIO12 et GPIO13 sont les deux ajouts pour passer de 4 à 6 touches.
+# VÉRIFIE sur ta carte qu'ils ne sont pas utilisés par le connecteur caméra.
+# Replis sûrs si besoin : 1, 2, 21, 47, 48.
+BUTTON_PINS = (4, 5, 6, 7, 12, 13)
 
 # Les deux modules capacitifs TTP223 qui changent de profil.
 TTP_PREVIOUS_PIN = 10
@@ -141,6 +152,30 @@ HID_ENABLED = False
 HID_TEST = None
 
 # =====================================================================
+# 4 bis. MODE CONFIGURATION (WiFi + page web)
+# =====================================================================
+# Maintiens B2 pendant le RESET : le macropad n'crée AUCUN clavier USB,
+# allume son propre réseau WiFi et sert une page web où tu peux modifier
+# les profils et les macros. Un RESET normal applique les changements.
+#
+# POURQUOI UN MODE SÉPARÉ ET PAS DU WIFI EN PERMANENCE
+# Ce boîtier tape dans ton ordinateur. Une radio allumée en permanence
+# permettrait à quelqu'un à portée de reprogrammer ce qu'il tape. Ici la
+# radio ne s'allume que si TU maintiens un bouton, et dans ce mode le
+# clavier USB n'existe même pas.
+SAFE_MODE_BUTTON_INDEX = 0          # index dans BUTTON_PINS : 0 = B1
+CONFIG_MODE_BUTTON_INDEX = 1        # index dans BUTTON_PINS : 1 = B2
+
+AP_SSID = "MACROPAD"                # nom du réseau créé par le macropad
+AP_PASSWORD = "macropad2026"        # >>> CHANGE-MOI <<< 8 caractères minimum
+AP_CHANNEL = 6
+AP_PORT = 80                        # page web sur http://192.168.4.1
+
+# Fichier où sont enregistrés tes profils personnalisés. Tant qu'il
+# n'existe pas, ce sont les profils d'usine de profiles.py qui servent.
+PROFILES_FILE = "profils.json"
+
+# =====================================================================
 # 5. TEMPS ET REACTIVITE (millisecondes)
 # =====================================================================
 # Délai entre la mise sous tension et la prise en compte des touches.
@@ -192,31 +227,46 @@ LED_RETURN_MS = 350     # retour progressif du flash vers la respiration
 
 ## device/profiles.py
 
-`140 lignes - sha256 bca35cac5d37ae1e`
+`151 lignes - sha256 33b8cbd2fefaffbc`
 
 ```python
 # -*- coding: utf-8 -*-
 """
-profiles.py - Toutes les macros du macropad. C'est LE fichier à modifier.
+profiles.py - Les profils et macros D'USINE du macropad.
 
 =====================================================================
-COMMENT EST ECRITE UNE MACRO
+DEUX FAÇONS DE MODIFIER TES MACROS
+=====================================================================
+1. **La page web** (recommandé) : maintiens B2 pendant le RESET, connecte-toi
+   au WiFi du macropad, ouvre http://192.168.4.1 et modifie tout à la
+   souris. Tes réglages sont enregistrés dans `profils.json` sur la carte.
+
+2. **Ce fichier** : ce sont les valeurs d'usine. Elles servent tant que
+   `profils.json` n'existe pas, et de filet de secours si ce fichier est
+   corrompu. Supprimer `profils.json` revient donc aux valeurs ci-dessous.
+
+=====================================================================
+COMMENT EST ÉCRITE UNE MACRO
 =====================================================================
 Chaque touche est une paire :   (libellé affiché, liste d'actions)
 
-Le libellé s'affiche sur l'écran OLED (14 caractères maximum).
-La liste d'actions contient une ou plusieurs actions exécutées à la suite.
+Le libellé s'affiche sur l'écran OLED : **6 caractères maximum**, parce que
+l'écran affiche maintenant six touches sur trois lignes.
 
-Les quatre types d'action disponibles :
+Les types d'action :
 
   ("key", "TAB")                  une touche seule
   ("combo", ("CTRL", "Z"))        plusieurs touches ensemble
-  ("text", "_HATCH")              écrire une chaîne, caractère par caractère
-  ("text_enter", "_HATCH")        écrire une chaîne puis appuyer sur Entrée
+  ("text", "_HATCH")              écrire une chaîne
+  ("text_enter", "_HATCH")        écrire une chaîne puis Entrée
 
-Comme c'est une LISTE, tu peux déjà enchaîner plusieurs actions :
+La liste permet d'enchaîner plusieurs actions :
 
-  ("ZOOM", [("text_enter", "_ZOOM"), ("text_enter", "E")])
+  ("ZOOM-E", [("text_enter", "_ZOOM"), ("text_enter", "E")])
+
+Attention : les séquences à plusieurs actions ne sont pas éditables depuis
+la page web (elle ne gère qu'une action par touche). Si tu en écris une ici
+et que tu enregistres ensuite depuis la page web, elle sera remplacée.
 
 =====================================================================
 NOMS DE TOUCHES UTILISABLES
@@ -225,66 +275,55 @@ Modificateurs : CTRL, SHIFT, ALT, WIN, ALTGR
 Touches nommées : ENTER, ESC, TAB, SPACE, BACKSPACE, DELETE, INSERT,
                   HOME, END, PAGEUP, PAGEDOWN, UP, DOWN, LEFT, RIGHT,
                   F1 à F12, MENU, CAPSLOCK, PRINTSCREEN
-Un seul caractère ("G", "z", "1") : désigne la TOUCHE PHYSIQUE qui écrit
-ce caractère avec la disposition réglée dans config.py.
-
-C'est ce dernier point qui fait que Ctrl+Z envoie bien "Annuler" sur un
-Windows français, et non Ctrl+W qui fermerait le document.
-
-=====================================================================
-POUR AJOUTER UN PROFIL (QGIS, AutoTURN, Road Survey...)
-=====================================================================
-1. Ajoute une entrée dans PROFILES ci-dessous, avec exactement 4 touches.
-2. Ajoute son nom dans PROFILES_ORDER, dans config.py.
-Rien d'autre : la rotation circulaire s'adapte automatiquement.
+Un seul caractère ("G", "z", "1") : la TOUCHE PHYSIQUE qui écrit ce
+caractère avec la disposition réglée dans config.py.
 """
 
 PROFILES = {
 
     # -----------------------------------------------------------------
     "BLENDER": [
-        ("MOVE",  [("key", "G")]),      # G = Grab, déplacer
-        ("ROT",   [("key", "R")]),      # R = Rotate
-        ("SCALE", [("key", "S")]),      # S = Scale
-        ("TAB",   [("key", "TAB")]),    # bascule mode Objet / mode Édition
+        ("MOVE",   [("key", "G")]),                  # Grab, déplacer
+        ("ROT",    [("key", "R")]),                  # Rotate
+        ("SCALE",  [("key", "S")]),                  # Scale
+        ("TAB",    [("key", "TAB")]),                # Objet / Édition
+        ("EXTRUD", [("key", "E")]),                  # Extrude
+        ("ANNUL",  [("combo", ("CTRL", "Z"))]),      # Annuler
     ],
 
     # -----------------------------------------------------------------
     # Le "_" devant les commandes AutoCAD force la commande INTERNATIONALE :
     # _MATCHPROP fonctionne même sur un Civil 3D installé en français.
-    # C'est pour cela qu'on tient tant à écrire correctement ce caractère.
     "CIVIL3D": [
-        ("MATCH", [("text_enter", "_MATCHPROP")]),        # copier les propriétés
-        ("HATCH", [("text_enter", "_HATCH")]),            # hachures
-        ("UNDO",  [("combo", ("CTRL", "Z"))]),            # annuler
-        ("ISOLE", [("text_enter", "_ISOLATEOBJECTS")]),   # isoler les objets
+        ("MATCH", [("text_enter", "_MATCHPROP")]),      # copier les propriétés
+        ("HATCH", [("text_enter", "_HATCH")]),          # hachures
+        ("ANNUL", [("combo", ("CTRL", "Z"))]),          # annuler
+        ("ISOLE", [("text_enter", "_ISOLATEOBJECTS")]),  # isoler
+        ("ZOOM",  [("text_enter", "_ZOOM")]),           # zoom
+        ("ENREG", [("combo", ("CTRL", "S"))]),          # enregistrer
     ],
 
     # -----------------------------------------------------------------
-    # RESERVE IMPORTANTE, VALIDEE AVEC TOI :
-    # ces raccourcis sont ceux de Word en ANGLAIS.
-    # Sur un Word en FRANCAIS, Gras se fait avec Ctrl+G (et non Ctrl+B),
-    # Italique avec Ctrl+I, Souligné avec Ctrl+U.
-    # Si ton Word est français, commente les quatre lignes actives et
-    # décommente le bloc "Word français" juste en dessous.
+    # RÉSERVE VALIDÉE AVEC TOI : ces raccourcis sont ceux de Word en
+    # ANGLAIS. Sur un Word FRANÇAIS, Gras se fait avec Ctrl+G et non
+    # Ctrl+B. Tu peux corriger cela en trente secondes depuis la page web.
     "WORD": [
-        ("BOLD",   [("combo", ("CTRL", "B"))]),
-        ("ITALIC", [("combo", ("CTRL", "I"))]),
-        ("SAVE",   [("combo", ("CTRL", "S"))]),
-        ("UNDO",   [("combo", ("CTRL", "Z"))]),
-        # --- Word français : à décommenter et remplacer les 4 lignes ci-dessus
-        # ("GRAS",  [("combo", ("CTRL", "G"))]),
-        # ("ITAL",  [("combo", ("CTRL", "I"))]),
-        # ("ENREG", [("combo", ("CTRL", "S"))]),
-        # ("ANNUL", [("combo", ("CTRL", "Z"))]),
+        ("GRAS",   [("combo", ("CTRL", "B"))]),
+        ("ITAL",   [("combo", ("CTRL", "I"))]),
+        ("ENREG",  [("combo", ("CTRL", "S"))]),
+        ("ANNUL",  [("combo", ("CTRL", "Z"))]),
+        ("SOULIG", [("combo", ("CTRL", "U"))]),
+        ("REFAIR", [("combo", ("CTRL", "Y"))]),
     ],
 
     # -----------------------------------------------------------------
     "WINDOWS": [
-        ("EXPLORER", [("combo", ("WIN", "E"))]),            # Explorateur de fichiers
-        ("ALT-TAB",  [("combo", ("ALT", "TAB"))]),          # changer de fenêtre
-        ("DESKTOP",  [("combo", ("WIN", "D"))]),            # afficher le bureau
-        ("TASKMGR",  [("combo", ("CTRL", "SHIFT", "ESC"))]),  # gestionnaire des tâches
+        ("EXPLOR", [("combo", ("WIN", "E"))]),               # Explorateur
+        ("ALTTAB", [("combo", ("ALT", "TAB"))]),             # changer de fenêtre
+        ("BUREAU", [("combo", ("WIN", "D"))]),               # afficher le bureau
+        ("TACHES", [("combo", ("CTRL", "SHIFT", "ESC"))]),   # gestionnaire
+        ("PRESSE", [("combo", ("WIN", "V"))]),               # presse-papiers
+        ("CAPTUR", [("combo", ("WIN", "SHIFT", "S"))]),      # capture d'écran
     ],
 }
 
@@ -294,10 +333,6 @@ TITLES = {"CIVIL3D": "CIVIL 3D"}
 # =====================================================================
 # MACROS DE TEST (utilisées seulement si HID_TEST est réglé dans config.py)
 # =====================================================================
-# Elles servent à valider le clavier une brique à la fois, dans le
-# Bloc-notes, sans risquer de lancer une commande dans Civil 3D.
-# Les deux modes texte n'ajoutent volontairement PAS de touche Entrée :
-# tu peux ainsi relire l'orthographe avant de valider quoi que ce soit.
 TESTS = {
     "LETTER":   [("text", "a")],
     "ESC":      [("key", "ESC")],
@@ -305,6 +340,8 @@ TESTS = {
     "AZERTY":   [("text", "_ABCDEFGHIJKLMNOPQRSTUVWXYZ")],
     "COMMANDS": [("text", "_MATCHPROP _HATCH _ISOLATEOBJECTS")],
 }
+
+LABEL_MAX = 6          # largeur d'un libellé sur l'écran OLED
 
 
 class ProfileManager:
@@ -315,21 +352,30 @@ class ProfileManager:
     division) qui fait ce travail, sans aucun test if.
     """
 
-    def __init__(self, order, default):
-        # On refuse de démarrer avec une configuration incohérente :
-        # mieux vaut une erreur claire tout de suite qu'un comportement
-        # bizarre une fois le macropad branché.
+    def __init__(self, order, default, profiles=None, keys_expected=None):
+        # profiles=None : on utilise les profils d'usine ci-dessus.
+        # Sinon on utilise ceux fournis (venant de profils.json).
+        self.profiles = PROFILES if profiles is None else profiles
+
         if not order or len(set(order)) != len(order):
             raise ValueError("Ordre des profils vide ou doublons")
         for name in order:
-            if name not in PROFILES or len(PROFILES[name]) != 4:
+            if name not in self.profiles:
                 raise ValueError("Profil invalide : " + name)
+            if keys_expected is not None and len(self.profiles[name]) != keys_expected:
+                raise ValueError("Profil %s : %d touches au lieu de %d"
+                                 % (name, len(self.profiles[name]), keys_expected))
         self.order = order
-        self.index = order.index(default)
+        self.index = order.index(default) if default in order else 0
 
     @property
     def name(self):
         return self.order[self.index]
+
+    @property
+    def macros(self):
+        """Les macros du profil courant."""
+        return self.profiles[self.name]
 
     def move(self, direction):
         """direction vaut +1 (profil suivant) ou -1 (profil précédent)."""
@@ -341,7 +387,7 @@ class ProfileManager:
 
 ## device/boot.py
 
-`65 lignes - sha256 face5bf5a227dc79`
+`81 lignes - sha256 22722123b48903aa`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -352,25 +398,28 @@ boot.py - Premier fichier exécuté par MicroPython au démarrage.
 POURQUOI CE FICHIER EST AUSSI COURT
 =====================================================================
 boot.py s'exécute AVANT tout le reste et avant que le REPL ne soit
-disponible. S'il plante ou s'il part en boucle, la carte devient
-pénible à récupérer. On y met donc le strict minimum.
+disponible. S'il plante ou s'il part en boucle, la carte devient pénible
+à récupérer. On y met donc le strict minimum.
 
-Il fait exactement trois choses :
+=====================================================================
+LES TROIS MODES DE DÉMARRAGE
+=====================================================================
+Ce que tu maintiens pendant le RESET décide de tout :
 
-1. Il éteint la LED du bouton ESC. Au démarrage un GPIO est dans un état
-   indéfini ; on force un 0 franc pour que la LED ne s'allume pas
-   bêtement pendant l'initialisation.
+  rien           -> MACROPAD : clavier USB actif, usage normal
+  B1 maintenu    -> SAFE MODE : le clavier n'est même pas créé.
+                    Impossible de taper quoi que ce soit, même avec une
+                    macro mal écrite. C'est ton filet de secours.
+  B2 maintenu    -> MODE CONFIG : pas de clavier non plus, mais le WiFi
+                    s'allume et une page web permet de modifier tes
+                    macros depuis un navigateur.
 
-2. Il regarde si tu maintiens B1 : c'est le SAFE MODE.
-   En SAFE MODE, le clavier USB n'est même pas créé. Il devient donc
-   physiquement impossible que le macropad tape quoi que ce soit, même si
-   une macro est mal écrite. C'est ton filet de secours.
+Dans les deux modes spéciaux, `create_interface()` n'est jamais appelé :
+le macropad est PHYSIQUEMENT incapable d'envoyer une touche.
 
-3. Si tout va bien et si HID_ENABLED est True, il déclare le clavier USB
-   à Windows. AUCUNE TOUCHE N'EST ENVOYEE ICI : on se contente d'exister
-   en tant que clavier.
-
-Ensuite MicroPython lance main.py.
+AUCUNE TOUCHE N'EST ENVOYÉE ICI, dans aucun des trois cas. boot.py se
+contente d'exister en tant que clavier ; c'est main.py qui décide quoi
+envoyer, et seulement sur un appui de ta part.
 """
 
 from machine import Pin
@@ -378,26 +427,39 @@ from time import sleep_ms
 import config as C
 import runtime
 
+
+def _maintenu(index):
+    """True si la touche d'index donné est maintenue enfoncée.
+
+    La résistance de tirage interne met la broche à 3,3 V (valeur 1) ;
+    appuyer la relie à la masse (valeur 0). On laisse 5 ms à la broche
+    pour se stabiliser, puis on lit trois fois : un seul parasite ne doit
+    pas nous faire croire à un appui.
+    """
+    broche = Pin(C.BUTTON_PINS[index], Pin.IN, Pin.PULL_UP)
+    sleep_ms(5)
+    for _ in range(3):
+        if broche.value() != 0:
+            return False
+        sleep_ms(3)
+    return True
+
+
 # --- 1. LED éteinte, quoi qu'il arrive -------------------------------
+# Au démarrage un GPIO est dans un état indéfini ; on force un 0 franc
+# pour que la LED ne s'allume pas bêtement pendant l'initialisation.
 Pin(C.LED_PIN, Pin.OUT, value=0)
 
-# --- 2. Détection du SAFE MODE ---------------------------------------
-# La résistance de tirage interne met la broche à 3,3 V (valeur 1).
-# Appuyer sur B1 la relie à la masse (valeur 0).
-# On laisse 5 ms à la broche pour se stabiliser, puis on lit trois fois :
-# un seul parasite ne doit pas nous faire croire à un appui.
-_b1 = Pin(C.BUTTON_PINS[0], Pin.IN, Pin.PULL_UP)
-sleep_ms(5)
-runtime.safe_mode = True
-for _ in range(3):
-    if _b1.value() != 0:
-        runtime.safe_mode = False
-        break
-    sleep_ms(3)
+# --- 2. Quel mode de démarrage ? -------------------------------------
+runtime.safe_mode = _maintenu(C.SAFE_MODE_BUTTON_INDEX)
+if not runtime.safe_mode:
+    runtime.config_mode = _maintenu(C.CONFIG_MODE_BUTTON_INDEX)
 
 # --- 3. Création du clavier USB, ou pas ------------------------------
 if runtime.safe_mode:
     print("SAFE MODE - HID DISABLED")
+elif runtime.config_mode:
+    print("MODE CONFIG - WiFi actif, HID desactive")
 elif C.HID_ENABLED:
     try:
         from hid_keyboard import create_interface
@@ -415,7 +477,7 @@ else:
 
 ## device/main.py
 
-`190 lignes - sha256 e454df76b4f4b0c9`
+`288 lignes - sha256 a48035b1f39e193c`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -423,12 +485,24 @@ else:
 main.py - Le chef d'orchestre. Lancé automatiquement après boot.py.
 
 =====================================================================
-LE PRINCIPE : UNE SEULE BOUCLE, JAMAIS D'ATTENTE
+LES TROIS MODES
 =====================================================================
-Tout le macropad tient dans une seule boucle qui tourne environ 500 fois
-par seconde. À chaque tour, on fait un tout petit peu de chaque travail :
+boot.py a déjà décidé lequel s'applique, selon ce que tu maintenais
+pendant le RESET :
 
-    1. lire les entrées          (quelques microsecondes)
+  SAFE MODE   (B1) : on affiche un écran d'alerte et on rend la main au
+                     REPL. Aucun clavier n'existe.
+  MODE CONFIG (B2) : on allume le WiFi et on sert la page web de
+                     configuration. Aucun clavier n'existe non plus.
+  NORMAL           : le macropad fait son travail.
+
+=====================================================================
+LE PRINCIPE DU MODE NORMAL : UNE SEULE BOUCLE, JAMAIS D'ATTENTE
+=====================================================================
+Tout tient dans une boucle qui tourne environ 500 fois par seconde. À
+chaque tour on fait un tout petit peu de chaque travail :
+
+    1. lire les entrées
     2. traiter ESC en priorité
     3. traiter les profils et les macros
     4. envoyer AU PLUS un paquet clavier
@@ -436,55 +510,117 @@ par seconde. À chaque tour, on fait un tout petit peu de chaque travail :
     6. envoyer AU PLUS une page d'écran
     7. dormir 2 ms, et on recommence
 
-C'est ce qu'on appelle une boucle coopérative : chaque tâche prend un
-petit morceau de temps puis rend la main volontairement. Aucune tâche ne
-peut donc bloquer les autres. C'est pour cela qu'écrire une commande de
-16 caractères (400 ms) n'empêche jamais le bouton ESC de répondre.
+C'est une boucle coopérative : chaque tâche prend un petit morceau de
+temps puis rend la main volontairement. Écrire une commande de seize
+caractères (400 ms) n'empêche donc jamais le bouton ESC de répondre.
 
-L'ordre des étapes n'est pas anodin : ESC est traité en tout premier.
+L'ordre n'est pas anodin : ESC est traité en tout premier.
 
 =====================================================================
-LES TROIS SECURITES AU DEMARRAGE
+D'OÙ VIENNENT LES MACROS
 =====================================================================
-1. boot.py n'a même pas créé le clavier si tu maintenais B1 (SAFE MODE).
-2. Toutes les macros sont traduites AVANT la première touche : une macro
-   mal écrite fait échouer le démarrage avec un message clair, plutôt que
-   de taper n'importe quoi.
-3. Pendant BOOT_GUARD_MS (2,5 s), les touches sont ignorées. Tu as le
-   temps de débrancher si quelque chose se passe mal.
+De `profils.json` s'il existe (créé par la page web), sinon des valeurs
+d'usine de `profiles.py`. Si le fichier est corrompu, on repart sur les
+valeurs d'usine en le signalant : le macropad ne peut pas devenir
+inutilisable à cause d'un fichier de configuration.
 """
 
 from time import ticks_ms, ticks_diff, sleep_ms
 import config as C
 import runtime
+import store
 from inputs import Inputs
-from profiles import ProfileManager, PROFILES, TESTS
+from profiles import ProfileManager, TESTS
 from display import Display
 from hid_keyboard import HIDKeyboard
 from layouts import compile_actions
 
+NB_TOUCHES = len(C.BUTTON_PINS)
 
+
+# =====================================================================
+# MODE CONFIG : WiFi + page web
+# =====================================================================
+def mode_config(display):
+    """Allume le point d'accès et sert la page de configuration.
+
+    Aucun clavier n'a été créé par boot.py : ce mode ne peut rien taper.
+    On en sort par un RESET normal.
+    """
+    from portal import demarrer_ap, arreter_ap, Portail
+
+    print("=" * 46)
+    print(" MODE CONFIGURATION")
+    print("=" * 46)
+
+    # Une LED allumée fixe, différente de la respiration habituelle :
+    # d'un coup d'œil tu sais que le macropad n'est pas un clavier.
+    led = None
+    try:
+        from led import Led
+        led = Led()
+        led.set_level(C.LED_MAX)
+    except Exception as exc:
+        print("LED desactivee :", exc)
+
+    portail = None
+    try:
+        ssid, cle, adresse = demarrer_ap()
+        display.config_screen(ssid, cle, adresse)
+        display.flush_startup()
+        print("1. Connecte-toi au reseau WiFi :", ssid)
+        print("2. Cle :", cle)
+        print("3. Ouvre http://%s dans un navigateur" % adresse)
+        print("4. Modifie tes macros, enregistre, puis fais un RESET.")
+
+        portail = Portail(NB_TOUCHES)
+        portail.ouvrir()
+        while True:
+            portail.service()          # rend la main au bout de 0,25 s
+    except KeyboardInterrupt:
+        print("Mode configuration interrompu.")
+    except Exception as exc:
+        print("MODE CONFIG en echec :", exc)
+        display.message("CONFIG KO", str(exc)[:16])
+        display.flush_startup()
+    finally:
+        if portail:
+            portail.fermer()
+        arreter_ap()
+        if led:
+            led.close()
+
+
+# =====================================================================
+# MODE NORMAL
+# =====================================================================
 def run():
     display = Display()
 
-    # ---------------------------------------------------------------
-    # Cas particulier : SAFE MODE
-    # ---------------------------------------------------------------
-    # boot.py n'a pas créé le clavier. On l'affiche et on rend la main au
-    # REPL pour que tu puisses réparer tes fichiers dans Thonny.
+    # --- SAFE MODE : on n'exécute rien, on rend la main au REPL --------
     if runtime.safe_mode:
-        display.message("SAFE MODE", "HID DISABLED")
+        display.message("SAFE MODE", "HID DISABLED", "", "Boutons lisibles",
+                        "Aucune frappe")
         display.flush_startup()
+        print("SAFE MODE : le clavier n'existe pas.")
         print("REPL disponible. Diagnostics : import diag; diag.run()")
         return
 
-    manager = ProfileManager(C.PROFILES_ORDER, C.DEFAULT_PROFILE)
+    # --- MODE CONFIG : WiFi + page web ---------------------------------
+    if runtime.config_mode:
+        mode_config(display)
+        return
 
-    # Vérification de TOUTES les macros avant la moindre frappe.
-    # Si une macro contient un caractère impossible à taper, on préfère
-    # une erreur ici plutôt qu'une commande à moitié écrite dans Civil 3D.
-    for name in C.PROFILES_ORDER:
-        for label, actions in PROFILES[name]:
+    # --- Chargement des macros -----------------------------------------
+    profils, ordre, titres, origine = store.charger(NB_TOUCHES)
+    print("Macros chargees depuis :", origine)
+
+    manager = ProfileManager(ordre, C.DEFAULT_PROFILE, profils, NB_TOUCHES)
+
+    # Vérification de TOUTES les macros avant la moindre frappe. Une macro
+    # impossible à taper doit échouer ici, pas au milieu d'une commande.
+    for nom in ordre:
+        for label, actions in profils[nom]:
             compile_actions(actions, C.KEYBOARD_LAYOUT)
     if C.HID_TEST is not None and C.HID_TEST not in TESTS:
         raise ValueError("HID_TEST invalide")
@@ -500,86 +636,110 @@ def run():
     except Exception as exc:
         print("LED desactivee :", exc)
 
-    display.profile(manager.name, ticks_ms())
+    def afficher(splash):
+        display.profile(titres.get(manager.name, manager.name),
+                        manager.macros, ticks_ms(),
+                        manager.index, len(ordre), splash)
+
+    afficher(False)
     print("Profil :", manager.name,
           "HID :", "initialise" if keyboard else "DESACTIVE")
     if runtime.hid_error:
         display.message("HID ERROR", "VOIR REPL")
 
-    started = ticks_ms()
-    armed = False          # False tant que la garde de démarrage n'est pas finie
-    was_ready = False
+    demarre = ticks_ms()
+    arme = False               # False tant que la garde de démarrage dure
+    etait_pret = False
+    etat_affiche = None
+    dernier_controle = demarre
 
     try:
         while True:
             now = ticks_ms()
-            edges = controls.poll(now)
+            fronts = controls.poll(now)
 
             # --- Fin de la garde de démarrage -----------------------
-            if not armed and ticks_diff(now, started) >= C.BOOT_GUARD_MS:
-                armed = True
+            if not arme and ticks_diff(now, demarre) >= C.BOOT_GUARD_MS:
+                arme = True
                 # Si tu tenais encore une touche, on l'ignore : il faudra
                 # la relâcher avant qu'elle ne serve.
                 controls.disarm_held()
-                edges = []
+                fronts = []
                 print("Entrees actives ; HID_TEST =", C.HID_TEST)
 
-            if armed:
-                pressed = [name for name, edge in edges if edge == 1]
+            if arme:
+                appuyes = [nom for nom, front in fronts if front == 1]
 
                 # --- 1. ESC : priorité absolue, avant tout le reste ---
-                if "ESC" in pressed:
+                if "ESC" in appuyes:
                     if keyboard:
                         keyboard.escape(now)
-                        # On appelle tick() tout de suite : ainsi le paquet
-                        # de relâchement part dans le même tour de boucle,
-                        # sans attendre 2 ms de plus.
+                        # tick() tout de suite : le paquet part dans le
+                        # même tour de boucle, sans attendre 2 ms de plus.
                         keyboard.tick(now)
                     if led:
                         led.flash(now)
                     print("ESC")
                 else:
                     # --- 2. Changement de profil ---------------------
-                    previous = "PREVIOUS" in pressed
-                    following = "NEXT" in pressed
-                    # Si les deux TTP sont touchés en même temps, on ne
-                    # fait rien : on ne saurait pas dans quel sens aller.
-                    if previous != following:
-                        manager.move(1 if following else -1)
+                    precedent = "PREVIOUS" in appuyes
+                    suivant = "NEXT" in appuyes
+                    # Les deux TTP touchés ensemble : on ne fait rien, on
+                    # ne saurait pas dans quel sens aller.
+                    if precedent != suivant:
+                        manager.move(1 if suivant else -1)
                         if keyboard:
                             # On annule la macro en cours : hors de question
                             # que la fin d'une commande de l'ancien profil
                             # continue de s'écrire après le changement.
                             keyboard.cancel()
-                        display.profile(manager.name, now, True)
+                        afficher(True)
                         print("Profil :", manager.name)
                     else:
-                        # --- 3. Les quatre touches de macro ----------
-                        for i in range(4):
-                            if "B" + str(i + 1) in pressed:
-                                label, actions = PROFILES[manager.name][i]
-                                if C.HID_TEST is not None:
-                                    # En mode test, seul B1 agit, et il
-                                    # déclenche la macro de test choisie.
-                                    if i != 0:
-                                        continue
-                                    label, actions = C.HID_TEST, TESTS[C.HID_TEST]
-                                print(manager.name, "B" + str(i + 1), label)
-                                if keyboard:
-                                    keyboard.submit(actions)
-                                else:
-                                    print("   (HID desactive : rien n'est tape)")
+                        # --- 3. Les touches de macro -----------------
+                        for index in range(NB_TOUCHES):
+                            if "B" + str(index + 1) not in appuyes:
+                                continue
+                            label, actions = manager.macros[index]
+                            if C.HID_TEST is not None:
+                                # En mode test, seul B1 agit.
+                                if index != 0:
+                                    continue
+                                label, actions = C.HID_TEST, TESTS[C.HID_TEST]
+                            print(manager.name, "B" + str(index + 1), label)
+                            if not actions:
+                                print("   (touche inactive)")
+                            elif keyboard:
+                                keyboard.submit(actions)
+                            else:
+                                print("   (HID desactive : rien n'est tape)")
 
             # --- 4. Travaux de fond, tous non bloquants -------------
             if keyboard:
                 keyboard.tick(now)
-                ready = keyboard.ready()
+                pret = keyboard.ready()
                 # Au moment précis où Windows ouvre le clavier, on ignore
                 # ce qui est déjà maintenu : sinon un doigt encore posé
                 # déclencherait une macro dès la connexion.
-                if ready and not was_ready:
+                if pret and not etait_pret:
                     controls.disarm_held()
-                was_ready = ready
+                etait_pret = pret
+
+            # Petit indicateur en haut à droite de l'écran, rafraîchi
+            # seulement quand il change (un redessin coûte 8 tours).
+            if ticks_diff(now, dernier_controle) >= 250:
+                dernier_controle = now
+                if keyboard is None:
+                    etat = "OFF"
+                elif keyboard.fault:
+                    etat = "ERR"
+                elif keyboard.ready():
+                    etat = "HID"
+                else:
+                    etat = "..."
+                if etat != etat_affiche:
+                    etat_affiche = etat
+                    display.set_etat(etat)
 
             if led:
                 try:
@@ -614,7 +774,7 @@ if __name__ == "__main__":
 
 ## device/runtime.py
 
-`16 lignes - sha256 83e652193bd9487f`
+`17 lignes - sha256 bec7ef35eb2d5495`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -631,6 +791,7 @@ est voulu (aucune usure de la flash, aucun état bizarre qui survivrait).
 """
 
 safe_mode = False    # True si B1 était maintenu au démarrage
+config_mode = False  # True si B2 était maintenu au démarrage (WiFi + page web)
 interface = None     # l'objet clavier USB, ou None si HID désactivé
 hid_error = None     # message d'erreur si la création du clavier a échoué
 ```
@@ -1151,9 +1312,566 @@ def compile_actions(actions, layout, caps_lock=False):
 
 ---
 
+## device/store.py
+
+`221 lignes - sha256 2a5b3b63026dd7c8`
+
+```python
+# -*- coding: utf-8 -*-
+"""
+store.py - Enregistrement des profils personnalisés sur la carte.
+
+=====================================================================
+À QUOI ÇA SERT
+=====================================================================
+La page web du mode configuration modifie tes profils. Il faut bien les
+ranger quelque part pour qu'ils survivent au débranchement : c'est le rôle
+de ce module. Il lit et écrit un fichier JSON sur la mémoire flash de la
+carte (`profils.json` par défaut).
+
+Le JSON est un format texte simple, lisible, que tu peux ouvrir dans
+Thonny pour voir ce que contient ta configuration.
+
+=====================================================================
+DEUX RÈGLES DE SÉCURITÉ
+=====================================================================
+1. **Rien n'est enregistré sans avoir été vérifié.** Chaque macro est
+   traduite en codes clavier AVANT l'écriture. Si un caractère est
+   impossible à taper ou si un nom de touche est inconnu, l'enregistrement
+   est refusé avec un message clair. Impossible d'enregistrer une
+   configuration qui planterait au prochain démarrage.
+
+2. **Le fichier n'est jamais indispensable.** S'il est absent, illisible
+   ou incohérent, le firmware repart sur les profils d'usine de
+   `profiles.py` en le signalant dans le REPL. Une carte ne peut pas
+   devenir inutilisable à cause de ce fichier ; au pire, efface-le.
+
+=====================================================================
+FORME DU FICHIER
+=====================================================================
+    {
+      "version": 1,
+      "ordre": ["BLENDER", "CIVIL3D", "WORD", "WINDOWS"],
+      "profils": {
+        "CIVIL3D": {
+          "titre": "CIVIL 3D",
+          "touches": [
+            {"label": "MATCH", "type": "text_enter", "valeur": "_MATCHPROP"},
+            ...
+          ]
+        }
+      }
+    }
+
+Le "type" vaut "key", "combo", "text", "text_enter" ou "none".
+Pour un "combo", la valeur s'écrit avec des plus : "CTRL+SHIFT+ESC".
+"""
+
+import json
+import config as C
+import profiles as P
+from layouts import compile_actions
+
+TYPES = ("key", "combo", "text", "text_enter", "none")
+
+
+# =====================================================================
+# Conversion entre la forme JSON (page web) et la forme interne (firmware)
+# =====================================================================
+def action_vers_json(actions):
+    """Forme interne -> (type, valeur texte) pour la page web."""
+    if not actions:
+        return "none", ""
+    kind, value = actions[0]
+    if kind == "combo":
+        return "combo", "+".join(value)
+    return kind, str(value)
+
+
+def action_depuis_json(kind, valeur):
+    """(type, valeur texte) -> forme interne."""
+    if kind == "none":
+        return []
+    if kind == "combo":
+        touches = tuple(p.strip() for p in str(valeur).split("+") if p.strip())
+        if not touches:
+            raise ValueError("combinaison vide")
+        return [("combo", touches)]
+    if kind in ("key", "text", "text_enter"):
+        return [(kind, str(valeur))]
+    raise ValueError("type inconnu : " + str(kind))
+
+
+# =====================================================================
+# Vérification
+# =====================================================================
+def verifier(profils, ordre, nb_touches):
+    """Retourne la liste des problèmes. Liste vide = configuration saine."""
+    problemes = []
+
+    if not ordre:
+        problemes.append("l'ordre des profils est vide")
+    if len(set(ordre)) != len(ordre):
+        problemes.append("un profil apparait deux fois dans l'ordre")
+
+    for nom in ordre:
+        if nom not in profils:
+            problemes.append("l'ordre cite '%s' qui n'existe pas" % nom)
+
+    for nom, macros in profils.items():
+        if len(macros) != nb_touches:
+            problemes.append("%s : %d touches au lieu de %d"
+                             % (nom, len(macros), nb_touches))
+        for index, macro in enumerate(macros):
+            label, actions = macro
+            if len(label) > P.LABEL_MAX:
+                problemes.append("%s B%d : libelle '%s' depasse %d caracteres"
+                                 % (nom, index + 1, label, P.LABEL_MAX))
+            try:
+                # La vérification qui compte : la macro est-elle réellement
+                # tapable avec la disposition clavier choisie ?
+                compile_actions(actions, C.KEYBOARD_LAYOUT)
+            except Exception as exc:
+                problemes.append("%s B%d (%s) : %s"
+                                 % (nom, index + 1, label, exc))
+    return problemes
+
+
+# =====================================================================
+# Lecture
+# =====================================================================
+def defauts():
+    """Copie des profils d'usine, dans la forme interne."""
+    profils = {}
+    for nom, macros in P.PROFILES.items():
+        profils[nom] = [(label, list(actions)) for label, actions in macros]
+    return profils, list(C.PROFILES_ORDER)
+
+
+def charger(nb_touches):
+    """Retourne (profils, ordre, titres, origine).
+
+    origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire
+    d'où viennent les macros actives.
+    """
+    titres = dict(P.TITLES)
+    try:
+        with open(C.PROFILES_FILE) as fichier:
+            data = json.load(fichier)
+    except OSError:
+        return defauts() + (titres, "usine")          # fichier absent : normal
+    except Exception as exc:
+        print("[store] %s illisible (%s), retour aux profils d'usine"
+              % (C.PROFILES_FILE, exc))
+        return defauts() + (titres, "usine")
+
+    try:
+        ordre = [str(n) for n in data["ordre"]]
+        profils = {}
+        for nom, bloc in data["profils"].items():
+            macros = []
+            for touche in bloc["touches"]:
+                actions = action_depuis_json(touche.get("type", "none"),
+                                             touche.get("valeur", ""))
+                macros.append((str(touche.get("label", ""))[:P.LABEL_MAX],
+                               actions))
+            profils[str(nom)] = macros
+            if bloc.get("titre"):
+                titres[str(nom)] = str(bloc["titre"])
+    except Exception as exc:
+        print("[store] %s mal formé (%s), retour aux profils d'usine"
+              % (C.PROFILES_FILE, exc))
+        return defauts() + (dict(P.TITLES), "usine")
+
+    problemes = verifier(profils, ordre, nb_touches)
+    if problemes:
+        print("[store] %s refuse, retour aux profils d'usine :" % C.PROFILES_FILE)
+        for probleme in problemes:
+            print("   -", probleme)
+        return defauts() + (dict(P.TITLES), "usine")
+
+    return profils, ordre, titres, "fichier"
+
+
+# =====================================================================
+# Écriture
+# =====================================================================
+def enregistrer(profils, ordre, titres, nb_touches):
+    """Vérifie puis écrit le fichier. Retourne (True, "") ou (False, raison)."""
+    problemes = verifier(profils, ordre, nb_touches)
+    if problemes:
+        return False, " ; ".join(problemes)
+
+    blocs = {}
+    for nom, macros in profils.items():
+        touches = []
+        for label, actions in macros:
+            kind, valeur = action_vers_json(actions)
+            touches.append({"label": label, "type": kind, "valeur": valeur})
+        blocs[nom] = {"titre": titres.get(nom, nom), "touches": touches}
+
+    data = {"version": 1, "ordre": list(ordre), "profils": blocs}
+    try:
+        # On écrit d'abord un fichier temporaire, puis on le renomme :
+        # une coupure de courant en plein enregistrement ne peut donc pas
+        # laisser un profils.json à moitié écrit.
+        temporaire = C.PROFILES_FILE + ".tmp"
+        with open(temporaire, "w") as fichier:
+            json.dump(data, fichier)
+        try:
+            import os
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+        import os
+        os.rename(temporaire, C.PROFILES_FILE)
+    except Exception as exc:
+        return False, "ecriture impossible : %s" % exc
+    return True, ""
+
+
+def effacer():
+    """Supprime le fichier : retour aux profils d'usine au prochain RESET."""
+    try:
+        import os
+        os.remove(C.PROFILES_FILE)
+        return True
+    except OSError:
+        return False
+```
+
+---
+
+## device/portal.py
+
+`318 lignes - sha256 6c7bb29ada107a3d`
+
+```python
+# -*- coding: utf-8 -*-
+"""
+portal.py - Le mode configuration : point d'accès WiFi + page web.
+
+=====================================================================
+COMMENT ÇA S'UTILISE
+=====================================================================
+1. Maintiens **B2** pendant que tu appuies sur RESET.
+2. L'écran affiche le nom du réseau, la clé WiFi et l'adresse à ouvrir.
+3. Sur ton PC ou ton téléphone, connecte-toi à ce réseau WiFi.
+4. Ouvre **http://192.168.4.1** dans un navigateur.
+5. Modifie tes profils et tes macros, puis « Enregistrer ».
+6. RESET normal : le macropad redémarre avec tes nouvelles macros.
+
+=====================================================================
+POURQUOI C'EST UN MODE SÉPARÉ, ET PAS DU WIFI EN PERMANENCE
+=====================================================================
+Ce boîtier tape dans ton ordinateur. Si une radio était allumée en
+permanence, quelqu'un à portée pourrait y déposer des commandes qui
+s'exécuteraient ensuite chez toi. Ici :
+
+* la radio ne s'allume que si TU maintiens un bouton au démarrage ;
+* dans ce mode, le clavier USB n'est même pas créé : le macropad est
+  physiquement incapable de taper quoi que ce soit ;
+* le réseau est protégé par une clé WPA2 affichée sur l'écran, il faut
+  donc voir l'appareil pour s'y connecter.
+
+Change quand même `AP_PASSWORD` dans config.py.
+
+=====================================================================
+CE QUE LA PAGE SAIT FAIRE, ET CE QU'ELLE NE SAIT PAS
+=====================================================================
+Elle gère une action par touche : une touche seule, une combinaison, un
+texte, ou un texte suivi d'Entrée. C'est ce qui couvre l'immense majorité
+des besoins.
+
+Les séquences à plusieurs actions (par exemple `_ZOOM` puis `E`) restent
+réservées à profiles.py : les écrire dans un formulaire deviendrait vite
+illisible. Si tu en as créé une à la main et que tu enregistres depuis la
+page, elle sera remplacée par sa première action.
+"""
+
+import json
+import socket
+import time
+
+import config as C
+import store
+
+# La page web. Volontairement compacte : elle tient dans la RAM de la carte.
+PAGE = """<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Macropad</title><style>
+*{box-sizing:border-box}body{margin:0;padding:16px;background:#14161a;color:#e6e8ec;
+font:14px/1.5 system-ui,sans-serif}h1{font-size:18px;margin:0 0 4px}
+p.sub{margin:0 0 20px;color:#9aa3af}
+.prof{background:#1c1f26;border:1px solid #2a2f3a;border-radius:10px;padding:14px;margin-bottom:14px}
+.head{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.head input{flex:1;min-width:120px}
+input,select{background:#0f1115;color:#e6e8ec;border:1px solid #2a2f3a;
+border-radius:6px;padding:7px 8px;font:13px/1.2 ui-monospace,monospace}
+table{width:100%;border-collapse:collapse}td{padding:3px 4px 3px 0}
+td.n{width:26px;color:#7c8698;text-align:right;font:12px ui-monospace,monospace}
+.lab{width:88px}.val{width:100%}
+button{background:#2f6feb;color:#fff;border:0;border-radius:6px;padding:9px 14px;
+font:600 13px system-ui;cursor:pointer}button.g{background:#2a2f3a}
+button.r{background:#7a2230}.bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+#msg{margin-top:14px;padding:10px 12px;border-radius:8px;display:none;white-space:pre-wrap}
+.ok{background:#123524;border:1px solid #1f7a4d}.ko{background:#3a1620;border:1px solid #8a2b3f}
+</style></head><body>
+<h1>Macropad &mdash; configuration</h1>
+<p class="sub">Libelles : 6 caracteres max. Combinaison : <code>CTRL+MAJ+ESC</code>.
+Apres enregistrement, faire un RESET.</p>
+<div id="app"></div>
+<div class="bar">
+<button onclick="addProfil()" class="g">+ Profil</button>
+<button onclick="save()">Enregistrer</button>
+<button onclick="usine()" class="r">Profils d'usine</button>
+</div>
+<div id="msg"></div>
+<script>
+let D={ordre:[],profils:{}},N=6;
+const TYPES=[["key","touche"],["combo","combinaison"],["text","texte"],
+["text_enter","texte + Entree"],["none","inactive"]];
+function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;")}
+function render(){
+ let h="";
+ D.ordre.forEach(function(nom){
+  const p=D.profils[nom];if(!p)return;
+  h+='<div class="prof"><div class="head"><input value="'+esc(nom)+
+     '" onchange="ren(this,\\''+esc(nom)+'\\')" title="nom interne">'+
+     '<input value="'+esc(p.titre)+'" oninput="D.profils[\\''+esc(nom)+
+     '\\'].titre=this.value" title="titre a l\\'ecran">'+
+     '<button class="r" onclick="del(\\''+esc(nom)+'\\')">Supprimer</button></div><table>';
+  for(let i=0;i<N;i++){
+   const t=p.touches[i]||{label:"",type:"none",valeur:""};
+   let o="";TYPES.forEach(function(x){
+    o+='<option value="'+x[0]+'"'+(t.type==x[0]?" selected":"")+'>'+x[1]+'</option>'});
+   h+='<tr><td class="n">B'+(i+1)+'</td>'+
+      '<td><input class="lab" maxlength="6" value="'+esc(t.label)+
+      '" oninput="set(\\''+esc(nom)+'\\','+i+',\\'label\\',this.value)"></td>'+
+      '<td><select onchange="set(\\''+esc(nom)+'\\','+i+',\\'type\\',this.value)">'+o+'</select></td>'+
+      '<td><input class="val" value="'+esc(t.valeur)+
+      '" oninput="set(\\''+esc(nom)+'\\','+i+',\\'valeur\\',this.value)"></td></tr>';
+  }
+  h+="</table></div>";
+ });
+ document.getElementById("app").innerHTML=h;
+}
+function set(n,i,k,v){const p=D.profils[n];
+ while(p.touches.length<N)p.touches.push({label:"",type:"none",valeur:""});
+ p.touches[i][k]=v}
+function ren(el,anc){const nv=el.value.trim();if(!nv||D.profils[nv]){render();return}
+ D.profils[nv]=D.profils[anc];delete D.profils[anc];
+ D.ordre=D.ordre.map(function(x){return x==anc?nv:x});render()}
+function del(n){if(D.ordre.length<2){return say("Il faut au moins un profil",0)}
+ delete D.profils[n];D.ordre=D.ordre.filter(function(x){return x!=n});render()}
+function addProfil(){let n="PROFIL",i=1;while(D.profils[n])n="PROFIL"+(++i);
+ D.profils[n]={titre:n,touches:[]};
+ for(let k=0;k<N;k++)D.profils[n].touches.push({label:"",type:"none",valeur:""});
+ D.ordre.push(n);render()}
+function say(t,ok){const m=document.getElementById("msg");
+ m.textContent=t;m.className=ok?"ok":"ko";m.style.display="block"}
+function save(){fetch("/api/profils",{method:"POST",body:JSON.stringify(D)})
+ .then(function(r){return r.json()}).then(function(r){
+  say(r.ok?"Enregistre. Fais un RESET pour appliquer.":"Refuse :\\n"+r.raison,r.ok)})
+ .catch(function(e){say("Erreur reseau : "+e,0)})}
+function usine(){if(!confirm("Revenir aux profils d'usine ?"))return;
+ fetch("/api/usine",{method:"POST"}).then(function(){location.reload()})}
+fetch("/api/profils").then(function(r){return r.json()}).then(function(d){
+ D=d;N=d.touches||6;render()});
+</script></body></html>"""
+
+
+# =====================================================================
+# Point d'accès WiFi
+# =====================================================================
+def demarrer_ap():
+    """Allume le réseau WiFi du macropad. Retourne (ssid, cle, adresse)."""
+    import network
+    ap = network.WLAN(network.AP_IF)
+    ap.active(True)
+
+    if len(C.AP_PASSWORD) < 8:
+        print("[portal] ATTENTION : AP_PASSWORD fait moins de 8 caracteres,")
+        print("[portal] le WiFi risque de refuser de demarrer.")
+
+    reglages = {"essid": C.AP_SSID, "password": C.AP_PASSWORD,
+                "channel": C.AP_CHANNEL}
+    try:
+        # WPA2 explicite. Le nom de la constante a varié selon les versions,
+        # d'où le getattr avec une valeur de repli.
+        reglages["authmode"] = getattr(network, "AUTH_WPA_WPA2_PSK", 4)
+        ap.config(**reglages)
+    except Exception:
+        del reglages["authmode"]
+        ap.config(**reglages)
+
+    attente = 0
+    while not ap.active() and attente < 5000:
+        time.sleep_ms(100)
+        attente += 100
+    adresse = ap.ifconfig()[0]
+    print("[portal] reseau '%s' actif, page sur http://%s" % (C.AP_SSID, adresse))
+    return C.AP_SSID, C.AP_PASSWORD, adresse
+
+
+def arreter_ap():
+    try:
+        import network
+        network.WLAN(network.AP_IF).active(False)
+    except Exception:
+        pass
+
+
+# =====================================================================
+# Serveur web minimal
+# =====================================================================
+class Portail:
+
+    def __init__(self, nb_touches):
+        self.nb_touches = nb_touches
+        self.serveur = None
+        self.clients = 0
+
+    def ouvrir(self):
+        adresse = socket.getaddrinfo("0.0.0.0", C.AP_PORT)[0][-1]
+        self.serveur = socket.socket()
+        self.serveur.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.serveur.bind(adresse)
+        self.serveur.listen(2)
+        # Court délai d'attente : on rend la main régulièrement pour que la
+        # LED continue de respirer même sans visiteur.
+        self.serveur.settimeout(0.25)
+
+    def fermer(self):
+        if self.serveur:
+            try:
+                self.serveur.close()
+            except Exception:
+                pass
+            self.serveur = None
+
+    # ------------------------------------------------------------------
+    def _etat_json(self):
+        profils, ordre, titres, origine = store.charger(self.nb_touches)
+        blocs = {}
+        for nom, macros in profils.items():
+            touches = []
+            for label, actions in macros:
+                kind, valeur = store.action_vers_json(actions)
+                touches.append({"label": label, "type": kind, "valeur": valeur})
+            blocs[nom] = {"titre": titres.get(nom, nom), "touches": touches}
+        return {"ordre": ordre, "profils": blocs,
+                "touches": self.nb_touches, "origine": origine}
+
+    def _enregistrer(self, data):
+        profils = {}
+        titres = {}
+        try:
+            ordre = [str(n) for n in data["ordre"]]
+            for nom, bloc in data["profils"].items():
+                macros = []
+                for touche in bloc["touches"][:self.nb_touches]:
+                    actions = store.action_depuis_json(
+                        touche.get("type", "none"), touche.get("valeur", ""))
+                    macros.append((str(touche.get("label", ""))[:6], actions))
+                while len(macros) < self.nb_touches:
+                    macros.append(("", []))
+                profils[str(nom)] = macros
+                titres[str(nom)] = str(bloc.get("titre", nom))
+        except Exception as exc:
+            return False, "donnees illisibles : %s" % exc
+        return store.enregistrer(profils, ordre, titres, self.nb_touches)
+
+    # ------------------------------------------------------------------
+    def _repondre(self, client, corps, type_mime="text/html", code="200 OK"):
+        entete = ("HTTP/1.0 %s\r\nContent-Type: %s; charset=utf-8\r\n"
+                  "Cache-Control: no-store\r\nConnection: close\r\n\r\n"
+                  % (code, type_mime))
+        client.write(entete.encode())
+        if isinstance(corps, str):
+            corps = corps.encode()
+        # Envoi par morceaux : la page fait plusieurs kilo-octets et la pile
+        # réseau de l'ESP32 n'avale pas tout d'un coup.
+        for debut in range(0, len(corps), 512):
+            client.write(corps[debut:debut + 512])
+
+    def _traiter(self, client):
+        ligne = client.readline()
+        if not ligne:
+            return
+        try:
+            methode, chemin, _ = ligne.decode().split(" ", 2)
+        except ValueError:
+            return
+
+        taille = 0
+        while True:
+            entete = client.readline()
+            if not entete or entete in (b"\r\n", b"\n"):
+                break
+            bas = entete.decode().lower()
+            if bas.startswith("content-length:"):
+                try:
+                    taille = int(bas.split(":", 1)[1].strip())
+                except ValueError:
+                    taille = 0
+
+        corps = client.read(taille) if taille else b""
+
+        if chemin.startswith("/api/profils"):
+            if methode == "POST":
+                try:
+                    data = json.loads(corps)
+                except Exception as exc:
+                    self._repondre(client,
+                                   json.dumps({"ok": False,
+                                               "raison": "JSON invalide : %s" % exc}),
+                                   "application/json")
+                    return
+                ok, raison = self._enregistrer(data)
+                print("[portal] enregistrement :", "OK" if ok else raison)
+                self._repondre(client, json.dumps({"ok": ok, "raison": raison}),
+                               "application/json")
+            else:
+                self._repondre(client, json.dumps(self._etat_json()),
+                               "application/json")
+        elif chemin.startswith("/api/usine") and methode == "POST":
+            store.effacer()
+            print("[portal] retour aux profils d'usine")
+            self._repondre(client, json.dumps({"ok": True}), "application/json")
+        elif chemin == "/" or chemin.startswith("/index"):
+            self._repondre(client, PAGE)
+        else:
+            self._repondre(client, "introuvable", "text/plain", "404 Not Found")
+
+    # ------------------------------------------------------------------
+    def service(self):
+        """Traite au plus un visiteur. Ne bloque jamais plus de 0,25 s."""
+        if not self.serveur:
+            return False
+        try:
+            client, _ = self.serveur.accept()
+        except OSError:
+            return False        # personne pour l'instant, c'est normal
+        self.clients += 1
+        try:
+            client.settimeout(3)
+            self._traiter(client)
+        except Exception as exc:
+            print("[portal] client abandonne :", exc)
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
+        return True
+```
+
+---
+
 ## device/hid_keyboard.py
 
-`315 lignes - sha256 23e93c4d8439193c`
+`331 lignes - sha256 57bb32c7edef95ef`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1280,6 +1998,15 @@ class HIDKeyboard:
         self.current = []
         self.phase = "idle"
         self.release_needed = True
+        # INDISPENSABLE : le relâchement qu'on vient de programmer est une
+        # NOUVELLE action, le chronomètre du garde-fou doit repartir de zéro.
+        #
+        # Sans cette ligne, self.progress gardait la date de la dernière
+        # frappe. Un changement de profil survenant après quelques secondes
+        # de repos déclenchait donc instantanément « transfert sans
+        # progression » et bloquait le clavier jusqu'au RESET, alors que
+        # rien n'était en panne. Panne constatée sur le matériel.
+        self.progress = ticks_ms()
 
     def escape(self, now):
         """Bouton ESC : priorité absolue.
@@ -1342,6 +2069,13 @@ class HIDKeyboard:
                 print("HID : interface ouverte par Windows")
                 self.opened = True
                 self.progress = now
+                if self.fault:
+                    # L'hôte vient de reconfigurer le périphérique : il a
+                    # forcément oublié toute touche restée enfoncée. On peut
+                    # donc repartir d'un état sain, plutôt que d'exiger un
+                    # RESET matériel pour un incident déjà passé.
+                    print("HID : reconnexion USB, reprise apres panne")
+                    self.fault = False
 
             # Garde-fou : si plus rien n'avance alors qu'on a du travail,
             # c'est que l'USB est bloqué. On arrête tout plutôt que de
@@ -1477,55 +2211,78 @@ def create_interface():
 
 ## device/display.py
 
-`156 lignes - sha256 af3a155c4d24f8a3`
+`260 lignes - sha256 b36ab16e2212fc09`
 
 ```python
 # -*- coding: utf-8 -*-
 """
-display.py - L'écran OLED. Totalement facultatif.
+display.py - L'interface sur l'écran OLED SH1106 128x64.
 
 =====================================================================
-L'ECRAN N'EST JAMAIS INDISPENSABLE
+L'ÉCRAN N'EST JAMAIS INDISPENSABLE
 =====================================================================
 S'il est absent, débranché, ou s'il tombe en panne en cours de route, on
 l'abandonne proprement (self.oled = None) et le macropad continue de
 fonctionner comme clavier. Un écran ne doit jamais empêcher de taper.
 
 =====================================================================
+LA VUE PRINCIPALE, SIX TOUCHES
+=====================================================================
+    ┌────────────────────────┐
+    │▓CIVIL 3D▓▓▓▓▓▓▓▓▓▓HID▓▓│   bandeau en vidéo inversée
+    │ ▐1▌ MATCH   ▐2▌ HATCH  │
+    │ ▐3▌ ANNUL   ▐4▌ ISOLE  │   trois lignes de deux touches
+    │ ▐5▌ ZOOM    ▐6▌ ENREG  │
+    │────────────────────────│
+    │ ■ □ □ □                │   position dans la liste des profils
+    └────────────────────────┘
+
+Le numéro de chaque touche est dans une pastille en vidéo inversée : on
+retrouve la bonne touche d'un coup d'œil, sans lire. Les libellés font
+6 caractères au maximum, c'est ce que laisse la demi-largeur de l'écran.
+
+Les petits carrés du bas indiquent où tu es dans la liste des profils,
+comme les points d'un carrousel. Avec quatre profils tu vois quatre
+carrés, dont un plein.
+
+=====================================================================
 POURQUOI UNE SEULE PAGE PAR TOUR DE BOUCLE
 =====================================================================
-L'écran fait 128 x 64 pixels, soit 1024 octets. Les envoyer d'un coup sur
-le bus I2C prend environ 23 millisecondes, pendant lesquelles le
-processeur ne fait rien d'autre : on sentirait le macropad "accrocher" à
-chaque changement d'affichage.
+L'écran fait 1024 octets. Les envoyer d'un coup prend environ 23 ms,
+pendant lesquelles le processeur ne fait rien d'autre : on sentirait le
+macropad accrocher à chaque changement d'affichage.
 
-Le SH1106 organise sa mémoire en 8 bandes horizontales de 8 pixels de
-haut, appelées "pages". On en envoie UNE par tour de boucle, soit environ
-3 ms. L'image complète est donc mise à jour en 8 tours de boucle, c'est-
-à-dire environ 16 ms : invisible pour l'oeil, et les touches restent
-lues en permanence.
+Le SH1106 range sa mémoire en 8 bandes horizontales de 8 pixels, appelées
+pages. On en envoie UNE par tour de boucle, soit environ 3 ms. L'image
+complète se met à jour en 8 tours, c'est-à-dire environ 16 ms : invisible
+à l'œil, et les touches restent lues en permanence.
 
-=====================================================================
-PARTICULARITE DU SH1106
-=====================================================================
-Ce contrôleur possède 132 colonnes de mémoire pour une dalle de 128
-pixels : les deux premières colonnes ne sont pas visibles. Il faut donc
-décaler l'écriture de 2 colonnes, sinon toute l'image est décalée.
-C'est le rôle de la commande 0x02 dans tick().
+Particularité du SH1106 : il possède 132 colonnes de mémoire pour une
+dalle de 128 pixels. Il faut décaler l'écriture de 2 colonnes, sinon toute
+l'image est décalée. C'est le rôle de la commande 0x02 dans tick().
 """
 
 from time import ticks_ms, ticks_diff, ticks_add
 import config as C
-from profiles import PROFILES, TITLES
+
+# Géométrie de la vue principale
+_TITRE_H = 11                       # hauteur du bandeau de titre
+_LIGNES_Y = (14, 29, 44)            # ligne de base des trois rangées
+_COLONNES_X = (0, 64)               # deux colonnes de 64 pixels
+_SEPARATEUR_Y = 54
+_PASTILLES_Y = 57
 
 
 class Display:
 
     def __init__(self):
         self.oled = None
-        self.profile_name = C.DEFAULT_PROFILE
+        self.titre = ""
+        self.macros = []
+        self.etat = ""
+        self.pastilles = (0, 0)     # (index du profil courant, nombre total)
         self.splash_until = None
-        self.pending_page = 8      # 8 = rien à envoyer ; 0 = tout à renvoyer
+        self.pending_page = 8       # 8 = rien à envoyer ; 0 = tout à renvoyer
         if not C.OLED_ENABLED:
             return
         try:
@@ -1535,91 +2292,172 @@ class Display:
             # au lieu de bloquer indéfiniment toute la boucle principale.
             bus = I2C(C.I2C_ID, sda=Pin(C.OLED_SDA), scl=Pin(C.OLED_SCL),
                       freq=C.I2C_FREQ, timeout=C.I2C_TIMEOUT_US)
-            addresses = bus.scan()
-            print("OLED I2C :", [hex(a) for a in addresses])
-            address = next((a for a in (0x3c, 0x3d) if a in addresses), None)
-            if address is None:
+            adresses = bus.scan()
+            print("OLED I2C :", [hex(a) for a in adresses])
+            adresse = next((a for a in (0x3c, 0x3d) if a in adresses), None)
+            if adresse is None:
                 raise OSError("SH1106 absent (0x3C/0x3D)")
-            self.oled = SH1106_I2C(128, 64, bus, addr=address, rotate=0)
+            self.oled = SH1106_I2C(128, 64, bus, addr=adresse, rotate=0)
             self.oled.contrast(C.OLED_CONTRAST)
         except Exception as exc:
             self.disable(exc)
 
-    def disable(self, error):
+    def disable(self, erreur):
         """Abandonne l'écran sans arrêter le macropad."""
-        print("OLED desactive :", error)
+        print("OLED desactive :", erreur)
         self.oled = None
 
-    def message(self, line1, line2=""):
-        """Deux lignes de texte brut : SAFE MODE, erreurs, diagnostic."""
+    # ------------------------------------------------------------------
+    # Briques de dessin
+    # ------------------------------------------------------------------
+    def _bandeau(self, texte, droite=""):
+        """Bandeau supérieur en vidéo inversée."""
+        o = self.oled
+        o.fill_rect(0, 0, 128, _TITRE_H, 1)      # rectangle plein
+        o.text(texte[:13], 2, 2, 0)              # texte en noir sur blanc
+        if droite:
+            o.text(droite[:4], 128 - 8 * len(droite[:4]) - 2, 2, 0)
+
+    def _pastille_touche(self, x, y, numero, label):
+        """Une case : le numéro en vidéo inversée, puis le libellé."""
+        o = self.oled
+        o.fill_rect(x + 1, y - 1, 9, 10, 1)
+        o.text(str(numero), x + 2, y, 0)
+        o.text(label[:6], x + 12, y, 1)
+
+    def _carrousel(self):
+        """Petits carrés indiquant la position dans la liste des profils."""
+        o = self.oled
+        index, total = self.pastilles
+        for i in range(min(total, 14)):
+            x = 2 + i * 8
+            if i == index:
+                o.fill_rect(x, _PASTILLES_Y, 5, 5, 1)      # profil courant
+            else:
+                o.rect(x, _PASTILLES_Y, 5, 5, 1)
+
+    def _vue_principale(self):
+        o = self.oled
+        o.fill(0)
+        self._bandeau(self.titre, self.etat)
+        for index in range(min(len(self.macros), 6)):
+            x = _COLONNES_X[index % 2]
+            y = _LIGNES_Y[index // 2]
+            self._pastille_touche(x, y, index + 1, self.macros[index][0])
+        o.hline(0, _SEPARATEUR_Y, 128, 1)
+        self._carrousel()
+
+    def _texte_double(self, texte):
+        """Écrit un texte en police doublée, centré.
+
+        MicroPython ne fournit qu'une police 8x8. Pour l'agrandir on dessine
+        le texte dans une petite image en mémoire, puis on recopie chaque
+        pixel sous forme d'un carré de 2x2 sur l'écran.
+        """
+        import framebuf
+        o = self.oled
+        o.fill(0)
+        echelle = 2 if len(texte) <= 8 else 1
+        largeur = len(texte) * 8
+        tampon = framebuf.FrameBuffer(bytearray(128), 128, 8,
+                                      framebuf.MONO_HLSB)
+        tampon.text(texte, 0, 0, 1)
+        x0 = max(0, (128 - largeur * echelle) // 2)
+        y0 = (64 - 8 * echelle) // 2
+        for x in range(min(128, largeur)):
+            for y in range(8):
+                if tampon.pixel(x, y):
+                    o.fill_rect(x0 + x * echelle, y0 + y * echelle,
+                                echelle, echelle, 1)
+
+    # ------------------------------------------------------------------
+    # API publique
+    # ------------------------------------------------------------------
+    def message(self, *lignes):
+        """Quelques lignes de texte brut : SAFE MODE, erreurs, diagnostic."""
         if not self.oled:
             return
         try:
             self.splash_until = None
-            self.oled.fill(0)                    # efface l'image en mémoire
-            self.oled.text(line1[:16], 0, 20)    # 16 caractères par ligne max
-            self.oled.text(line2[:16], 0, 36)
-            self.pending_page = 0                # demande le réaffichage
+            self.oled.fill(0)
+            y = 4
+            for ligne in lignes[:6]:
+                self.oled.text(str(ligne)[:16], 2, y, 1)
+                y += 10
+            self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
 
-    def profile(self, name, now, splash=False):
-        """Affiche un profil.
-
-        splash=True affiche d'abord son nom en gros pendant une demi-seconde,
-        puis on revient automatiquement à la liste des quatre touches.
-        """
-        self.profile_name = name
+    def config_screen(self, ssid, mot_de_passe, adresse):
+        """Écran du mode configuration : tout ce qu'il faut pour se connecter."""
         if not self.oled:
             return
         try:
             o = self.oled
             o.fill(0)
-            title = TITLES.get(name, name)
+            self._bandeau("MODE CONFIG", "WIFI")
+            o.text("Reseau :", 2, 15, 1)
+            o.text(str(ssid)[:16], 2, 25, 1)
+            o.text("Cle :", 2, 36, 1)
+            o.text(str(mot_de_passe)[:16], 2, 46, 1)
+            o.hline(0, _SEPARATEUR_Y, 128, 1)
+            o.text(str(adresse)[:16], 2, 56, 1)
+            self.splash_until = None
+            self.pending_page = 0
+        except Exception as exc:
+            self.disable(exc)
 
+    def set_etat(self, etat):
+        """Petit texte en haut à droite : HID, SAFE, ..."""
+        self.etat = etat
+        if self.oled and self.splash_until is None:
+            try:
+                self._vue_principale()
+                self.pending_page = 0
+            except Exception as exc:
+                self.disable(exc)
+
+    def profile(self, titre, macros, now, index=0, total=1, splash=False):
+        """Affiche un profil.
+
+        splash=True montre d'abord son nom en gros pendant une demi-seconde,
+        puis on revient automatiquement à la vue à six touches.
+        """
+        self.titre = titre
+        self.macros = list(macros)
+        self.pastilles = (index, total)
+        if not self.oled:
+            return
+        try:
             if splash:
-                # MicroPython ne fournit qu'une seule police, en 8x8 pixels.
-                # Pour l'agrandir, on dessine le texte dans une petite image
-                # en mémoire, puis on recopie chaque pixel sous forme d'un
-                # carré de 2x2 pixels sur l'écran.
-                import framebuf
-                scale = 2 if len(title) <= 8 else 1
-                buf = framebuf.FrameBuffer(bytearray(128), 128, 8,
-                                           framebuf.MONO_HLSB)
-                buf.text(title, 0, 0, 1)
-                x0 = max(0, (128 - len(title) * 8 * scale) // 2)   # centrage
-                for x in range(min(128, len(title) * 8)):
-                    for y in range(8):
-                        if buf.pixel(x, y):
-                            o.fill_rect(x0 + x * scale, 24 + y * scale,
-                                        scale, scale, 1)
+                self._texte_double(titre[:8])
                 self.splash_until = ticks_add(now, C.PROFILE_SPLASH_MS)
             else:
-                o.text(title[:16], 0, 0)
-                o.hline(0, 11, 128, 1)
-                # Une ligne par touche : "B1 EXPLORER" tient entièrement,
-                # pas besoin d'abréviations difficiles à relire.
-                for i, macro in enumerate(PROFILES[name]):
-                    o.text("B%d %s" % (i + 1, macro[0]), 0, 16 + i * 12)
+                self._vue_principale()
                 self.splash_until = None
-
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
 
     def tick(self, now):
-        """Envoie au plus UNE page à l'écran. Appelé à chaque tour de boucle."""
+        """Envoie au plus UNE page. Appelé à chaque tour de boucle."""
         if not self.oled:
             return
         if self.splash_until is not None and ticks_diff(now, self.splash_until) >= 0:
-            self.profile(self.profile_name, now)     # fin du nom en gros
+            self.splash_until = None
+            try:
+                self._vue_principale()
+                self.pending_page = 0
+            except Exception as exc:
+                self.disable(exc)
+                return
         if not self.oled or self.pending_page >= 8:
             return
         try:
             page = self.pending_page
             self.oled.write_cmd(0xB0 | page)   # choisir la bande n° page
-            self.oled.write_cmd(0x02)          # colonne de départ, 4 bits bas
-            self.oled.write_cmd(0x10)          # colonne de départ, 4 bits hauts
+            self.oled.write_cmd(0x02)          # colonne de départ, poids faibles
+            self.oled.write_cmd(0x10)          # colonne de départ, poids forts
             #        ^ 0x02 = le décalage de 2 colonnes propre au SH1106
             self.oled.write_data(
                 self.oled.displaybuf[page * 128:(page + 1) * 128])
@@ -1632,7 +2470,7 @@ class Display:
         """Envoie l'image entière d'un coup.
 
         Réservé aux moments où l'on peut se permettre d'attendre : avant que
-        les touches ne deviennent actives, et au retour au REPL en SAFE MODE.
+        les touches ne deviennent actives, en SAFE MODE, en mode config.
         """
         for _ in range(8):
             self.tick(ticks_ms())

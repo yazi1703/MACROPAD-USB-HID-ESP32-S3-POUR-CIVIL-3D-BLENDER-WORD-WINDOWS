@@ -28,6 +28,8 @@ ORDRE = [
     "runtime.py",
     "inputs.py",
     "layouts.py",
+    "store.py",
+    "portal.py",
     "hid_keyboard.py",
     "display.py",
     "led.py",

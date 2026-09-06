@@ -12,5 +12,6 @@ est voulu (aucune usure de la flash, aucun état bizarre qui survivrait).
 """
 
 safe_mode = False    # True si B1 était maintenu au démarrage
+config_mode = False  # True si B2 était maintenu au démarrage (WiFi + page web)
 interface = None     # l'objet clavier USB, ou None si HID désactivé
 hid_error = None     # message d'erreur si la création du clavier a échoué

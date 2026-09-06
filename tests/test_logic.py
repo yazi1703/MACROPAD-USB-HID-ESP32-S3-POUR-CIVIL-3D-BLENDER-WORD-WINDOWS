@@ -140,7 +140,9 @@ class Logic(unittest.TestCase):
         runtime.safe_mode=False
     def test_oled_absent_nonfatal(self):
         from display import Display
-        d=Display(); self.assertIsNone(d.oled); d.profile('WORD',0); d.tick(0)
+        d=Display(); self.assertIsNone(d.oled)
+        d.profile('WORD', [('BOLD', [('combo', ('CTRL','B'))])], 0, 0, 4)
+        d.tick(0); d.set_etat('HID'); d.config_screen('X','Y','1.2.3.4')
     def test_vendor_report_bytes(self):
         from usb.device.keyboard import KeyboardInterface
         class Capture(KeyboardInterface):
@@ -299,8 +301,9 @@ class Corrections(unittest.TestCase):
         controls = Inputs()
         noms = [name for name, _ in controls.sequence]
         self.assertEqual(noms[0], 'ESC')           # ESC toujours lu en premier
-        self.assertEqual(noms, ['ESC', 'B1', 'B2', 'B3', 'B4',
-                                'PREVIOUS', 'NEXT'])
+        attendu = ['ESC'] + ['B%d' % (i + 1) for i in range(len(C.BUTTON_PINS))]
+        attendu += ['PREVIOUS', 'NEXT']
+        self.assertEqual(noms, attendu)
 
 
 
@@ -353,6 +356,328 @@ class BugChangementDeProfil(unittest.TestCase):
         k.tick(20)                      # rebranche : l'hote reconfigure tout
         self.assertFalse(k.fault)
         self.assertTrue(k.submit([('text', 'a')]))
+
+
+
+class V1SixTouchesEtConfigWeb(unittest.TestCase):
+    """Tests des nouveautes V1 : six touches, profils en JSON, page web."""
+
+    def setUp(self):
+        clock[0] = 0
+        Pin.levels = {}
+        self.fichier = C.PROFILES_FILE
+        try:
+            import os
+            os.remove(self.fichier)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    # --- six touches ---------------------------------------------------
+    def test_six_touches_partout(self):
+        import profiles as P
+        self.assertEqual(len(C.BUTTON_PINS), 6)
+        for nom in C.PROFILES_ORDER:
+            self.assertEqual(len(P.PROFILES[nom]), 6, nom)
+
+    def test_libelles_tiennent_sur_l_ecran(self):
+        import profiles as P
+        for nom, macros in P.PROFILES.items():
+            for label, _ in macros:
+                self.assertLessEqual(len(label), P.LABEL_MAX,
+                                     "%s : '%s'" % (nom, label))
+
+    def test_toutes_les_macros_usine_sont_tapables(self):
+        import profiles as P
+        for nom, macros in P.PROFILES.items():
+            for label, actions in macros:
+                compile_actions(actions, C.KEYBOARD_LAYOUT)
+
+    def test_rotation_sur_six_touches(self):
+        from profiles import ProfileManager
+        import store
+        profils, ordre, titres, origine = store.charger(6)
+        self.assertEqual(origine, 'usine')
+        p = ProfileManager(ordre, C.DEFAULT_PROFILE, profils, 6)
+        self.assertEqual(len(p.macros), 6)
+        self.assertEqual([p.move(1) for _ in range(4)],
+                         ['WORD', 'WINDOWS', 'BLENDER', 'CIVIL3D'])
+
+    # --- enregistrement JSON --------------------------------------------
+    def test_aller_retour_json(self):
+        import store
+        profils, ordre = store.defauts()
+        titres = {'CIVIL3D': 'CIVIL 3D'}
+        ok, raison = store.enregistrer(profils, ordre, titres, 6)
+        self.assertTrue(ok, raison)
+        relus, ordre2, titres2, origine = store.charger(6)
+        self.assertEqual(origine, 'fichier')
+        self.assertEqual(ordre2, ordre)
+        # Les macros relues doivent produire exactement les memes frappes.
+        for nom in ordre:
+            for i in range(6):
+                self.assertEqual(
+                    compile_actions(relus[nom][i][1], 'FR_AZERTY'),
+                    compile_actions(profils[nom][i][1], 'FR_AZERTY'),
+                    '%s B%d' % (nom, i + 1))
+
+    def test_macro_intapable_refusee(self):
+        import store
+        profils, ordre = store.defauts()
+        profils['CIVIL3D'][0] = ('KO', [('key', 'TOUCHE_QUI_NEXISTE_PAS')])
+        ok, raison = store.enregistrer(profils, ordre, {}, 6)
+        self.assertFalse(ok)
+        self.assertIn('CIVIL3D', raison)
+
+    def test_libelle_trop_long_refuse(self):
+        import store
+        profils, ordre = store.defauts()
+        profils['WORD'][0] = ('BEAUCOUPTROPLONG', [('key', 'A')])
+        ok, raison = store.enregistrer(profils, ordre, {}, 6)
+        self.assertFalse(ok)
+
+    def test_fichier_corrompu_repli_sur_usine(self):
+        import store
+        with open(C.PROFILES_FILE, 'w') as f:
+            f.write('{ ceci n est pas du JSON')
+        profils, ordre, titres, origine = store.charger(6)
+        self.assertEqual(origine, 'usine')      # ne doit PAS planter
+        self.assertEqual(len(profils['CIVIL3D']), 6)
+
+    def test_fichier_incoherent_repli_sur_usine(self):
+        import store, json as J
+        # JSON valide, mais une macro impossible a taper.
+        data = {'version': 1, 'ordre': ['X'], 'profils': {'X': {'titre': 'X',
+                'touches': [{'label': 'A', 'type': 'key', 'valeur': 'INCONNU'}] * 6}}}
+        with open(C.PROFILES_FILE, 'w') as f:
+            J.dump(data, f)
+        profils, ordre, titres, origine = store.charger(6)
+        self.assertEqual(origine, 'usine')
+
+    def test_conversion_combo(self):
+        import store
+        self.assertEqual(store.action_vers_json([('combo', ('CTRL', 'SHIFT', 'ESC'))]),
+                         ('combo', 'CTRL+SHIFT+ESC'))
+        self.assertEqual(store.action_depuis_json('combo', 'CTRL+SHIFT+ESC'),
+                         [('combo', ('CTRL', 'SHIFT', 'ESC'))])
+        self.assertEqual(store.action_depuis_json('none', ''), [])
+
+    # --- affichage six touches ------------------------------------------
+    def test_affichage_six_touches_sans_debordement(self):
+        # Faux ecran : il ne dessine rien, il compte les ecritures qui
+        # sortiraient des 128x64 pixels reels de la dalle.
+        class EcranFactice:
+            def __init__(self):
+                self.displaybuf = bytearray(1024)
+                self.out_of_bounds = 0
+                self.pages = []
+
+            def _v(self, x, y, w=1, h=1):
+                if x < 0 or y < 0 or x + w > 128 or y + h > 64:
+                    self.out_of_bounds += 1
+
+            def fill(self, c):
+                pass
+
+            def fill_rect(self, x, y, w, h, c):
+                self._v(x, y, w, h)
+
+            def rect(self, x, y, w, h, c):
+                self._v(x, y, w, h)
+
+            def hline(self, x, y, w, c):
+                self._v(x, y, w, 1)
+
+            def vline(self, x, y, h, c):
+                self._v(x, y, 1, h)
+
+            def text(self, s, x, y, c=1):
+                self._v(x, y, 8 * len(s), 8)
+
+            def write_cmd(self, c):
+                pass
+
+            def write_data(self, b):
+                self.pages.append(bytes(b))
+
+        # Faux framebuf, utilise par l'agrandissement de police du splash.
+        fb = types.ModuleType('framebuf')
+
+        class _FB:
+            def __init__(self, buf, w, h, fmt):
+                self.w, self.h, self.px = w, h, set()
+
+            def fill(self, c):
+                self.px.clear()
+
+            def text(self, s, x, y, c=1):
+                for i, ch in enumerate(s):
+                    for r in range(8):
+                        for col in range(7):
+                            if (r + col + ord(ch)) % 3 == 0:
+                                self.px.add((x + i * 8 + col, y + r))
+
+            def pixel(self, x, y):
+                return 1 if (x, y) in self.px else 0
+
+        fb.FrameBuffer = _FB
+        fb.MONO_HLSB = 3
+        fb.MONO_VLSB = 0
+        sys.modules['framebuf'] = fb
+
+        from display import Display
+        import profiles as P
+        ecran = Display()
+        ecran.oled = EcranFactice()
+
+        for index, nom in enumerate(C.PROFILES_ORDER):
+            ecran.profile(P.TITLES.get(nom, nom), P.PROFILES[nom], clock[0],
+                          index, len(C.PROFILES_ORDER), True)
+            for _ in range(C.PROFILE_SPLASH_MS + 100):
+                ecran.tick(clock[0])
+                clock[0] += 1
+            ecran.set_etat('HID')
+        ecran.config_screen('MACROPAD', 'macropad2026', '192.168.4.1')
+        ecran.flush_startup()
+        self.assertEqual(ecran.out_of_bounds if hasattr(ecran, 'out_of_bounds')
+                         else ecran.oled.out_of_bounds, 0,
+                         'debordement hors des 128x64 pixels')
+        self.assertGreater(len(ecran.oled.pages), 8)
+
+
+
+class PageWebDeConfiguration(unittest.TestCase):
+    """Tests du serveur web du mode configuration, sans WiFi ni socket reel.
+
+    On fabrique un faux client HTTP et on fait traiter de vraies requetes
+    par le code du portail.
+    """
+
+    def setUp(self):
+        clock[0] = 0
+        try:
+            import os
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    class FauxClient:
+        """Imite juste ce que portal.py utilise d'une socket."""
+
+        def __init__(self, requete):
+            self.entree = requete
+            self.pos = 0
+            self.sortie = b""
+
+        def readline(self):
+            fin = self.entree.find(b"\n", self.pos)
+            if fin == -1:
+                ligne = self.entree[self.pos:]
+                self.pos = len(self.entree)
+            else:
+                ligne = self.entree[self.pos:fin + 1]
+                self.pos = fin + 1
+            return ligne
+
+        def read(self, taille):
+            bloc = self.entree[self.pos:self.pos + taille]
+            self.pos += len(bloc)
+            return bloc
+
+        def write(self, data):
+            self.sortie += data
+
+        def settimeout(self, t):
+            pass
+
+        def close(self):
+            pass
+
+    def _requete(self, methode, chemin, corps=b""):
+        import portal
+        entete = "%s %s HTTP/1.1\r\nHost: 192.168.4.1\r\n" % (methode, chemin)
+        if corps:
+            entete += "Content-Length: %d\r\n" % len(corps)
+        entete += "\r\n"
+        client = self.FauxClient(entete.encode() + corps)
+        portal.Portail(6)._traiter(client)
+        return client.sortie
+
+    def test_page_html_servie(self):
+        sortie = self._requete("GET", "/")
+        self.assertIn(b"200 OK", sortie)
+        self.assertIn(b"text/html", sortie)
+        self.assertIn(b"Macropad", sortie)
+        self.assertIn(b"/api/profils", sortie)
+
+    def test_api_renvoie_les_profils_usine(self):
+        import json as J
+        sortie = self._requete("GET", "/api/profils")
+        self.assertIn(b"application/json", sortie)
+        data = J.loads(sortie.split(b"\r\n\r\n", 1)[1])
+        self.assertEqual(data["touches"], 6)
+        self.assertEqual(data["origine"], "usine")
+        self.assertEqual(data["ordre"], list(C.PROFILES_ORDER))
+        civil = data["profils"]["CIVIL3D"]["touches"]
+        self.assertEqual(len(civil), 6)
+        self.assertEqual(civil[0]["valeur"], "_MATCHPROP")
+        self.assertEqual(civil[0]["type"], "text_enter")
+        # Les combinaisons sont lisibles dans le formulaire.
+        self.assertEqual(civil[2]["valeur"], "CTRL+Z")
+
+    def test_enregistrement_valide(self):
+        import json as J
+        sortie = self._requete("GET", "/api/profils")
+        data = J.loads(sortie.split(b"\r\n\r\n", 1)[1])
+        data["profils"]["CIVIL3D"]["touches"][0] = {
+            "label": "TALUS", "type": "text_enter", "valeur": "_GRADING"}
+        reponse = self._requete("POST", "/api/profils",
+                                J.dumps(data).encode())
+        resultat = J.loads(reponse.split(b"\r\n\r\n", 1)[1])
+        self.assertTrue(resultat["ok"], resultat.get("raison"))
+
+        # La modification doit etre relue telle quelle par le firmware.
+        import store
+        profils, ordre, titres, origine = store.charger(6)
+        self.assertEqual(origine, "fichier")
+        self.assertEqual(profils["CIVIL3D"][0][0], "TALUS")
+        frappes = compile_actions(profils["CIVIL3D"][0][1], "FR_AZERTY")
+        self.assertEqual(len(frappes), len("_GRADING") + 1)   # + ENTREE
+        self.assertEqual(frappes[0], (37,))                   # "_" en AZERTY
+
+    def test_enregistrement_refuse_une_macro_intapable(self):
+        import json as J
+        sortie = self._requete("GET", "/api/profils")
+        data = J.loads(sortie.split(b"\r\n\r\n", 1)[1])
+        data["profils"]["WORD"]["touches"][0] = {
+            "label": "KO", "type": "combo", "valeur": "CTRL+TOUCHE_BIDON"}
+        reponse = self._requete("POST", "/api/profils", J.dumps(data).encode())
+        resultat = J.loads(reponse.split(b"\r\n\r\n", 1)[1])
+        self.assertFalse(resultat["ok"])
+        self.assertIn("WORD", resultat["raison"])
+        # Rien ne doit avoir ete ecrit : on reste sur les profils d'usine.
+        import store
+        self.assertEqual(store.charger(6)[3], "usine")
+
+    def test_enregistrement_refuse_un_json_casse(self):
+        import json as J
+        reponse = self._requete("POST", "/api/profils", b"{pas du json")
+        resultat = J.loads(reponse.split(b"\r\n\r\n", 1)[1])
+        self.assertFalse(resultat["ok"])
+
+    def test_retour_usine(self):
+        import json as J, store
+        profils, ordre = store.defauts()
+        store.enregistrer(profils, ordre, {}, 6)
+        self.assertEqual(store.charger(6)[3], "fichier")
+        self._requete("POST", "/api/usine")
+        self.assertEqual(store.charger(6)[3], "usine")
+
+    def test_chemin_inconnu(self):
+        self.assertIn(b"404", self._requete("GET", "/nimportequoi"))
 
 
 if __name__=='__main__': unittest.main(verbosity=2)

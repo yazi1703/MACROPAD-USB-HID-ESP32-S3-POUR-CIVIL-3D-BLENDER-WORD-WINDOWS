@@ -18,7 +18,8 @@ capacitives pour changer de profil, un écran OLED SH1106, et un gros bouton
 | vérifier le brochage broche par broche | [`docs/02-cablage.md`](docs/02-cablage.md) |
 | cocher que tout est bon | [`docs/04-checklist.md`](docs/04-checklist.md) |
 | savoir ce qui a été corrigé et pourquoi | [`docs/06-corrections.md`](docs/06-corrections.md) |
-| modifier les macros | `device/profiles.py` |
+| **modifier les macros sans coder** | maintenir B2 au RESET, puis `http://192.168.4.1` — voir [`docs/07`](docs/07-mode-configuration.md) |
+| modifier les macros d'usine | `device/profiles.py` |
 | modifier les broches ou les réglages | `device/config.py` |
 
 ---
@@ -40,6 +41,20 @@ capacitives pour changer de profil, un écran OLED SH1106, et un gros bouton
    maintenir **B1 au démarrage** coupe le clavier quoi qu'il arrive
    (SAFE MODE) : c'est ta porte de sortie si une macro devient folle.
 
+## Les trois modes de démarrage
+
+Ce que tu maintiens pendant le RESET décide de tout :
+
+| Maintenu au RESET | Mode | Clavier USB |
+|---|---|---|
+| rien | **macropad** — usage normal | actif |
+| **B1** | **SAFE MODE** — écran d'alerte, REPL libre | jamais créé |
+| **B2** | **MODE CONFIG** — WiFi + page web sur `http://192.168.4.1` | jamais créé |
+
+Le mode configuration permet de modifier profils et macros depuis un
+navigateur, PC ou téléphone, sans Thonny et sans toucher au code. Détail
+complet : [`docs/07-mode-configuration.md`](docs/07-mode-configuration.md).
+
 ---
 
 ## Ce que ça fait
@@ -56,6 +71,11 @@ BLENDER  →  CIVIL3D  →  WORD  →  WINDOWS  →  BLENDER
 | **B2** | `R` | `_HATCH` + Entrée | Ctrl+I | Alt+Tab |
 | **B3** | `S` | Ctrl+Z | Ctrl+S | Win+D |
 | **B4** | `Tab` | `_ISOLATEOBJECTS` + Entrée | Ctrl+Z | Ctrl+Maj+Échap |
+| **B5** | `E` | `_ZOOM` + Entrée | Ctrl+U | Win+V |
+| **B6** | Ctrl+Z | Ctrl+S | Ctrl+Y | Win+Maj+S |
+
+Ce ne sont que les valeurs d'usine : **tout se change depuis la page web**
+(voir ci-dessous), sans toucher au code.
 
 Le gros bouton **ESC** agit dans tous les profils : il annule la macro en
 cours, envoie Échap, et déclenche un flash lumineux.
@@ -81,7 +101,9 @@ cours, envoie Échap, et déclenche un flash lumineux.
 │   ├── boot.py                   SAFE MODE, création du clavier USB
 │   ├── main.py                   la boucle principale
 │   ├── config.py                 tous les réglages
-│   ├── profiles.py               toutes les macros
+│   ├── profiles.py               macros d'usine (repli)
+│   ├── store.py                  lecture/écriture de profils.json
+│   ├── portal.py                 point d'accès WiFi + page web
 │   ├── layouts.py                AZERTY / QWERTY, traduction des caractères
 │   ├── hid_keyboard.py           envoi des rapports USB, file d'attente
 │   ├── inputs.py                 anti-rebond des entrées
@@ -107,7 +129,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 38 tests ... OK
+→ Ran 59 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport

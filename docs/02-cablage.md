@@ -21,6 +21,8 @@ Contraintes de l'ESP32-S3 (source : documentation GPIO d'ESP-IDF, fichier
 | GPIO | Fonction retenue | Strapping ? | Flash/PSRAM ? | USB ? | Verdict |
 |---|---|---|---|---|---|
 | 4 | B1 (+ SAFE MODE) | non | non | non | **OK** |
+| 12 | B5 | non | non | non | **OK** (*) |
+| 13 | B6 | non | non | non | **OK** (*) |
 | 5 | B2 | non | non | non | **OK** |
 | 6 | B3 | non | non | non | **OK** |
 | 7 | B4 | non | non | non | **OK** |
@@ -31,6 +33,13 @@ Contraintes de l'ESP32-S3 (source : documentation GPIO d'ESP-IDF, fichier
 | 14 | Switch ESC | non | non | non | **OK** |
 | 15 | PWM LED ESC | non | non | non | **OK** (*) |
 | 19 / 20 | USB D- / D+ | — | — | **oui** | **NE RIEN BRANCHER** |
+
+(*) GPIO12 et GPIO13 sont les deux broches ajoutees pour passer de quatre a
+six touches. Elles n'ont ni strapping, ni flash, ni PSRAM, ni USB. **Verifie
+tout de meme sur ta carte** qu'elles ne sont pas prises par le connecteur
+camera : sur ce type de clone, la nappe camera occupe plusieurs GPIO. Replis
+surs en cas de conflit : GPIO1, GPIO2, GPIO21, GPIO47, GPIO48. Il suffit alors
+de changer un numero dans `BUTTON_PINS` (config.py), rien d'autre.
 
 (*) GPIO15 porte la fonction IO MUX `U0RTS`, mais MicroPython n'utilise aucun
 controle de flux materiel sur l'UART0 : la broche est totalement libre en GPIO.
