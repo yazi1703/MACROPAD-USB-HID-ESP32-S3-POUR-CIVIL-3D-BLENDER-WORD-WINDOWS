@@ -169,6 +169,109 @@ loin du watt et de tout échauffement.
 
 ---
 
+## 5.4 bis — Variante avec un MOSFET IRFZ44N à la place du BC547
+
+Si tu as monté un **IRFZ44N** plutôt qu'un BC547, la topologie est la même
+(interrupteur côté masse), mais **trois différences importantes**.
+
+```
+   +5 V
+    |
+  [330 Ω]
+    |
+   LED
+    |
+    D  (drain = broche du MILIEU, et aussi la patte métallique)
+    |
+G --|  IRFZ44N          G = broche de GAUCHE
+    |                   S = broche de DROITE
+    S
+    |
+   GND
+
+   GPIO15 ---[220 Ω]---+--- G
+                       |
+                    [10 kΩ]        <-- INDISPENSABLE avec un MOSFET
+                       |
+                      GND
+```
+
+### Différence 1 — la résistance de 10 kΩ n'est plus optionnelle
+
+La grille d'un MOSFET est un **condensateur isolé** : elle ne consomme
+aucun courant, mais elle **retient sa charge**. Pendant le RESET et le
+démarrage de l'ESP32, GPIO15 est en haute impédance : la grille garde alors
+la tension qu'elle avait, et la LED peut rester allumée ou clignoter au
+hasard.
+
+Avec un BC547 c'était un confort. Avec un MOSFET, **c'est obligatoire** :
+10 kΩ entre la grille et GND.
+
+### Différence 2 — l'IRFZ44N n'est pas un modèle « logic level »
+
+C'est le vrai point faible de ce choix. Sa fiche technique donne une
+tension de seuil `Vgs(th)` comprise entre **2,0 V et 4,0 V**, et sa
+résistance à l'état passant est spécifiée pour **Vgs = 10 V**.
+
+Or l'ESP32 ne fournit que **3,3 V**. Selon l'exemplaire que tu as :
+
+* seuil bas (2,0 V) → il conduit très correctement, tout va bien ;
+* seuil haut (4,0 V) → à 3,3 V il est pratiquement **bloqué**, et la LED
+  reste éteinte ou très sombre.
+
+C'est une loterie, et deux transistors du même sachet peuvent se comporter
+différemment. **Bonne nouvelle** : on ne demande que 8 mA. Même partiellement
+ouvert, un IRFZ44N laisse en général passer largement plus que cela, donc
+ça fonctionne le plus souvent. Et tant qu'il peut écouler 8 mA avec moins
+de 2,7 V à ses bornes, c'est la résistance de 330 Ω qui fixe le courant :
+la luminosité est alors exactement celle prévue.
+
+**Aucun risque de destruction** dans les deux cas : à 8 mA, même s'il
+travaille en régime linéaire, il dissipe moins de 20 mW pour un boîtier
+prévu pour plusieurs dizaines de watts.
+
+Donc : **teste, et regarde**. Si la LED s'allume franchement et que les
+paliers 5 % / 20 % / 100 % du test 6 sont bien distincts, garde ce montage.
+Si elle reste sombre ou éteinte, deux solutions :
+
+1. revenir au **BC547** (330 Ω / 2,2 kΩ / 10 kΩ), qui lui n'a aucun seuil
+   problématique à 3,3 V ;
+2. utiliser un MOSFET **logic level** si tu en as un : IRLZ44N, IRL540,
+   AO3400, 2N7000… Le `L` de IRLZ44N signifie justement « logic level ».
+
+Pour ce montage à 8 mA, le BC547 reste le choix le plus sûr : l'IRFZ44N est
+prévu pour 49 A, il est surdimensionné d'un facteur 6000.
+
+### Différence 3 — identifier les broches, sans se tromper
+
+Sur un IRFZ44N en boîtier TO-220, **face marquée vers toi, pattes vers le
+bas**, l'ordre est :
+
+```
+   G   D   S
+   |   |   |
+  gauche milieu droite
+```
+
+**Vérifie-le au multimètre plutôt que de me croire sur parole**, c'est
+immédiat :
+
+* **Le drain est relié à la patte métallique.** Mets le multimètre en
+  continuité entre le dissipateur et chaque broche : celle qui « bipe » est
+  le **drain**, et c'est normalement celle du milieu. C'est le test le plus
+  rapide et le plus fiable.
+* **La grille est isolée** : en position test de diode, elle ne conduit
+  vers aucune autre broche, dans aucun sens.
+* **La source** est la broche restante. Un MOSFET N possède une diode
+  interne source → drain : pointe **rouge sur la source**, pointe noire sur
+  le drain, tu lis environ 0,5 V. Dans l'autre sens, rien.
+
+Attention aussi : comme le drain est relié au dissipateur, **la patte
+métallique est au potentiel de la cathode de la LED**. Ne la visse pas sur
+quelque chose de conducteur relié à la masse.
+
+---
+
 ## 5.5 Le câble du bouton ESC : le point le plus risqué du montage
 
 Ton câble porte quatre fils : **+5 V, GND, GPIO14, GPIO15**. Le danger est
