@@ -26,6 +26,7 @@ de `device/`, pas ce document.
 - [`device/hid_keyboard.py`](#devicehidkeyboardpy)
 - [`device/display.py`](#devicedisplaypy)
 - [`device/led.py`](#deviceledpy)
+- [`device/rgb.py`](#devicergbpy)
 - [`device/diag.py`](#devicediagpy)
 - [`device/sh1106.py`](#devicesh1106py)
 - [`device/lib/usb/device/__init__.py`](#devicelibusbdeviceinitpy)
@@ -38,7 +39,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`245 lignes - sha256 a38a88b54622025d`
+`292 lignes - sha256 17b4dd0dc77d48e4`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -213,6 +214,53 @@ STATS_SAVE_EVERY = 25
 # visible. Le bandeau inverse du haut est exactement le pire cas.
 # Apres un moment sans appui on baisse le contraste, puis on eteint.
 # N'importe quelle touche reveille l'ecran instantanement.
+# =====================================================================
+# LES LED RGB SOUS LES TOUCHES
+# =====================================================================
+# Livre a False : rien ne s'allume tant que tu n'as pas cable et choisi
+# ton type de LED. Lis docs/10-led-rgb.md AVANT de brancher quoi que ce
+# soit - il y a une histoire de courant qui peut faire redemarrer la
+# carte en pleine frappe.
+RGB_ENABLED = False
+
+# "WS2812" : LED adressables, un seul fil de donnees, une couleur par
+#            touche. C'est ce qu'il faut pour eclairer six touches.
+# "PWM"    : UNE LED RGB ordinaire a quatre pattes, sur trois broches.
+#            Une seule couleur pour tout le macropad.
+RGB_TYPE = "WS2812"
+
+# --- montage WS2812 ---------------------------------------------------
+RGB_PIN = 16                # fil de donnees (via 330 a 470 ohms en serie)
+RGB_COUNT = 6               # une LED par touche
+RGB_ORDRE = "GRB"           # ordre des couleurs de TES LED (voir la doc)
+
+# --- montage PWM (une seule LED RGB) ----------------------------------
+RGB_PIN_R = 16
+RGB_PIN_V = 17
+RGB_PIN_B = 18
+RGB_ANODE_COMMUNE = True    # patte commune au + : True. Au GND : False.
+
+# --- luminosite : C'EST LA SECURITE COURANT ---------------------------
+# Chaque canal est multiplie par RGB_LUMINOSITE / 255 avant d'etre
+# envoye. A 40, six WS2812 tirent environ 60 mA au total. A 255, elles
+# en tireraient 360 : le 5 V d'un port USB s'effondre, la carte redemarre
+# et le clavier disparait. Ne monte pas ce chiffre sans mesurer.
+RGB_LUMINOSITE = 40
+
+# --- couleurs ---------------------------------------------------------
+# Un profil = une couleur. Tu sais ou tu es sans lire l'ecran.
+RGB_COULEURS = {
+    "BLENDER": (255, 110, 0),      # orange Blender
+    "CIVIL3D": (0, 160, 255),      # bleu cyan
+    "WORD":    (40, 70, 255),      # bleu Word
+    "WINDOWS": (0, 200, 90),       # vert
+}
+RGB_COULEUR_DEFAUT = (120, 120, 120)   # profil sans couleur declaree
+RGB_COULEUR_ERREUR = (255, 0, 0)       # panne HID : visible sans lire
+
+RGB_MS = 25                 # au plus un envoi toutes les 25 ms
+RGB_VEILLE_MS = 300000      # 5 minutes sans appui -> extinction
+
 SCREEN_DIM_MS = 180000      # 3 minutes  -> contraste minimal
 SCREEN_OFF_MS = 900000      # 15 minutes -> ecran eteint
 SCREEN_DIM_CONTRAST = 1     # 0 a 255
@@ -292,7 +340,7 @@ LED_RETURN_MS = 350     # retour progressif du flash vers la respiration
 
 ## device/profiles.py
 
-`250 lignes - sha256 81e7e817abc72f16`
+`260 lignes - sha256 7dd14aa0f86a01e0`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -421,7 +469,14 @@ PROFILES = {
     # _MATCHPROP fonctionne meme sur un Civil 3D installe en francais.
     "CIVIL3D": [
         presse_papiers(),
-        K("HACHUR", [("text_enter", "_HATCH")]),
+        # LA TOUCHE MODIFICATRICE. Elle ne tape rien : elle enfonce Ctrl
+        # ou Maj et les GARDE enfonces tant que ton doigt reste dessus.
+        #   appui maintenu             -> Ctrl  (Ctrl+clic : selectionner)
+        #   appui bref puis maintenu   -> Maj   (Maj+clic : deselectionner)
+        # Ta main gauche tient le modificateur, ta main droite reste a la
+        # souris. Voir gestures.py pour le detail.
+        K("CTRL",   [("maintien", ("CTRL",))],
+          double=[("maintien", ("SHIFT",))]),
         K("MATCH",  [("text_enter", "_MATCHPROP")],
           long=[("combo", ("CTRL", "Y"))]),                # retablir
         K("ISOLE",  [("text_enter", "_ISOLATEOBJECTS")],
@@ -432,7 +487,10 @@ PROFILES = {
         # version ne suit pas, remets simplement "_ZOOM".
         K("ZOOM",   [("text_enter", "_ZOOM E")],
           double=[("text_enter", "_REGEN")]),              # regenerer
-        K("ENREG",  [("combo", ("CTRL", "S"))]),
+        # _HATCH etait sur B2, que la touche modificatrice occupe
+        # desormais : il passe en appui long, ou il ne coute aucun retard.
+        K("ENREG",  [("combo", ("CTRL", "S"))],
+          long=[("text_enter", "_HATCH")]),                # hachures
     ],
 
     # -----------------------------------------------------------------
@@ -641,7 +699,7 @@ else:
 
 ## device/main.py
 
-`358 lignes - sha256 fccc91ff57df9170`
+`381 lignes - sha256 e5d897577dca3528`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -691,7 +749,7 @@ import runtime
 import store
 from inputs import Inputs
 from profiles import ProfileManager, TESTS, COURT
-from gestures import Gestes
+from gestures import Gestes, FIN
 from stats import Stats
 from display import Display
 from hid_keyboard import HIDKeyboard
@@ -800,6 +858,11 @@ def run():
     except Exception as exc:
         print("LED desactivee :", exc)
 
+    # Les LED RGB des touches. Rgb() se desactive tout seul si le materiel
+    # n'est pas la ou si RGB_ENABLED vaut False : rien a proteger ici.
+    from rgb import Rgb
+    rgb = Rgb()
+
     lien = Link(NB_TOUCHES, stats=stats) if C.LINK_ENABLED else None
     verrouille = False          # True = l'auto ne peut plus changer de profil
     dernier_auto = None
@@ -809,6 +872,7 @@ def run():
                         manager.macros, ticks_ms(),
                         manager.index, len(ordre), splash)
         gestes.configurer(manager.macros)
+        rgb.profil(manager.name)          # chaque profil a sa couleur
 
     def recharger_profils():
         """Relit profils.json et applique la nouvelle configuration.
@@ -830,6 +894,13 @@ def run():
 
     def declencher(index, geste):
         """Execute la macro correspondant a un geste sur une touche."""
+        if geste == FIN:
+            # Une touche modificatrice vient d'etre relachee : on remonte
+            # Ctrl ou Maj cote PC. Rien a afficher, rien a compter.
+            if keyboard:
+                keyboard.relacher_maintien()
+            return
+
         label, gestes_touche = manager.macros[index]
         actions = (gestes_touche or {}).get(geste)
         if C.HID_TEST is not None:
@@ -839,15 +910,22 @@ def run():
             label, actions = C.HID_TEST, TESTS[C.HID_TEST]
 
         print("%s B%d %s %s" % (manager.name, index + 1, geste, label or "-"))
-        display.surligner(index, ticks_ms())
+        maintenant = ticks_ms()
+        display.surligner(index, maintenant)
+        rgb.touche(index, maintenant)
         if not actions:
             print("   (aucune macro sur ce geste)")
             return
         stats.compter(manager.name, index)
-        if keyboard:
-            keyboard.submit(actions)
-        else:
+        if not keyboard:
             print("   (HID desactive : rien n'est tape)")
+            return
+        if actions[0][0] == "maintien":
+            # Touche modificatrice : on enfonce et on GARDE enfonce
+            # jusqu'au relachement (voir gestures.py).
+            keyboard.maintenir(actions)
+        else:
+            keyboard.submit(actions)
 
     afficher(False)
     print("Profil :", manager.name,
@@ -974,6 +1052,7 @@ def run():
                 if etat != etat_affiche:
                     etat_affiche = etat
                     display.set_etat(etat)
+                    rgb.etat(etat)
 
             if led:
                 try:
@@ -986,6 +1065,7 @@ def run():
                         pass
                     led = None
 
+            rgb.tick(now)
             display.tick(now)
             sleep_ms(C.LOOP_MS)
 
@@ -997,6 +1077,7 @@ def run():
             keyboard.close()
         if led:
             led.close()
+        rgb.close()
         stats.enregistrer()
 
 
@@ -1209,7 +1290,7 @@ class Inputs:
 
 ## device/gestures.py
 
-`142 lignes - sha256 13788873315a15ef`
+`217 lignes - sha256 db0b9643634fc182`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1258,6 +1339,38 @@ LA MACHINE A ETATS, TOUCHE PAR TOUCHE
 L'appui long est emis DES QUE le seuil est franchi, sans attendre le
 relachement : tu sens la macro partir sous ton doigt, c'est bien plus
 agreable que d'attendre d'avoir relache.
+
+=====================================================================
+LE MODE MODIFICATEUR : UNE TOUCHE QUI FAIT CTRL ET MAJ
+=====================================================================
+Une touche dont l'appui court est du type "maintien" ne fonctionne plus
+comme les autres. Elle devient une vraie touche modificatrice :
+
+    1 appui maintenu                     -> Ctrl reste enfonce
+    1 appui bref, puis 1 appui maintenu  -> Maj reste enfonce
+
+Tu gardes le doigt dessus, le modificateur reste enfonce cote PC ; tu
+relaches, il remonte. Tu peux donc cliquer a la souris pendant ce temps,
+ce qui est exactement l'usage recherche dans Civil 3D (Ctrl+clic pour
+selectionner, Maj+clic pour deselectionner).
+
+Deux choix importants :
+
+  * le modificateur descend DES L'APPUI, sans le moindre delai. Attendre
+    260 ms pour savoir si un second appui arrive rendrait la touche
+    inutilisable ;
+  * consequence assumee : le premier appui bref de la sequence "bref puis
+    maintenu" envoie un Ctrl seul, tres bref. Un Ctrl seul n'a aucun effet
+    dans Windows, Civil 3D, Blender ou Word - contrairement a Alt, qui
+    ouvre la barre de menus. Evite donc de mettre ALT sur le premier
+    appui.
+
+    REPOS      --appui-->        TENU1        (emet COURT : on maintient)
+    TENU1      --relache-->      ATTENTE2     (emet FIN : on relache)
+                              ou REPOS        s'il n'y a pas de second
+    ATTENTE2   --appui-->        TENU2        (emet DOUBLE : on maintient)
+    ATTENTE2   --delai-->        REPOS        (rien)
+    TENU2      --relache-->      REPOS        (emet FIN)
 """
 
 from time import ticks_diff, ticks_add
@@ -1266,12 +1379,18 @@ from time import ticks_diff, ticks_add
 COURT = "court"
 LONG = "long"
 DOUBLE = "double"
+# Un quatrieme evenement, qui n'est pas un geste enregistrable : il dit
+# a main.py de relacher les touches maintenues.
+FIN = "fin"
 
 # Etats internes
 _REPOS = 0
 _ENFONCE = 1
 _ATTENTE_DOUBLE = 2
 _LONG_ENVOYE = 3
+_TENU1 = 4                  # mode modificateur : premier maintien
+_ATTENTE_MAINTIEN2 = 5      # relache, on guette le second appui
+_TENU2 = 6                  # mode modificateur : second maintien
 
 
 class Gestes:
@@ -1286,6 +1405,9 @@ class Gestes:
         # Capacites, mises a jour a chaque changement de profil.
         self.a_long = [False] * nb_touches
         self.a_double = [False] * nb_touches
+        # Mode modificateur (voir en tete de fichier).
+        self.a_maintien = [False] * nb_touches
+        self.a_maintien2 = [False] * nb_touches
 
     # ------------------------------------------------------------------
     def configurer(self, macros):
@@ -1301,6 +1423,8 @@ class Gestes:
                 gestes = macros[index][1] or {}
             self.a_long[index] = bool(gestes.get(LONG))
             self.a_double[index] = bool(gestes.get(DOUBLE))
+            self.a_maintien[index] = _est_maintien(gestes.get(COURT))
+            self.a_maintien2[index] = _est_maintien(gestes.get(DOUBLE))
         self.reinitialiser()
 
     def reinitialiser(self):
@@ -1313,6 +1437,15 @@ class Gestes:
         if not (0 <= index < self.nb_touches):
             return None
         etat = self.etats[index]
+
+        if self.a_maintien[index]:
+            # Mode modificateur : on enfonce tout de suite, sans attendre.
+            if etat == _ATTENTE_MAINTIEN2:
+                self.etats[index] = _TENU2
+                return DOUBLE           # second maintien (Maj)
+            self.etats[index] = _TENU1
+            return COURT                # premier maintien (Ctrl)
+
         if etat == _ATTENTE_DOUBLE:
             # Second appui dans le delai : c'est un double.
             self.etats[index] = _REPOS
@@ -1326,6 +1459,19 @@ class Gestes:
         if not (0 <= index < self.nb_touches):
             return None
         etat = self.etats[index]
+
+        if etat == _TENU1:
+            # On relache le modificateur, et on guette un second appui.
+            if self.a_maintien2[index]:
+                self.etats[index] = _ATTENTE_MAINTIEN2
+                self.instants[index] = ticks_add(now, self.double_ms)
+            else:
+                self.etats[index] = _REPOS
+            return FIN
+        if etat == _TENU2:
+            self.etats[index] = _REPOS
+            return FIN
+
         if etat == _LONG_ENVOYE:
             self.etats[index] = _REPOS      # la macro longue est deja partie
             return None
@@ -1353,14 +1499,24 @@ class Gestes:
                 if ticks_diff(now, self.instants[index]) >= 0:
                     self.etats[index] = _REPOS
                     resultats.append((index, COURT))
+            elif etat == _ATTENTE_MAINTIEN2:
+                # Le second appui n'est pas venu : rien a emettre, le
+                # premier maintien a deja ete relache.
+                if ticks_diff(now, self.instants[index]) >= 0:
+                    self.etats[index] = _REPOS
         return resultats
+
+
+def _est_maintien(actions):
+    """Cette macro est-elle du type 'maintien' (touche gardee enfoncee) ?"""
+    return bool(actions) and actions[0][0] == "maintien"
 ```
 
 ---
 
 ## device/layouts.py
 
-`330 lignes - sha256 b8d52683cee54811`
+`335 lignes - sha256 9aa1e8c9e849a622`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1679,7 +1835,12 @@ def compile_actions(actions, layout, caps_lock=False):
     for kind, value in actions:
         if kind == "key":
             result.append((key_code(value, layout),))
-        elif kind == "combo":
+        elif kind in ("combo", "maintien"):
+            # "maintien" se traduit exactement comme une combinaison : ce
+            # sont les memes codes de touches. La difference n'est pas ici
+            # mais dans la facon de les ENVOYER - voir hid_keyboard.py :
+            # une combinaison est appuyee puis relachee, un maintien reste
+            # enfonce tant que tu gardes le doigt sur la touche.
             codes = tuple(key_code(name, layout) for name in value)
             # Un rapport HID ne transporte que 6 touches normales à la fois.
             if sum(1 for code in codes if code >= 0) > 6:
@@ -1699,7 +1860,7 @@ def compile_actions(actions, layout, caps_lock=False):
 
 ## device/store.py
 
-`317 lignes - sha256 9e3bedfb00d161e7`
+`321 lignes - sha256 626a037549f71696`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1759,8 +1920,11 @@ FORME DU FICHIER
       }
     }
 
-Le "type" vaut "key", "combo", "text", "text_enter" ou "none".
+Le "type" vaut "key", "combo", "maintien", "text", "text_enter" ou "none".
 Pour un "combo", la valeur s'ecrit avec des plus : "CTRL+SHIFT+ESC".
+Un "maintien" s'ecrit pareil, mais la touche reste ENFONCEE tant que tu
+gardes le doigt dessus : c'est ainsi qu'une touche du macropad devient une
+vraie touche Ctrl ou Maj.
 """
 
 import json
@@ -1768,7 +1932,7 @@ import config as C
 import profiles as P
 from layouts import compile_actions
 
-TYPES = ("key", "combo", "text", "text_enter", "none")
+TYPES = ("key", "combo", "maintien", "text", "text_enter", "none")
 
 
 # =====================================================================
@@ -1779,8 +1943,9 @@ def action_vers_json(actions):
     if not actions:
         return "none", ""
     genre, valeur = actions[0]
-    if genre == "combo":
-        return "combo", "+".join(valeur)
+    if genre in ("combo", "maintien"):
+        # Les deux transportent une liste de touches : CTRL+MAJ, ou juste CTRL.
+        return genre, "+".join(valeur)
     return genre, str(valeur)
 
 
@@ -1788,11 +1953,11 @@ def action_depuis_json(genre, valeur):
     """(type, valeur texte) -> forme interne."""
     if genre == "none" or (genre in ("text", "text_enter") and not valeur):
         return []
-    if genre == "combo":
+    if genre in ("combo", "maintien"):
         touches = tuple(p.strip() for p in str(valeur).split("+") if p.strip())
         if not touches:
             raise ValueError("combinaison vide")
-        return [("combo", touches)]
+        return [(genre, touches)]
     if genre in ("key", "text", "text_enter"):
         if not str(valeur).strip():
             return []
@@ -2154,7 +2319,7 @@ class Stats:
 
 ## device/portal.py
 
-`451 lignes - sha256 38b9e26de6f72e39`
+`458 lignes - sha256 bf033ed3b46fd5a5`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2264,6 +2429,12 @@ white-space:pre-wrap;font:13px ui-monospace,monospace}
 <p class=hint>Libelles : 6 caracteres maximum. Combinaison :
 <b>CTRL+MAJ+ESC</b>. Chaque touche accepte trois gestes : appui court,
 appui long et double appui.</p>
+<p class=hint><b>maintenir</b> transforme la touche en vraie touche
+modificatrice : mets <b>CTRL</b> sur l'appui court et <b>MAJ</b> sur le
+double appui, et tu obtiens <i>appui maintenu = Ctrl</i>,
+<i>appui bref puis maintenu = Maj</i>. Le modificateur reste enfonce tant
+que ton doigt reste sur la touche, ce qui permet de cliquer a la souris
+pendant ce temps.</p>
 
 <h2>Profils et macros</h2>
 <div id=profs></div>
@@ -2287,6 +2458,7 @@ var D={ordre:[],profils:{},apps:{repli:{profil:"WINDOWS",abrege:"Win"},liste:[]}
 var N=6,GESTES=["court","long","double"];
 var LIB={court:"court",long:"long",double:"double"};
 var TYPES=[["none","inactive"],["key","touche"],["combo","combinaison"],
+["maintien","maintenir (Ctrl, Maj...)"],
 ["text","texte"],["text_enter","texte + Entree"]];
 
 function el(tag,attrs,kids){var e=document.createElement(tag);
@@ -2853,7 +3025,7 @@ class Link:
 
 ## device/hid_keyboard.py
 
-`331 lignes - sha256 57bb32c7edef95ef`
+`393 lignes - sha256 10aa759f9f53fa01`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2931,6 +3103,12 @@ class HIDKeyboard:
         self.opened = False            # Windows a-t-il configuré le clavier ?
         self.release_needed = True     # par sécurité on commence par tout relâcher
         self.keys_down = False         # des touches sont-elles enfoncées côté PC ?
+        # Touches MAINTENUES : elles sont ajoutées à chaque rapport envoyé,
+        # tant que tu gardes le doigt sur la touche du macropad. C'est ce
+        # qui permet à une touche du pad de se comporter comme la touche
+        # Ctrl d'un vrai clavier : Ctrl reste enfoncé pendant que tu
+        # cliques à la souris.
+        self.tenus = ()
         self.fault = False
 
     # ------------------------------------------------------------------
@@ -2974,11 +3152,44 @@ class HIDKeyboard:
         self.queue.append(actions)
         return True
 
+    def maintenir(self, actions):
+        """Enfonce des touches et les GARDE enfoncées (Ctrl, Maj...).
+
+        Rien n'est tapé : les touches sont simplement ajoutées à tous les
+        rapports suivants, jusqu'à relacher_maintien(). Le relâchement est
+        prioritaire dans tick(), donc Ctrl descend en deux ou trois
+        millisecondes : à l'échelle d'un doigt, c'est instantané.
+        """
+        if not self.accepting():
+            print("HID : maintien ignore, interface non prete")
+            return False
+        # Traduit tout de suite pour verifier, comme submit().
+        frappes = compile_actions(actions, C.KEYBOARD_LAYOUT)
+        codes = ()
+        for frappe in frappes:
+            codes += frappe
+        self.tenus = codes
+        self.release_needed = True     # provoque l'envoi de l'etat courant
+        self.progress = ticks_ms()
+        return True
+
+    def relacher_maintien(self):
+        """Relâche les touches maintenues. Sans effet s'il n'y en a pas."""
+        if not self.tenus:
+            return
+        self.tenus = ()
+        self.release_needed = True
+        self.progress = ticks_ms()
+
     def cancel(self):
         """Oublie tout ce qui était prévu et programme un relâchement."""
         self.queue = []
         self.current = []
         self.phase = "idle"
+        # Un ESC, un changement de profil ou une panne doivent TOUT
+        # relâcher, y compris un Ctrl resté enfoncé. Sinon le PC garde un
+        # modificateur bloqué, ce qui est la pire panne possible.
+        self.tenus = ()
         self.release_needed = True
         # INDISPENSABLE : le relâchement qu'on vient de programmer est une
         # NOUVELLE action, le chronomètre du garde-fou doit repartir de zéro.
@@ -3016,11 +3227,34 @@ class HIDKeyboard:
         """
         if self.interface.busy():
             return False
-        if not self.interface.send_keys(keys, timeout_ms=0):
+        paquet = self._avec_tenus(keys)
+        if not self.interface.send_keys(paquet, timeout_ms=0):
             return False
         # On mémorise si ce paquet laissait des touches enfoncées.
-        self.keys_down = bool(keys)
+        self.keys_down = bool(paquet)
         return True
+
+    def _avec_tenus(self, keys):
+        """Ajoute les touches maintenues au paquet, sans doublon.
+
+        Un rapport HID ne transporte que six touches ordinaires (les
+        modificateurs, eux, sont des bits et ne comptent pas). Si le
+        maintien et la macro en demandent davantage, on garde les
+        maintenues : ce sont elles que le doigt réclame.
+        """
+        if not self.tenus:
+            return keys
+        paquet = tuple(self.tenus)
+        ordinaires = sum(1 for code in paquet if code >= 0)
+        for code in keys:
+            if code in paquet:
+                continue
+            if code >= 0:
+                if ordinaires >= 6:
+                    continue
+                ordinaires += 1
+            paquet += (code,)
+        return paquet
 
     def _fail(self, error):
         if not self.fault:
@@ -3193,7 +3427,7 @@ def create_interface():
 
 ## device/display.py
 
-`501 lignes - sha256 5678cd3fafbd4a3c`
+`502 lignes - sha256 7f977eaa772823dd`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -3358,9 +3592,10 @@ class Display:
         if not actions:
             return "-"
         genre, valeur = actions[0]
-        if genre == "combo":
+        if genre in ("combo", "maintien"):
             # D'une combinaison, on montre la derniere touche : dans
             # CTRL+SHIFT+Z, c'est le Z qui distingue la macro des autres.
+            # Pour un maintien, c'est le modificateur lui-meme : CTRL, MAJ.
             texte = valeur[-1] if valeur else "?"
         elif genre == "key":
             texte = str(valeur)
@@ -3825,6 +4060,268 @@ class Led:
         # deinit() relâche la broche ; on la repasse en sortie à 0 pour
         # être certain que le transistor reste bloqué et la LED éteinte.
         Pin(C.LED_PIN, Pin.OUT, value=0)
+```
+
+---
+
+## device/rgb.py
+
+`253 lignes - sha256 0b42f568ed1b27f0`
+
+```python
+# -*- coding: utf-8 -*-
+"""
+rgb.py - Les LED RGB sous les touches.
+
+=====================================================================
+CE QUE CA FAIT
+=====================================================================
+* chaque profil a sa couleur : d'un coup d'oeil, tu sais si le macropad
+  est en CIVIL 3D ou en BLENDER, sans lire l'ecran ;
+* la touche que tu viens d'utiliser s'allume en blanc un instant, comme
+  la surbrillance de l'ecran ;
+* apres RGB_VEILLE_MS sans rien toucher, tout s'eteint - pour les yeux,
+  pour la duree de vie des LED, et surtout pour le courant.
+
+=====================================================================
+DEUX MONTAGES POSSIBLES, ET UN SEUL FIL DE CODE POUR LES DEUX
+=====================================================================
+RGB_TYPE = "WS2812"   LED adressables (NeoPixel, SK6812...). UN seul fil
+                      de donnees pour toute la guirlande, et une couleur
+                      DIFFERENTE par touche. C'est ce qu'il faut pour
+                      eclairer six touches.
+
+RGB_TYPE = "PWM"      UNE LED RGB ordinaire a quatre pattes, sur trois
+                      broches. Une seule couleur pour tout le macropad :
+                      la couleur du profil. Pas de couleur par touche -
+                      il faudrait trois broches PAR touche, soit dix-huit.
+
+Livre avec RGB_ENABLED = False : rien ne bouge tant que tu n'as pas
+cable et choisi ton type.
+
+=====================================================================
+CE QUI RISQUE DE CRAMER, OU DE FAIRE REDEMARRER LA CARTE
+=====================================================================
+1. LE COURANT, C'EST LE VRAI DANGER. Une WS2812 en blanc a fond tire
+   60 mA. Six touches = 360 mA, plus la carte, plus l'ecran : on depasse
+   les 500 mA que fournit un port USB ordinaire. Le 5 V s'effondre, la
+   carte redemarre, et ton clavier disparait en pleine frappe.
+
+   La parade est dans le code : RGB_LUMINOSITE plafonne CHAQUE canal
+   avant l'envoi. A la valeur livree (40 sur 255), six LED tirent environ
+   60 mA au total. Ne monte pas ce chiffre sans mesurer.
+
+2. LES WS2812 SE NOURRISSENT EN 5 V, PAS EN 3,3 V. Le regulateur 3,3 V
+   de la carte n'a pas la marge ; il faut prendre le 5 V (VBUS).
+
+3. LE FIL DE DONNEES SORT EN 3,3 V. Une WS2812 alimentee en 5 V attend
+   un niveau haut d'au moins 3,5 V : on est JUSTE en dessous. Souvent ca
+   passe, parfois non - et quand ca ne passe pas, les couleurs sautent au
+   hasard. Deux remedes eprouves :
+     * une resistance de 330 a 470 ohms EN SERIE sur le fil de donnees,
+       au plus pres de la premiere LED (elle protege aussi le GPIO) ;
+     * si ca scintille encore, alimente la guirlande en ~4,3 V en
+       intercalant une diode 1N4148 entre le 5 V et son VCC : le seuil
+       descend a 3,0 V et le probleme disparait.
+
+4. UN CONDENSATEUR DE 470 a 1000 uF entre 5 V et GND, au plus pres des
+   LED. Elles commutent tres vite et tirent des pointes de courant ; sans
+   reservoir local, ces pointes se voient sur toute l'alimentation. Tu en
+   as : mets-en un. ATTENTION A LA POLARITE, un chimique monte a l'envers
+   gonfle et explose.
+
+5. NE JAMAIS brancher le fil de donnees sur une LED deja alimentee alors
+   que la carte est hors tension : le courant passerait par la diode de
+   protection du GPIO. Alimente les deux ensemble.
+"""
+
+from time import ticks_ms, ticks_diff, ticks_add
+import config as C
+
+_BLANC = (255, 255, 255)
+
+
+class Rgb:
+    """Pilote les LED RGB. Se desactive toute seule en cas de probleme."""
+
+    def __init__(self):
+        self.actif = False
+        self.materiel = None
+        self.type = None
+        self.nb = 0
+        self.base = (0, 0, 0)          # couleur du profil courant
+        self._erreur = False           # panne HID : tout passe au rouge
+        self.surbrillance = -1
+        self._surbrillance_t = 0
+        self._activite = ticks_ms()
+        self._eteint = False
+        self._a_redessiner = True
+        self._prochain = 0
+        if not getattr(C, "RGB_ENABLED", False):
+            return
+        try:
+            self._demarrer()
+            self.actif = True
+        except Exception as exc:
+            # Une LED absente ou mal cablee ne doit JAMAIS empecher le
+            # macropad de taper. Meme regle que pour l'ecran.
+            print("RGB desactive :", exc)
+
+    # ------------------------------------------------------------------
+    def _demarrer(self):
+        from machine import Pin
+        self.type = getattr(C, "RGB_TYPE", "WS2812")
+        if self.type == "WS2812":
+            from neopixel import NeoPixel
+            self.nb = int(getattr(C, "RGB_COUNT", 6))
+            self.materiel = NeoPixel(Pin(C.RGB_PIN, Pin.OUT), self.nb)
+        elif self.type == "PWM":
+            from machine import PWM
+            self.nb = 1
+            self.materiel = tuple(
+                PWM(Pin(broche, Pin.OUT), freq=1000, duty_u16=0)
+                for broche in (C.RGB_PIN_R, C.RGB_PIN_V, C.RGB_PIN_B))
+        else:
+            raise ValueError("RGB_TYPE inconnu : " + str(self.type))
+
+    def desactiver(self, exc):
+        print("RGB desactive :", exc)
+        self.actif = False
+
+    # ------------------------------------------------------------------
+    # Ce que main.py appelle
+    # ------------------------------------------------------------------
+    def profil(self, nom):
+        """Nouvelle couleur de fond : celle du profil qui vient d'etre pris."""
+        couleurs = getattr(C, "RGB_COULEURS", {})
+        self.base = tuple(couleurs.get(nom, C.RGB_COULEUR_DEFAUT))
+        self.surbrillance = -1
+        self._a_redessiner = True
+        self.reveiller(ticks_ms())
+
+    def etat(self, texte):
+        """Le bandeau de l'ecran change : on en profite pour signaler.
+
+        ERR est le seul cas ou la couleur du profil s'efface : quand le
+        clavier est en panne, tu dois le voir sans lire l'ecran.
+        """
+        erreur = (texte == "ERR")
+        if erreur != self._erreur:
+            self._erreur = erreur
+            self._a_redessiner = True
+
+    def touche(self, index, now):
+        """La touche vient de servir : elle s'allume en blanc un instant."""
+        self.reveiller(now)
+        if 0 <= index < max(self.nb, 1):
+            self.surbrillance = index
+            self._surbrillance_t = ticks_add(now, C.HIGHLIGHT_MS)
+            self._a_redessiner = True
+
+    def reveiller(self, now):
+        self._activite = now
+        if self._eteint:
+            self._eteint = False
+            self._a_redessiner = True
+
+    # ------------------------------------------------------------------
+    def tick(self, now):
+        """A appeler a chaque tour de boucle. N'attend jamais."""
+        if not self.actif:
+            return
+
+        if (self.surbrillance >= 0
+                and ticks_diff(now, self._surbrillance_t) >= 0):
+            self.surbrillance = -1
+            self._a_redessiner = True
+
+        if (not self._eteint
+                and ticks_diff(now, self._activite) > C.RGB_VEILLE_MS):
+            self._eteint = True
+            self._a_redessiner = True
+
+        if not self._a_redessiner or ticks_diff(now, self._prochain) < 0:
+            return
+        self._prochain = ticks_add(now, C.RGB_MS)
+        self._a_redessiner = False
+        try:
+            self._envoyer()
+        except Exception as exc:
+            self.desactiver(exc)
+
+    def _envoyer(self):
+        if self._eteint:
+            self._peindre_tout((0, 0, 0))
+            return
+        fond = tuple(C.RGB_COULEUR_ERREUR) if self._erreur else self.base
+        if self.type == "PWM":
+            # Une seule LED : la surbrillance n'a pas de sens, on montre
+            # simplement la couleur du profil.
+            self._peindre_tout(fond)
+            return
+        for index in range(self.nb):
+            couleur = _BLANC if index == self.surbrillance else fond
+            self._pixel(index, couleur)
+        self.materiel.write()
+
+    def _peindre_tout(self, couleur):
+        if self.type == "PWM":
+            self._pwm(couleur)
+            return
+        for index in range(self.nb):
+            self._pixel(index, couleur)
+        self.materiel.write()
+
+    # ------------------------------------------------------------------
+    # Bas niveau
+    # ------------------------------------------------------------------
+    def _pixel(self, index, couleur):
+        r, v, b = limiter(couleur)
+        # Les WS2812 attendent l'ordre VERT, ROUGE, BLEU. C'est la cause
+        # n°1 des "mes rouges sortent verts" : si tes couleurs sont
+        # permutees, c'est RGB_ORDRE qu'il faut changer, pas ton cablage.
+        ordre = getattr(C, "RGB_ORDRE", "GRB")
+        valeurs = {"R": r, "G": v, "B": b}
+        self.materiel[index] = tuple(valeurs[lettre] for lettre in ordre)
+
+    def _pwm(self, couleur):
+        valeurs = limiter(couleur)
+        for canal, valeur in zip(self.materiel, valeurs):
+            rapport = valeur * 257            # 0..255 -> 0..65535
+            if getattr(C, "RGB_ANODE_COMMUNE", True):
+                # Anode commune : la patte commune est au +, le GPIO tire
+                # vers le bas. Zero volt = allume, d'ou l'inversion.
+                rapport = 65535 - rapport
+            canal.duty_u16(rapport)
+
+    def close(self):
+        """Tout eteindre en partant. Une LED oubliee allumee, ca se voit."""
+        if not self.actif:
+            return
+        try:
+            self._peindre_tout((0, 0, 0))
+        except Exception:
+            pass
+        self.actif = False
+
+
+def limiter(couleur):
+    """Plafonne la couleur a RGB_LUMINOSITE. C'EST LA SECURITE COURANT.
+
+    Elle est ici, dans le code, et pas laissee au bon vouloir de celui qui
+    choisit les couleurs : personne ne peut demander du blanc a fond sur
+    six LED et faire redemarrer la carte en pleine frappe.
+    """
+    plafond = getattr(C, "RGB_LUMINOSITE", 40)
+    sortie = []
+    for valeur in couleur:
+        valeur = int(valeur)
+        if valeur < 0:
+            valeur = 0
+        elif valeur > 255:
+            valeur = 255
+        sortie.append(valeur * plafond // 255)
+    return tuple(sortie)
 ```
 
 ---

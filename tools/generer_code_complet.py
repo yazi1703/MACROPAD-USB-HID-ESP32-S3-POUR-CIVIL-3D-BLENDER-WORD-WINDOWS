@@ -36,6 +36,7 @@ ORDRE = [
     "hid_keyboard.py",
     "display.py",
     "led.py",
+    "rgb.py",
     "diag.py",
     "sh1106.py",
     "lib/usb/device/__init__.py",

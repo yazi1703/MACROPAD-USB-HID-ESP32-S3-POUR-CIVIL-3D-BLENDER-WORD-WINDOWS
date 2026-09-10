@@ -45,7 +45,7 @@ import runtime
 import store
 from inputs import Inputs
 from profiles import ProfileManager, TESTS, COURT
-from gestures import Gestes
+from gestures import Gestes, FIN
 from stats import Stats
 from display import Display
 from hid_keyboard import HIDKeyboard
@@ -154,6 +154,11 @@ def run():
     except Exception as exc:
         print("LED desactivee :", exc)
 
+    # Les LED RGB des touches. Rgb() se desactive tout seul si le materiel
+    # n'est pas la ou si RGB_ENABLED vaut False : rien a proteger ici.
+    from rgb import Rgb
+    rgb = Rgb()
+
     lien = Link(NB_TOUCHES, stats=stats) if C.LINK_ENABLED else None
     verrouille = False          # True = l'auto ne peut plus changer de profil
     dernier_auto = None
@@ -163,6 +168,7 @@ def run():
                         manager.macros, ticks_ms(),
                         manager.index, len(ordre), splash)
         gestes.configurer(manager.macros)
+        rgb.profil(manager.name)          # chaque profil a sa couleur
 
     def recharger_profils():
         """Relit profils.json et applique la nouvelle configuration.
@@ -184,6 +190,13 @@ def run():
 
     def declencher(index, geste):
         """Execute la macro correspondant a un geste sur une touche."""
+        if geste == FIN:
+            # Une touche modificatrice vient d'etre relachee : on remonte
+            # Ctrl ou Maj cote PC. Rien a afficher, rien a compter.
+            if keyboard:
+                keyboard.relacher_maintien()
+            return
+
         label, gestes_touche = manager.macros[index]
         actions = (gestes_touche or {}).get(geste)
         if C.HID_TEST is not None:
@@ -193,15 +206,22 @@ def run():
             label, actions = C.HID_TEST, TESTS[C.HID_TEST]
 
         print("%s B%d %s %s" % (manager.name, index + 1, geste, label or "-"))
-        display.surligner(index, ticks_ms())
+        maintenant = ticks_ms()
+        display.surligner(index, maintenant)
+        rgb.touche(index, maintenant)
         if not actions:
             print("   (aucune macro sur ce geste)")
             return
         stats.compter(manager.name, index)
-        if keyboard:
-            keyboard.submit(actions)
-        else:
+        if not keyboard:
             print("   (HID desactive : rien n'est tape)")
+            return
+        if actions[0][0] == "maintien":
+            # Touche modificatrice : on enfonce et on GARDE enfonce
+            # jusqu'au relachement (voir gestures.py).
+            keyboard.maintenir(actions)
+        else:
+            keyboard.submit(actions)
 
     afficher(False)
     print("Profil :", manager.name,
@@ -328,6 +348,7 @@ def run():
                 if etat != etat_affiche:
                     etat_affiche = etat
                     display.set_etat(etat)
+                    rgb.etat(etat)
 
             if led:
                 try:
@@ -340,6 +361,7 @@ def run():
                         pass
                     led = None
 
+            rgb.tick(now)
             display.tick(now)
             sleep_ms(C.LOOP_MS)
 
@@ -351,6 +373,7 @@ def run():
             keyboard.close()
         if led:
             led.close()
+        rgb.close()
         stats.enregistrer()
 
 

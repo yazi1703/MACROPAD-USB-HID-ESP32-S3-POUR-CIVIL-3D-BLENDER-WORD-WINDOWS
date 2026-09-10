@@ -128,6 +128,40 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 [ ] GESTE_LONG_MS / GESTE_DOUBLE_MS ajustés à ton doigt si besoin
 ```
 
+## La touche modificatrice — Civil 3D B2 (V1)
+
+```
+[ ] appui maintenu : Ctrl+clic ajoute bien à la sélection dans Civil 3D
+[ ] appui bref puis maintenu : Maj+clic retire bien de la sélection
+[ ] le modificateur descend SANS délai perceptible
+[ ] au relâchement, plus rien n'est enfoncé (teste une frappe normale après)
+[ ] ESC pendant un maintien : tout est relâché
+[ ] changement de profil pendant un maintien : tout est relâché
+[ ] câble débranché pendant un maintien : rien ne reste coincé au rebranchement
+```
+
+## LED RGB (V1)
+
+```
+[ ] docs/10-led-rgb.md lu EN ENTIER avant de brancher
+[ ] type identifié : WS2812 (3 fils, DIN) ou RGB ordinaire (4 pattes)
+[ ] alimentées en 5 V (VBUS), PAS en 3,3 V
+[ ] GND commun avec la carte
+[ ] résistance 330 à 470 Ω en série sur le fil de données, côté LED
+[ ] condensateur 470 à 1000 µF entre 5 V et GND, POLARITÉ vérifiée
+[ ] RGB_LUMINOSITE laissé à 40 (ou consommation mesurée si tu l'augmentes)
+[ ] essai 0 : la LED déjà soudée sur la carte (GPIO48) répond au REPL
+[ ] essai 1 : une LED câblée s'allume
+[ ] essai 2 : les six s'allument une par une
+[ ] essai 3 : RGB_ENABLED = True, chaque profil a sa couleur
+[ ] la touche pressée passe au blanc puis revient
+[ ] les couleurs sont justes (sinon : RGB_ORDRE)
+[ ] aucun scintillement (sinon : diode 1N4148 sur le VCC du ruban)
+[ ] LA CARTE NE REDÉMARRE PAS quand toutes les LED sont allumées
+[ ] le port COM ne disparaît pas en tapant, LED allumées
+[ ] extinction après 5 minutes, réveil au premier appui
+```
+
 ## L'écran tableau (V1)
 
 ```

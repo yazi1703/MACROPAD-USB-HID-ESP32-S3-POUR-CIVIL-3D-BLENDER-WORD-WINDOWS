@@ -102,9 +102,16 @@ Voir le [chapitre 9](09-ecran-et-gestes.md) pour le détail.
 |---|---|---|
 | touche | `TAB`, `F5`, `G` | une seule touche |
 | combinaison | `CTRL+Z`, `CTRL+SHIFT+ESC` | plusieurs touches ensemble |
+| **maintenir** | `CTRL`, `SHIFT`, `CTRL+ALT` | **garde la touche enfoncée** tant que ton doigt reste dessus |
 | texte | `_HATCH` | écrit la chaîne |
 | texte + Entrée | `_MATCHPROP` | écrit la chaîne puis valide |
 | inactive | — | ce geste ne fait rien |
+
+**« maintenir » transforme la touche en vraie touche modificatrice.** Mets
+`CTRL` sur l'appui court et `MAJ` sur le double appui : tu obtiens
+*appui maintenu = Ctrl*, *appui bref puis maintenu = Maj*, et tu peux
+cliquer à la souris pendant ce temps. C'est le seul type qui ne « tape »
+rien. Détail dans [`docs/09`](09-ecran-et-gestes.md).
 
 **Le libellé fait 6 caractères au maximum** : c'est ce que laisse la
 largeur de l'écran une fois les trois colonnes de gestes posées.

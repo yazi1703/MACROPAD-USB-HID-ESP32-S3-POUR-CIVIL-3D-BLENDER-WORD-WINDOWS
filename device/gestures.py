@@ -44,6 +44,38 @@ LA MACHINE A ETATS, TOUCHE PAR TOUCHE
 L'appui long est emis DES QUE le seuil est franchi, sans attendre le
 relachement : tu sens la macro partir sous ton doigt, c'est bien plus
 agreable que d'attendre d'avoir relache.
+
+=====================================================================
+LE MODE MODIFICATEUR : UNE TOUCHE QUI FAIT CTRL ET MAJ
+=====================================================================
+Une touche dont l'appui court est du type "maintien" ne fonctionne plus
+comme les autres. Elle devient une vraie touche modificatrice :
+
+    1 appui maintenu                     -> Ctrl reste enfonce
+    1 appui bref, puis 1 appui maintenu  -> Maj reste enfonce
+
+Tu gardes le doigt dessus, le modificateur reste enfonce cote PC ; tu
+relaches, il remonte. Tu peux donc cliquer a la souris pendant ce temps,
+ce qui est exactement l'usage recherche dans Civil 3D (Ctrl+clic pour
+selectionner, Maj+clic pour deselectionner).
+
+Deux choix importants :
+
+  * le modificateur descend DES L'APPUI, sans le moindre delai. Attendre
+    260 ms pour savoir si un second appui arrive rendrait la touche
+    inutilisable ;
+  * consequence assumee : le premier appui bref de la sequence "bref puis
+    maintenu" envoie un Ctrl seul, tres bref. Un Ctrl seul n'a aucun effet
+    dans Windows, Civil 3D, Blender ou Word - contrairement a Alt, qui
+    ouvre la barre de menus. Evite donc de mettre ALT sur le premier
+    appui.
+
+    REPOS      --appui-->        TENU1        (emet COURT : on maintient)
+    TENU1      --relache-->      ATTENTE2     (emet FIN : on relache)
+                              ou REPOS        s'il n'y a pas de second
+    ATTENTE2   --appui-->        TENU2        (emet DOUBLE : on maintient)
+    ATTENTE2   --delai-->        REPOS        (rien)
+    TENU2      --relache-->      REPOS        (emet FIN)
 """
 
 from time import ticks_diff, ticks_add
@@ -52,12 +84,18 @@ from time import ticks_diff, ticks_add
 COURT = "court"
 LONG = "long"
 DOUBLE = "double"
+# Un quatrieme evenement, qui n'est pas un geste enregistrable : il dit
+# a main.py de relacher les touches maintenues.
+FIN = "fin"
 
 # Etats internes
 _REPOS = 0
 _ENFONCE = 1
 _ATTENTE_DOUBLE = 2
 _LONG_ENVOYE = 3
+_TENU1 = 4                  # mode modificateur : premier maintien
+_ATTENTE_MAINTIEN2 = 5      # relache, on guette le second appui
+_TENU2 = 6                  # mode modificateur : second maintien
 
 
 class Gestes:
@@ -72,6 +110,9 @@ class Gestes:
         # Capacites, mises a jour a chaque changement de profil.
         self.a_long = [False] * nb_touches
         self.a_double = [False] * nb_touches
+        # Mode modificateur (voir en tete de fichier).
+        self.a_maintien = [False] * nb_touches
+        self.a_maintien2 = [False] * nb_touches
 
     # ------------------------------------------------------------------
     def configurer(self, macros):
@@ -87,6 +128,8 @@ class Gestes:
                 gestes = macros[index][1] or {}
             self.a_long[index] = bool(gestes.get(LONG))
             self.a_double[index] = bool(gestes.get(DOUBLE))
+            self.a_maintien[index] = _est_maintien(gestes.get(COURT))
+            self.a_maintien2[index] = _est_maintien(gestes.get(DOUBLE))
         self.reinitialiser()
 
     def reinitialiser(self):
@@ -99,6 +142,15 @@ class Gestes:
         if not (0 <= index < self.nb_touches):
             return None
         etat = self.etats[index]
+
+        if self.a_maintien[index]:
+            # Mode modificateur : on enfonce tout de suite, sans attendre.
+            if etat == _ATTENTE_MAINTIEN2:
+                self.etats[index] = _TENU2
+                return DOUBLE           # second maintien (Maj)
+            self.etats[index] = _TENU1
+            return COURT                # premier maintien (Ctrl)
+
         if etat == _ATTENTE_DOUBLE:
             # Second appui dans le delai : c'est un double.
             self.etats[index] = _REPOS
@@ -112,6 +164,19 @@ class Gestes:
         if not (0 <= index < self.nb_touches):
             return None
         etat = self.etats[index]
+
+        if etat == _TENU1:
+            # On relache le modificateur, et on guette un second appui.
+            if self.a_maintien2[index]:
+                self.etats[index] = _ATTENTE_MAINTIEN2
+                self.instants[index] = ticks_add(now, self.double_ms)
+            else:
+                self.etats[index] = _REPOS
+            return FIN
+        if etat == _TENU2:
+            self.etats[index] = _REPOS
+            return FIN
+
         if etat == _LONG_ENVOYE:
             self.etats[index] = _REPOS      # la macro longue est deja partie
             return None
@@ -139,4 +204,14 @@ class Gestes:
                 if ticks_diff(now, self.instants[index]) >= 0:
                     self.etats[index] = _REPOS
                     resultats.append((index, COURT))
+            elif etat == _ATTENTE_MAINTIEN2:
+                # Le second appui n'est pas venu : rien a emettre, le
+                # premier maintien a deja ete relache.
+                if ticks_diff(now, self.instants[index]) >= 0:
+                    self.etats[index] = _REPOS
         return resultats
+
+
+def _est_maintien(actions):
+    """Cette macro est-elle du type 'maintien' (touche gardee enfoncee) ?"""
+    return bool(actions) and actions[0][0] == "maintien"

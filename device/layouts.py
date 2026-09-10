@@ -314,7 +314,12 @@ def compile_actions(actions, layout, caps_lock=False):
     for kind, value in actions:
         if kind == "key":
             result.append((key_code(value, layout),))
-        elif kind == "combo":
+        elif kind in ("combo", "maintien"):
+            # "maintien" se traduit exactement comme une combinaison : ce
+            # sont les memes codes de touches. La difference n'est pas ici
+            # mais dans la facon de les ENVOYER - voir hid_keyboard.py :
+            # une combinaison est appuyee puis relachee, un maintien reste
+            # enfonce tant que tu gardes le doigt sur la touche.
             codes = tuple(key_code(name, layout) for name in value)
             # Un rapport HID ne transporte que 6 touches normales à la fois.
             if sum(1 for code in codes if code >= 0) > 6:

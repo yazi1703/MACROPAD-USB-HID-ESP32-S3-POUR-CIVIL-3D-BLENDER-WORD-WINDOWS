@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 114 tests PC réussis ; 21 fichiers Python compilés avec succès.**
+**Résultat : 143 tests PC réussis ; 22 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -12,10 +12,10 @@
 
 ## Exécuté réellement dans cet environnement
 
-- Compilation syntaxique des **21 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
+- Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 114 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  89 pour le firmware, 25 pour le compagnon Windows.
+- 143 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  118 pour le firmware, 25 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -25,6 +25,10 @@
 **Base V0.** Navigation dans les deux sens ; anti-rebond, rebonds et maintien ; démarrage avec touche tenue ; retour circulaire des ticks ; 26 lettres FR, underscore, macros et ENTER ; Caps Lock ; refus atomique d'un texte non pris en charge ; pressions/relâchements de Ctrl+Shift+Esc ; ESC au milieu d'Alt+Tab/texte ; endpoint occupé sans perte immédiate ; file bornée ; déconnexion sans reprise de macro ; faute et timeout avec annulation/libération ; respiration, flash et passage des ticks ; SAFE MODE sans initialisation HID et retour REPL ; absence/panne OLED ; une page transmise par tick ; boucle main simulée avec macro Civil3D, NEXT et ESC ; rapports de huit octets produits par la classe officielle KeyboardInterface.
 
 **La page de configuration** (`PageDeConfigurationIntacte`, 6 tests). La page servie par `device/portal.py` et celle servie par `pc/macropad_auto.py` sont comparees a leur source unique `tools/page_config.html` ; le JavaScript est verifie syntaxiquement par `node --check` ; enfin il est **execute hors navigateur** avec un DOM minimal (`tests/page_smoke.js`), une fois avec les valeurs d'usine — on compte alors les cartes de profil, les listes deroulantes et les lignes de logiciels produites — une fois avec une configuration vide, pour verifier que la page explique pourquoi elle n'a rien a montrer, et une fois en TAPANT dans les champs pour verifier que chaque saisie arrive bien sur la touche voulue - et nulle part ailleurs - dans ce qui part vers le macropad. Ces tests sont nes du bug de la correction 11 : un antislash mal interprete cassait tout le script, et la page restait vide sans le moindre message.
+
+**La touche modificatrice** (`ToucheModificatrice`, 14 tests). La machine a etats (appui maintenu, appui bref puis maintenu, second appui hors delai, touche a un seul maintien) ; le modificateur reste present dans TOUS les rapports envoyes, y compris pendant qu'une macro se deroule par-dessus ; le relachement le libere ; et surtout les quatre filets contre un modificateur coince cote PC : ESC, changement de profil, deconnexion USB, macro intapable refusee sans rien envoyer.
+
+**Les LED RGB** (`LedsRgb`, 15 tests). Le plafond de luminosite, qui est une securite electrique et non un reglage esthetique : le test calcule le courant que tireraient six LED et refuse qu'il approche des 500 mA du port USB. Puis la couleur par profil, l'ordre des octets configurable, la surbrillance de la touche utilisee et son retour, le rouge en cas de panne HID, l'extinction apres inactivite et le reveil, la cadence d'envoi bornee, l'absence totale d'acces materiel quand RGB_ENABLED vaut False, une LED absente ou arrachee en cours de route qui desactive l'affichage sans jamais remonter d'exception, et les deux variantes du montage a une seule LED RGB (anode ou cathode commune).
 
 **Ajouts V1.** Les six touches et leurs libellés ; la machine à états des trois gestes (appui court immédiat quand aucun double appui n'est défini, appui court retardé quand il y en a un, double appui, deux appuis trop espacés, appui long déclenché au seuil sans deuxième envoi au relâchement, touches indépendantes) ; l'aller-retour complet de la configuration par page web sans perte ; le refus d'une macro intapable et d'un libellé trop long ; le repli sur les valeurs d'usine pour un fichier corrompu ou incohérent ; **la relecture d'un `profils.json` de version 1**, dont la macro devient l'appui court ; le protocole série ligne par ligne, y compris une ligne coupée en deux envois, la lecture bornée par tour de boucle et une configuration trop volumineuse ; l'absence de séquence à deux actions dans les valeurs d'usine (que la page web tronquerait) ; **l'écran, qui ne doit jamais écrire hors des 128×64 pixels** — quatre profils, splash, surlignage de chaque touche, nom de fichier de 48 caractères en défilement, page WiFi.
 
@@ -123,6 +127,23 @@ test_double_appui ... ok
 test_maintien_sans_macro_longue_reste_un_court ... ok
 test_touches_independantes ... ok
 
+--- LedsRgb
+test_aucun_acces_materiel_quand_c_est_desactive ... ok
+test_chaque_profil_a_sa_couleur ... ok
+test_extinction_apres_la_veille_puis_reveil ... ok
+test_la_luminosite_plafonne_vraiment_le_courant ... ok
+test_la_touche_utilisee_passe_en_blanc ... ok
+test_materiel_absent_ne_plante_pas ... ok
+test_montage_pwm_anode_commune ... ok
+test_montage_pwm_cathode_commune ... ok
+test_ordre_des_couleurs_configurable ... ok
+test_panne_en_cours_de_route_desactive_sans_remonter ... ok
+test_panne_hid_passe_au_rouge_et_revient ... ok
+test_pas_plus_d_un_envoi_par_periode ... ok
+test_profil_inconnu_prend_la_couleur_par_defaut ... ok
+test_rien_a_envoyer_rien_n_est_envoye ... ok
+test_tout_s_eteint_a_l_arret ... ok
+
 --- LiaisonSerieAvecLePC
 test_changement_de_profil_demande_par_le_pc ... ok
 test_commande_inconnue_ignoree ... ok
@@ -180,6 +201,22 @@ test_enregistrement_valide ... ok
 test_page_html_servie ... ok
 test_retour_usine ... ok
 
+--- ToucheModificatrice
+test_aller_retour_par_la_page_web ... ok
+test_appui_maintenu_donne_le_premier_modificateur ... ok
+test_bref_puis_maintenu_donne_le_second ... ok
+test_changement_de_profil_libere_le_modificateur ... ok
+test_deconnexion_usb_oublie_le_maintien ... ok
+test_esc_libere_un_modificateur_bloque ... ok
+test_le_modificateur_reste_enfonce ... ok
+test_les_autres_touches_ne_changent_pas ... ok
+test_les_valeurs_usine_de_civil3d ... ok
+test_maintien_intapable_refuse_sans_rien_envoyer ... ok
+test_relachement_libere_le_modificateur ... ok
+test_second_appui_trop_tard_redonne_le_premier ... ok
+test_touche_a_un_seul_maintien ... ok
+test_une_macro_pendant_le_maintien_garde_le_modificateur ... ok
+
 --- V1SixTouchesEtConfigWeb
 test_affichage_six_touches_sans_debordement ... ok
 test_aller_retour_json ... ok
@@ -233,7 +270,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 114 tests
+Ran 143 tests
 
 OK
 ```

@@ -696,6 +696,12 @@ white-space:pre-wrap;font:13px ui-monospace,monospace}
 <p class=hint>Libelles : 6 caracteres maximum. Combinaison :
 <b>CTRL+MAJ+ESC</b>. Chaque touche accepte trois gestes : appui court,
 appui long et double appui.</p>
+<p class=hint><b>maintenir</b> transforme la touche en vraie touche
+modificatrice : mets <b>CTRL</b> sur l'appui court et <b>MAJ</b> sur le
+double appui, et tu obtiens <i>appui maintenu = Ctrl</i>,
+<i>appui bref puis maintenu = Maj</i>. Le modificateur reste enfonce tant
+que ton doigt reste sur la touche, ce qui permet de cliquer a la souris
+pendant ce temps.</p>
 
 <h2>Profils et macros</h2>
 <div id=profs></div>
@@ -719,6 +725,7 @@ var D={ordre:[],profils:{},apps:{repli:{profil:"WINDOWS",abrege:"Win"},liste:[]}
 var N=6,GESTES=["court","long","double"];
 var LIB={court:"court",long:"long",double:"double"};
 var TYPES=[["none","inactive"],["key","touche"],["combo","combinaison"],
+["maintien","maintenir (Ctrl, Maj...)"],
 ["text","texte"],["text_enter","texte + Entree"]];
 
 function el(tag,attrs,kids){var e=document.createElement(tag);

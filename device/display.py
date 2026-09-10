@@ -160,9 +160,10 @@ class Display:
         if not actions:
             return "-"
         genre, valeur = actions[0]
-        if genre == "combo":
+        if genre in ("combo", "maintien"):
             # D'une combinaison, on montre la derniere touche : dans
             # CTRL+SHIFT+Z, c'est le Z qui distingue la macro des autres.
+            # Pour un maintien, c'est le modificateur lui-meme : CTRL, MAJ.
             texte = valeur[-1] if valeur else "?"
         elif genre == "key":
             texte = str(valeur)

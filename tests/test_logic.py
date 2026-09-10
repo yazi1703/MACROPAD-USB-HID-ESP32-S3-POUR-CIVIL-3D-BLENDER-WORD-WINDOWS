@@ -81,9 +81,9 @@ class Logic(unittest.TestCase):
             for _, gestes in macros:
                 for actions in gestes.values():
                     self.assertTrue(compile_actions(actions,'FR_AZERTY'))
-        # B2, B3 et B4 de CIVIL3D ecrivent une commande _XXX suivie d'Entree
-        # (B1 est desormais le presse-papiers, commun a tous les profils).
-        for index in (1,2,3):
+        # B3 et B4 de CIVIL3D ecrivent une commande _XXX suivie d'Entree.
+        # B1 est le presse-papiers, B2 la touche modificatrice.
+        for index in (2,3):
             seq=compile_actions(PROFILES['CIVIL3D'][index][1]['court'],'FR_AZERTY')
             self.assertEqual(seq[0],(37,)); self.assertEqual(seq[-1],(40,))
         self.assertEqual(compile_actions([('combo',('CTRL','Z'))],'FR_AZERTY'),[(-1,26)])
@@ -190,9 +190,10 @@ class Logic(unittest.TestCase):
         def simulated_sleep(ms):
             clock[0]+=ms
             # Chronologie physique : appui macro, changement profil, ESC.
-            # On se sert de B2 (GPIO5, _HATCH) : B1 est le presse-papiers,
-            # et son double appui retarde volontairement l'appui court.
-            Pin.levels[5]=0 if 2600 <= clock[0] < 2660 else 1
+            # On se sert de B3 (GPIO6, _MATCHPROP) : B1 est le presse-papiers
+            # et son double appui retarde volontairement l'appui court, B2
+            # est la touche modificatrice.
+            Pin.levels[6]=0 if 2600 <= clock[0] < 2660 else 1
             Pin.levels[11]=1 if 2700 <= clock[0] < 2780 else 0
             Pin.levels[14]=0 if 2900 <= clock[0] < 2960 else 1
             if clock[0] >= 3200: raise KeyboardInterrupt()
@@ -989,10 +990,386 @@ class GestesCourtLongDouble(unittest.TestCase):
         # B1 est le presse-papiers : les trois gestes sont occupes.
         self.assertTrue(self.G.a_long[0])
         self.assertTrue(self.G.a_double[0])
-        # B2 HACHUR n'a que l'appui court : aucun retard, aucune
-        # surveillance. C'est ce qui garde les touches instantanees.
-        self.assertFalse(self.G.a_long[1])
-        self.assertFalse(self.G.a_double[1])
+        # B4 ISOLE n'a pas de double appui : aucun retard, aucune
+        # attente. C'est ce qui garde les touches instantanees.
+        self.assertFalse(self.G.a_double[3])
+        # B2 est la touche modificatrice : mode a part.
+        self.assertTrue(self.G.a_maintien[1])
+        self.assertTrue(self.G.a_maintien2[1])
+        self.assertFalse(self.G.a_maintien[0])
+
+
+class ToucheModificatrice(unittest.TestCase):
+    """Une touche qui fait Ctrl et Maj, comme sur un vrai clavier.
+
+    Demande : un appui maintenu donne Ctrl ; un appui bref suivi d'un
+    appui maintenu donne Maj. Le modificateur doit rester enfonce cote PC
+    tant que le doigt reste sur la touche, pour pouvoir cliquer a la
+    souris pendant ce temps.
+    """
+
+    def setUp(self):
+        clock[0] = 0
+        from gestures import Gestes, COURT, LONG, DOUBLE, FIN
+        self.COURT, self.LONG, self.DOUBLE, self.FIN = COURT, LONG, DOUBLE, FIN
+        self.G = Gestes(6, long_ms=400, double_ms=260)
+        self.G.configurer([
+            ("CTRL", {COURT: [("maintien", ("CTRL",))],
+                      DOUBLE: [("maintien", ("SHIFT",))]}),
+            ("SIMPLE", {COURT: [("key", "F5")]}),
+            ("SEUL", {COURT: [("maintien", ("ALT",))]}),
+            ("", {}), ("", {}), ("", {}),
+        ])
+
+    # --- la machine a etats -------------------------------------------
+    def test_appui_maintenu_donne_le_premier_modificateur(self):
+        # Le modificateur part DES l'appui : aucune attente.
+        self.assertEqual(self.G.appui(0, 0), self.COURT)
+        self.assertEqual(self.G.service(100), [])
+        self.assertEqual(self.G.service(500), [])   # meme au-dela du long
+        self.assertEqual(self.G.relachement(0, 600), self.FIN)
+
+    def test_bref_puis_maintenu_donne_le_second(self):
+        self.assertEqual(self.G.appui(0, 0), self.COURT)
+        self.assertEqual(self.G.relachement(0, 60), self.FIN)
+        # Second appui dans la fenetre : c'est Maj.
+        self.assertEqual(self.G.appui(0, 200), self.DOUBLE)
+        self.assertEqual(self.G.relachement(0, 900), self.FIN)
+        # Et on est bien revenu au depart.
+        self.assertEqual(self.G.appui(0, 1000), self.COURT)
+
+    def test_second_appui_trop_tard_redonne_le_premier(self):
+        self.G.appui(0, 0)
+        self.G.relachement(0, 60)
+        self.assertEqual(self.G.service(400), [])   # la fenetre expire
+        self.assertEqual(self.G.appui(0, 500), self.COURT)
+
+    def test_touche_a_un_seul_maintien(self):
+        self.assertEqual(self.G.appui(2, 0), self.COURT)
+        self.assertEqual(self.G.relachement(2, 50), self.FIN)
+        # Pas de second maintien : l'appui suivant repart sur le premier.
+        self.assertEqual(self.G.appui(2, 100), self.COURT)
+
+    def test_les_autres_touches_ne_changent_pas(self):
+        self.assertIsNone(self.G.appui(1, 0))
+        self.assertEqual(self.G.relachement(1, 50), self.COURT)
+
+    # --- le clavier ----------------------------------------------------
+    # Rappel : pump(k, depart, duree) fait avancer l'horloge de "depart" a
+    # "depart + duree", par pas de 2 ms - comme la vraie boucle.
+    def test_le_modificateur_reste_enfonce(self):
+        t = Transport(); k = HIDKeyboard(t); k.tick(0)
+        k.maintenir([("maintien", ("CTRL",))])
+        pump(k, 10, 40)
+        # Ctrl seul, et il reste dans le rapport.
+        self.assertIn((-1,), t.sent)
+        self.assertEqual(t.sent[-1], (-1,))
+
+    def test_une_macro_pendant_le_maintien_garde_le_modificateur(self):
+        t = Transport(); k = HIDKeyboard(t); k.tick(0)
+        k.maintenir([("maintien", ("CTRL",))])
+        pump(k, 10, 40)
+        k.submit([("key", "F5")])
+        pump(k, 60, 120)
+        # F5 (62) est parti AVEC Ctrl : c'est bien Ctrl+F5 qu'a recu le PC.
+        self.assertIn((-1, 62), t.sent)
+        # Et entre les frappes, Ctrl n'est jamais remonte : aucun rapport
+        # vide tant que le doigt tient la touche.
+        self.assertEqual(t.sent[-1], (-1,))
+        self.assertNotIn((), t.sent[1:])
+
+    def test_relachement_libere_le_modificateur(self):
+        t = Transport(); k = HIDKeyboard(t); k.tick(0)
+        k.maintenir([("maintien", ("CTRL",))])
+        pump(k, 10, 40)
+        k.relacher_maintien()
+        pump(k, 60, 40)
+        self.assertEqual(t.sent[-1], ())
+        self.assertFalse(k.keys_down)
+
+    def test_esc_libere_un_modificateur_bloque(self):
+        # Le pire scenario : Ctrl enfonce et quelque chose qui derape.
+        # ESC doit TOUT relacher, sinon le PC reste avec Ctrl coince.
+        t = Transport(); k = HIDKeyboard(t); k.tick(0)
+        k.maintenir([("maintien", ("CTRL",))])
+        pump(k, 10, 40)
+        k.escape(60)
+        pump(k, 62, 200)
+        self.assertEqual(k.tenus, ())
+        self.assertIn((41,), t.sent)          # Echap est bien parti
+        self.assertEqual(t.sent[-1], ())
+
+    def test_changement_de_profil_libere_le_modificateur(self):
+        t = Transport(); k = HIDKeyboard(t); k.tick(0)
+        k.maintenir([("maintien", ("CTRL",))])
+        pump(k, 10, 40)
+        k.cancel()                            # ce que fait un changement
+        pump(k, 60, 40)
+        self.assertEqual(k.tenus, ())
+        self.assertEqual(t.sent[-1], ())
+
+    def test_deconnexion_usb_oublie_le_maintien(self):
+        t = Transport(); k = HIDKeyboard(t); k.tick(0)
+        k.maintenir([("maintien", ("CTRL",))])
+        pump(k, 10, 40)
+        t.open = False
+        k.tick(60)
+        self.assertEqual(k.tenus, ())
+
+    def test_maintien_intapable_refuse_sans_rien_envoyer(self):
+        t = Transport(); k = HIDKeyboard(t); k.tick(0)
+        with self.assertRaises(ValueError):
+            k.maintenir([("maintien", ("TOUCHE_BIDON",))])
+        self.assertEqual(k.tenus, ())
+
+    # --- la configuration ----------------------------------------------
+    def test_aller_retour_par_la_page_web(self):
+        import store
+        entree = store.action_vers_json([("maintien", ("CTRL",))])
+        self.assertEqual(entree, ("maintien", "CTRL"))
+        self.assertEqual(store.action_depuis_json("maintien", "CTRL"),
+                         [("maintien", ("CTRL",))])
+        self.assertEqual(store.action_depuis_json("maintien", "CTRL+SHIFT"),
+                         [("maintien", ("CTRL", "SHIFT"))])
+
+    def test_les_valeurs_usine_de_civil3d(self):
+        import profiles as P
+        import store
+        label, gestes = P.PROFILES["CIVIL3D"][1]
+        self.assertEqual(label, "CTRL")
+        self.assertEqual(gestes["court"], [("maintien", ("CTRL",))])
+        self.assertEqual(gestes["double"], [("maintien", ("SHIFT",))])
+        # Et elles restent verifiables comme n'importe quelle macro.
+        self.assertEqual(store.verifier({"CIVIL3D": P.PROFILES["CIVIL3D"]},
+                                        ["CIVIL3D"], 6), [])
+
+
+class LedsRgb(unittest.TestCase):
+    """Les LED RGB des touches, sans LED.
+
+    Le test le plus important de ce fichier est le premier : il verifie
+    que le plafond de luminosite est bien applique. Sans lui, six LED en
+    blanc a fond tirent 360 mA, le 5 V du port USB s'effondre et la carte
+    redemarre en pleine frappe.
+    """
+
+    def setUp(self):
+        clock[0] = 0
+        # Faux neopixel : il retient ce qu'on lui ecrit.
+        module = types.ModuleType('neopixel')
+
+        class NeoPixel:
+            def __init__(self, pin, n):
+                self.pin, self.n = pin, n
+                self.pixels = [(0, 0, 0)] * n
+                self.ecritures = 0
+
+            def __setitem__(self, index, valeur):
+                self.pixels[index] = valeur
+
+            def __getitem__(self, index):
+                return self.pixels[index]
+
+            def write(self):
+                self.ecritures += 1
+
+        module.NeoPixel = NeoPixel
+        sys.modules['neopixel'] = module
+
+        self.sauvegarde = {}
+        self._regler(RGB_ENABLED=True, RGB_TYPE="WS2812", RGB_PIN=16,
+                     RGB_COUNT=6, RGB_ORDRE="GRB", RGB_LUMINOSITE=40,
+                     RGB_VEILLE_MS=300000, RGB_MS=25)
+
+    def tearDown(self):
+        for nom, valeur in self.sauvegarde.items():
+            setattr(C, nom, valeur)
+
+    def _regler(self, **valeurs):
+        for nom, valeur in valeurs.items():
+            if nom not in self.sauvegarde:
+                self.sauvegarde[nom] = getattr(C, nom, None)
+            setattr(C, nom, valeur)
+
+    def _rgb(self):
+        import rgb
+        objet = rgb.Rgb()
+        self.assertTrue(objet.actif, "les LED auraient du s'initialiser")
+        return objet
+
+    # --- LA securite --------------------------------------------------
+    def test_la_luminosite_plafonne_vraiment_le_courant(self):
+        import rgb
+        self.assertEqual(rgb.limiter((255, 255, 255)), (40, 40, 40))
+        self.assertEqual(rgb.limiter((0, 0, 0)), (0, 0, 0))
+        # Meme une couleur aberrante reste dans les clous.
+        self.assertEqual(rgb.limiter((999, -20, 128)), (40, 0, 20))
+
+        # Le calcul qui compte : 60 mA par LED en blanc plein. Avec le
+        # plafond livre, six LED restent tres en dessous des 500 mA de
+        # l'USB, marge confortable pour la carte et l'ecran.
+        pire = rgb.limiter((255, 255, 255))
+        courant = 6 * 60 * sum(pire) / (3 * 255.0)
+        self.assertLess(courant, 100,
+                        "six LED tireraient %d mA : trop pour l'USB" % courant)
+
+    def test_aucun_acces_materiel_quand_c_est_desactive(self):
+        self._regler(RGB_ENABLED=False)
+        import rgb
+        objet = rgb.Rgb()
+        self.assertFalse(objet.actif)
+        self.assertIsNone(objet.materiel)
+        objet.profil("CIVIL3D"); objet.touche(0, 0); objet.tick(0)
+        objet.close()          # rien ne doit lever
+
+    # --- les couleurs --------------------------------------------------
+    def test_chaque_profil_a_sa_couleur(self):
+        objet = self._rgb()
+        objet.profil("CIVIL3D")
+        objet.tick(100)
+        attendu = tuple(C.RGB_COULEURS["CIVIL3D"])
+        import rgb
+        r, v, b = rgb.limiter(attendu)
+        # Les WS2812 attendent VERT, ROUGE, BLEU.
+        for pixel in objet.materiel.pixels:
+            self.assertEqual(pixel, (v, r, b))
+
+    def test_ordre_des_couleurs_configurable(self):
+        self._regler(RGB_ORDRE="RGB")
+        objet = self._rgb()
+        objet.profil("CIVIL3D")
+        objet.tick(100)
+        import rgb
+        r, v, b = rgb.limiter(C.RGB_COULEURS["CIVIL3D"])
+        self.assertEqual(objet.materiel.pixels[0], (r, v, b))
+
+    def test_profil_inconnu_prend_la_couleur_par_defaut(self):
+        objet = self._rgb()
+        objet.profil("UN_PROFIL_A_MOI")
+        objet.tick(100)
+        import rgb
+        r, v, b = rgb.limiter(C.RGB_COULEUR_DEFAUT)
+        self.assertEqual(objet.materiel.pixels[0], (v, r, b))
+
+    def test_la_touche_utilisee_passe_en_blanc(self):
+        objet = self._rgb()
+        objet.profil("WORD")
+        objet.tick(100)
+        objet.touche(3, 200)
+        objet.tick(300)
+        import rgb
+        blanc = rgb.limiter((255, 255, 255))
+        fond = rgb.limiter(C.RGB_COULEURS["WORD"])
+        self.assertEqual(objet.materiel.pixels[3], blanc)
+        self.assertNotEqual(objet.materiel.pixels[2], blanc)
+        r, v, b = fond
+        self.assertEqual(objet.materiel.pixels[2], (v, r, b))
+
+        # Puis elle revient a la couleur du profil.
+        objet.tick(300 + C.HIGHLIGHT_MS + 50)
+        self.assertEqual(objet.materiel.pixels[3], (v, r, b))
+
+    def test_panne_hid_passe_au_rouge_et_revient(self):
+        objet = self._rgb()
+        objet.profil("BLENDER")
+        objet.tick(100)
+        objet.etat("ERR")
+        objet.tick(200)
+        import rgb
+        r, v, b = rgb.limiter(C.RGB_COULEUR_ERREUR)
+        self.assertEqual(objet.materiel.pixels[0], (v, r, b))
+        objet.etat("HID")
+        objet.tick(300)
+        r, v, b = rgb.limiter(C.RGB_COULEURS["BLENDER"])
+        self.assertEqual(objet.materiel.pixels[0], (v, r, b))
+
+    # --- veille et cadence ---------------------------------------------
+    def test_extinction_apres_la_veille_puis_reveil(self):
+        objet = self._rgb()
+        objet.profil("WORD")
+        objet.tick(100)
+        objet.tick(100 + C.RGB_VEILLE_MS + 10)
+        self.assertEqual(objet.materiel.pixels[0], (0, 0, 0))
+        # Le premier appui rallume.
+        objet.touche(0, 100 + C.RGB_VEILLE_MS + 20)
+        objet.tick(100 + C.RGB_VEILLE_MS + 60)
+        self.assertNotEqual(objet.materiel.pixels[0], (0, 0, 0))
+
+    def test_pas_plus_d_un_envoi_par_periode(self):
+        objet = self._rgb()
+        objet.profil("WORD")
+        objet.tick(0)
+        depart = objet.materiel.ecritures
+        # Cent tours de boucle, soit 100 ms de temps simule : a la
+        # cadence livree (un envoi toutes les 25 ms), cela doit faire
+        # quatre ou cinq envois, pas cent. Envoyer a chaque tour
+        # occuperait le processeur pour rien - et les WS2812 coupent les
+        # interruptions pendant l'envoi.
+        for n in range(100):
+            objet.touche(n % 6, n)
+            objet.tick(n)
+        envois = objet.materiel.ecritures - depart
+        self.assertLessEqual(envois, 100 // C.RGB_MS + 1)
+        self.assertGreater(envois, 0)
+
+    def test_rien_a_envoyer_rien_n_est_envoye(self):
+        objet = self._rgb()
+        objet.profil("WORD")
+        objet.tick(0)
+        depart = objet.materiel.ecritures
+        for n in range(1000, 3000, 2):
+            objet.tick(n)
+        self.assertEqual(objet.materiel.ecritures, depart)
+
+    # --- robustesse ------------------------------------------------------
+    def test_materiel_absent_ne_plante_pas(self):
+        del sys.modules['neopixel']
+        import rgb
+        objet = rgb.Rgb()
+        self.assertFalse(objet.actif)
+        objet.profil("WORD"); objet.touche(0, 0); objet.tick(0); objet.close()
+
+    def test_panne_en_cours_de_route_desactive_sans_remonter(self):
+        objet = self._rgb()
+        objet.profil("WORD")
+
+        def casse():
+            raise OSError("fil arrache")
+        objet.materiel.write = casse
+        objet.tick(100)            # ne doit rien lever
+        self.assertFalse(objet.actif)
+
+    def test_tout_s_eteint_a_l_arret(self):
+        objet = self._rgb()
+        objet.profil("WORD")
+        objet.tick(100)
+        objet.close()
+        self.assertEqual(objet.materiel.pixels[0], (0, 0, 0))
+        self.assertFalse(objet.actif)
+
+    # --- le montage a une seule LED RGB ---------------------------------
+    def test_montage_pwm_anode_commune(self):
+        self._regler(RGB_TYPE="PWM", RGB_PIN_R=16, RGB_PIN_V=17,
+                     RGB_PIN_B=18, RGB_ANODE_COMMUNE=True)
+        objet = self._rgb()
+        objet.profil("CIVIL3D")
+        objet.tick(100)
+        import rgb
+        r, v, b = rgb.limiter(C.RGB_COULEURS["CIVIL3D"])
+        # Anode commune : le GPIO tire vers le bas, donc c'est inverse.
+        self.assertEqual(objet.materiel[0].values[-1], 65535 - r * 257)
+        self.assertEqual(objet.materiel[1].values[-1], 65535 - v * 257)
+        self.assertEqual(objet.materiel[2].values[-1], 65535 - b * 257)
+
+    def test_montage_pwm_cathode_commune(self):
+        self._regler(RGB_TYPE="PWM", RGB_PIN_R=16, RGB_PIN_V=17,
+                     RGB_PIN_B=18, RGB_ANODE_COMMUNE=False)
+        objet = self._rgb()
+        objet.profil("CIVIL3D")
+        objet.tick(100)
+        import rgb
+        r, v, b = rgb.limiter(C.RGB_COULEURS["CIVIL3D"])
+        self.assertEqual(objet.materiel[0].values[-1], r * 257)
 
 
 class ValeursUsineSansPiege(unittest.TestCase):

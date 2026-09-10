@@ -124,7 +124,14 @@ PROFILES = {
     # _MATCHPROP fonctionne meme sur un Civil 3D installe en francais.
     "CIVIL3D": [
         presse_papiers(),
-        K("HACHUR", [("text_enter", "_HATCH")]),
+        # LA TOUCHE MODIFICATRICE. Elle ne tape rien : elle enfonce Ctrl
+        # ou Maj et les GARDE enfonces tant que ton doigt reste dessus.
+        #   appui maintenu             -> Ctrl  (Ctrl+clic : selectionner)
+        #   appui bref puis maintenu   -> Maj   (Maj+clic : deselectionner)
+        # Ta main gauche tient le modificateur, ta main droite reste a la
+        # souris. Voir gestures.py pour le detail.
+        K("CTRL",   [("maintien", ("CTRL",))],
+          double=[("maintien", ("SHIFT",))]),
         K("MATCH",  [("text_enter", "_MATCHPROP")],
           long=[("combo", ("CTRL", "Y"))]),                # retablir
         K("ISOLE",  [("text_enter", "_ISOLATEOBJECTS")],
@@ -135,7 +142,10 @@ PROFILES = {
         # version ne suit pas, remets simplement "_ZOOM".
         K("ZOOM",   [("text_enter", "_ZOOM E")],
           double=[("text_enter", "_REGEN")]),              # regenerer
-        K("ENREG",  [("combo", ("CTRL", "S"))]),
+        # _HATCH etait sur B2, que la touche modificatrice occupe
+        # desormais : il passe en appui long, ou il ne coute aucun retard.
+        K("ENREG",  [("combo", ("CTRL", "S"))],
+          long=[("text_enter", "_HATCH")]),                # hachures
     ],
 
     # -----------------------------------------------------------------

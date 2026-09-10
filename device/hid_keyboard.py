@@ -73,6 +73,12 @@ class HIDKeyboard:
         self.opened = False            # Windows a-t-il configuré le clavier ?
         self.release_needed = True     # par sécurité on commence par tout relâcher
         self.keys_down = False         # des touches sont-elles enfoncées côté PC ?
+        # Touches MAINTENUES : elles sont ajoutées à chaque rapport envoyé,
+        # tant que tu gardes le doigt sur la touche du macropad. C'est ce
+        # qui permet à une touche du pad de se comporter comme la touche
+        # Ctrl d'un vrai clavier : Ctrl reste enfoncé pendant que tu
+        # cliques à la souris.
+        self.tenus = ()
         self.fault = False
 
     # ------------------------------------------------------------------
@@ -116,11 +122,44 @@ class HIDKeyboard:
         self.queue.append(actions)
         return True
 
+    def maintenir(self, actions):
+        """Enfonce des touches et les GARDE enfoncées (Ctrl, Maj...).
+
+        Rien n'est tapé : les touches sont simplement ajoutées à tous les
+        rapports suivants, jusqu'à relacher_maintien(). Le relâchement est
+        prioritaire dans tick(), donc Ctrl descend en deux ou trois
+        millisecondes : à l'échelle d'un doigt, c'est instantané.
+        """
+        if not self.accepting():
+            print("HID : maintien ignore, interface non prete")
+            return False
+        # Traduit tout de suite pour verifier, comme submit().
+        frappes = compile_actions(actions, C.KEYBOARD_LAYOUT)
+        codes = ()
+        for frappe in frappes:
+            codes += frappe
+        self.tenus = codes
+        self.release_needed = True     # provoque l'envoi de l'etat courant
+        self.progress = ticks_ms()
+        return True
+
+    def relacher_maintien(self):
+        """Relâche les touches maintenues. Sans effet s'il n'y en a pas."""
+        if not self.tenus:
+            return
+        self.tenus = ()
+        self.release_needed = True
+        self.progress = ticks_ms()
+
     def cancel(self):
         """Oublie tout ce qui était prévu et programme un relâchement."""
         self.queue = []
         self.current = []
         self.phase = "idle"
+        # Un ESC, un changement de profil ou une panne doivent TOUT
+        # relâcher, y compris un Ctrl resté enfoncé. Sinon le PC garde un
+        # modificateur bloqué, ce qui est la pire panne possible.
+        self.tenus = ()
         self.release_needed = True
         # INDISPENSABLE : le relâchement qu'on vient de programmer est une
         # NOUVELLE action, le chronomètre du garde-fou doit repartir de zéro.
@@ -158,11 +197,34 @@ class HIDKeyboard:
         """
         if self.interface.busy():
             return False
-        if not self.interface.send_keys(keys, timeout_ms=0):
+        paquet = self._avec_tenus(keys)
+        if not self.interface.send_keys(paquet, timeout_ms=0):
             return False
         # On mémorise si ce paquet laissait des touches enfoncées.
-        self.keys_down = bool(keys)
+        self.keys_down = bool(paquet)
         return True
+
+    def _avec_tenus(self, keys):
+        """Ajoute les touches maintenues au paquet, sans doublon.
+
+        Un rapport HID ne transporte que six touches ordinaires (les
+        modificateurs, eux, sont des bits et ne comptent pas). Si le
+        maintien et la macro en demandent davantage, on garde les
+        maintenues : ce sont elles que le doigt réclame.
+        """
+        if not self.tenus:
+            return keys
+        paquet = tuple(self.tenus)
+        ordinaires = sum(1 for code in paquet if code >= 0)
+        for code in keys:
+            if code in paquet:
+                continue
+            if code >= 0:
+                if ordinaires >= 6:
+                    continue
+                ordinaires += 1
+            paquet += (code,)
+        return paquet
 
     def _fail(self, error):
         if not self.fault:

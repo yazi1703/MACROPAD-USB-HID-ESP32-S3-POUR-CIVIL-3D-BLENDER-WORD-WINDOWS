@@ -36,6 +36,7 @@ deux résumés**. Le résumé prend :
 
 * le nom de la touche pour une macro « touche » (`F5` → `F5`) ;
 * la **dernière** touche d'une combinaison (`CTRL+SHIFT+Z` → `Z`) ;
+* le modificateur d'un maintien (`CTRL` → `CTRL`, `MAJ` → `MAJ`) ;
 * le texte sans son underscore de tête (`_MATCHPROP` → `MATC`).
 
 > **Pourquoi la colonne `CRT` montre le libellé et pas la macro ?** Parce
@@ -83,6 +84,60 @@ est dans l'un de quatre états — au repos, enfoncée, en attente d'un
 éventuel second appui, ou « long déjà envoyé ». Rien n'y bloque : la
 fonction `service(now)` est appelée à chaque tour de boucle et se contente
 de comparer des dates.
+
+---
+
+## 9.2 bis Une touche qui fait Ctrl et Maj
+
+C'est un quatrième comportement, à part des trois gestes : une touche qui
+**ne tape rien**, mais qui enfonce un modificateur et le **garde enfoncé**
+tant que ton doigt reste dessus — exactement comme la touche Ctrl d'un
+vrai clavier.
+
+| Ce que tu fais | Ce que le PC reçoit |
+|---|---|
+| tu appuies et tu **maintiens** | **Ctrl** enfoncé, relâché quand tu lâches |
+| tu appuies **brièvement**, puis tu **maintiens** | **Maj** enfoncé, relâché quand tu lâches |
+
+C'est B2 dans le profil CIVIL 3D. L'usage visé : ta main gauche tient le
+modificateur pendant que ta main droite reste à la souris —
+**Ctrl+clic** pour ajouter à la sélection, **Maj+clic** pour en retirer.
+
+### Comment on la configure
+
+Dans la page de configuration, type **« maintenir (Ctrl, Maj...) »** :
+
+| Geste | Type | Valeur |
+|---|---|---|
+| appui court | maintenir | `CTRL` |
+| double appui | maintenir | `MAJ` |
+
+Tu peux évidemment mettre autre chose : `ALTGR`, `CTRL+ALT`, ou même une
+touche ordinaire à maintenir.
+
+### Deux choix assumés
+
+**Le modificateur descend dès l'appui, sans le moindre délai.** Attendre
+260 ms pour voir si un second appui arrive rendrait la touche
+inutilisable : un modificateur qui traîne, c'est un clic raté.
+
+**Conséquence : le premier appui bref de la séquence « bref puis
+maintenu » envoie un Ctrl seul, très court.** Un Ctrl seul n'a aucun effet
+dans Windows, Civil 3D, Blender ou Word. Mais **évite `ALT` sur le premier
+appui** : un Alt seul ouvre la barre de menus.
+
+### Ce qui ne peut pas arriver
+
+Un modificateur resté coincé côté PC est la pire panne possible — tout
+devient un raccourci. Trois filets, chacun couvert par un test :
+
+| Événement | Effet |
+|---|---|
+| tu relâches la touche | le modificateur remonte |
+| **ESC** | tout est relâché, y compris un maintien |
+| changement de profil | idem |
+| câble débranché | le maintien est oublié |
+| `Ctrl-C` dans Thonny | `close()` relâche avant de rendre la main |
 
 ---
 

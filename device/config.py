@@ -170,6 +170,53 @@ STATS_SAVE_EVERY = 25
 # visible. Le bandeau inverse du haut est exactement le pire cas.
 # Apres un moment sans appui on baisse le contraste, puis on eteint.
 # N'importe quelle touche reveille l'ecran instantanement.
+# =====================================================================
+# LES LED RGB SOUS LES TOUCHES
+# =====================================================================
+# Livre a False : rien ne s'allume tant que tu n'as pas cable et choisi
+# ton type de LED. Lis docs/10-led-rgb.md AVANT de brancher quoi que ce
+# soit - il y a une histoire de courant qui peut faire redemarrer la
+# carte en pleine frappe.
+RGB_ENABLED = False
+
+# "WS2812" : LED adressables, un seul fil de donnees, une couleur par
+#            touche. C'est ce qu'il faut pour eclairer six touches.
+# "PWM"    : UNE LED RGB ordinaire a quatre pattes, sur trois broches.
+#            Une seule couleur pour tout le macropad.
+RGB_TYPE = "WS2812"
+
+# --- montage WS2812 ---------------------------------------------------
+RGB_PIN = 16                # fil de donnees (via 330 a 470 ohms en serie)
+RGB_COUNT = 6               # une LED par touche
+RGB_ORDRE = "GRB"           # ordre des couleurs de TES LED (voir la doc)
+
+# --- montage PWM (une seule LED RGB) ----------------------------------
+RGB_PIN_R = 16
+RGB_PIN_V = 17
+RGB_PIN_B = 18
+RGB_ANODE_COMMUNE = True    # patte commune au + : True. Au GND : False.
+
+# --- luminosite : C'EST LA SECURITE COURANT ---------------------------
+# Chaque canal est multiplie par RGB_LUMINOSITE / 255 avant d'etre
+# envoye. A 40, six WS2812 tirent environ 60 mA au total. A 255, elles
+# en tireraient 360 : le 5 V d'un port USB s'effondre, la carte redemarre
+# et le clavier disparait. Ne monte pas ce chiffre sans mesurer.
+RGB_LUMINOSITE = 40
+
+# --- couleurs ---------------------------------------------------------
+# Un profil = une couleur. Tu sais ou tu es sans lire l'ecran.
+RGB_COULEURS = {
+    "BLENDER": (255, 110, 0),      # orange Blender
+    "CIVIL3D": (0, 160, 255),      # bleu cyan
+    "WORD":    (40, 70, 255),      # bleu Word
+    "WINDOWS": (0, 200, 90),       # vert
+}
+RGB_COULEUR_DEFAUT = (120, 120, 120)   # profil sans couleur declaree
+RGB_COULEUR_ERREUR = (255, 0, 0)       # panne HID : visible sans lire
+
+RGB_MS = 25                 # au plus un envoi toutes les 25 ms
+RGB_VEILLE_MS = 300000      # 5 minutes sans appui -> extinction
+
 SCREEN_DIM_MS = 180000      # 3 minutes  -> contraste minimal
 SCREEN_OFF_MS = 900000      # 15 minutes -> ecran eteint
 SCREEN_DIM_CONTRAST = 1     # 0 a 255

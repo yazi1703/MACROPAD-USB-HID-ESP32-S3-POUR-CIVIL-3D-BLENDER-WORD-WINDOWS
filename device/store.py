@@ -55,8 +55,11 @@ FORME DU FICHIER
       }
     }
 
-Le "type" vaut "key", "combo", "text", "text_enter" ou "none".
+Le "type" vaut "key", "combo", "maintien", "text", "text_enter" ou "none".
 Pour un "combo", la valeur s'ecrit avec des plus : "CTRL+SHIFT+ESC".
+Un "maintien" s'ecrit pareil, mais la touche reste ENFONCEE tant que tu
+gardes le doigt dessus : c'est ainsi qu'une touche du macropad devient une
+vraie touche Ctrl ou Maj.
 """
 
 import json
@@ -64,7 +67,7 @@ import config as C
 import profiles as P
 from layouts import compile_actions
 
-TYPES = ("key", "combo", "text", "text_enter", "none")
+TYPES = ("key", "combo", "maintien", "text", "text_enter", "none")
 
 
 # =====================================================================
@@ -75,8 +78,9 @@ def action_vers_json(actions):
     if not actions:
         return "none", ""
     genre, valeur = actions[0]
-    if genre == "combo":
-        return "combo", "+".join(valeur)
+    if genre in ("combo", "maintien"):
+        # Les deux transportent une liste de touches : CTRL+MAJ, ou juste CTRL.
+        return genre, "+".join(valeur)
     return genre, str(valeur)
 
 
@@ -84,11 +88,11 @@ def action_depuis_json(genre, valeur):
     """(type, valeur texte) -> forme interne."""
     if genre == "none" or (genre in ("text", "text_enter") and not valeur):
         return []
-    if genre == "combo":
+    if genre in ("combo", "maintien"):
         touches = tuple(p.strip() for p in str(valeur).split("+") if p.strip())
         if not touches:
             raise ValueError("combinaison vide")
-        return [("combo", touches)]
+        return [(genre, touches)]
     if genre in ("key", "text", "text_enter"):
         if not str(valeur).strip():
             return []

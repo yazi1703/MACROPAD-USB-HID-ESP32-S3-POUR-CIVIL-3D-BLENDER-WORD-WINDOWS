@@ -23,6 +23,7 @@ ouvert, compte les appuis, et se configure entièrement depuis une page web
 | vérifier le brochage broche par broche | [`docs/02-cablage.md`](docs/02-cablage.md) |
 | cocher que tout est bon | [`docs/04-checklist.md`](docs/04-checklist.md) |
 | **comprendre l'écran et les trois gestes** | [`docs/09-ecran-et-gestes.md`](docs/09-ecran-et-gestes.md) |
+| **câbler les LED RGB sans faire redémarrer la carte** | [`docs/10-led-rgb.md`](docs/10-led-rgb.md) |
 | savoir ce qui a été corrigé et pourquoi | [`docs/06-corrections.md`](docs/06-corrections.md) |
 | **que le macropad suive le logiciel actif** | [`docs/08-detection-auto.md`](docs/08-detection-auto.md) — le script PC |
 | **modifier les macros depuis le PC** | lancer `pc/macropad_auto.bat`, puis `http://127.0.0.1:8765` |
@@ -79,7 +80,7 @@ BLENDER  →  CIVIL3D  →  WORD  →  WINDOWS  →  BLENDER
 |  | BLENDER | CIVIL 3D | WORD | WINDOWS |
 |---|---|---|---|---|
 | **B1** | **Ctrl+C** | **Ctrl+C** | **Ctrl+C** | **Ctrl+C** |
-| **B2** | `R` | `_HATCH` + Entrée | Ctrl+B | Alt+Tab |
+| **B2** | `R` | **Ctrl / Maj maintenus** | Ctrl+B | Alt+Tab |
 | **B3** | `S` | `_MATCHPROP` + Entrée | Ctrl+I | Win+E |
 | **B4** | `Tab` | `_ISOLATEOBJECTS` + Entrée | Ctrl+U | Ctrl+Maj+Échap |
 | **B5** | `E` | `_ZOOM E` + Entrée | Ctrl+S | Win+V |
@@ -99,9 +100,11 @@ Les autres appuis longs et doubles des valeurs d'usine :
 | | Appui long | Double appui |
 |---|---|---|
 | **BLENDER** B6 `G` | Ctrl+Maj+Z rétablir | — |
+| **CIVIL 3D** B2 CTRL | — | **Maj maintenu** (voir ci-dessous) |
 | **CIVIL 3D** B3 MATCH | Ctrl+Y rétablir | — |
 | **CIVIL 3D** B4 ISOLE | `_UNISOLATEOBJECTS` | — |
 | **CIVIL 3D** B5 ZOOM | — | `_REGEN` |
+| **CIVIL 3D** B6 ENREG | `_HATCH` hachures | — |
 | **WORD** B5 ENREG | F12 enregistrer sous | — |
 | **WORD** B6 FORMAT | Ctrl+Y refaire | Ctrl+Maj+V appliquer la mise en forme |
 | **WINDOWS** B3 EXPLOR | Win+D bureau | — |
@@ -112,6 +115,21 @@ Les autres appuis longs et doubles des valeurs d'usine :
 > **double appui** attend (260 ms) avant de conclure « c'était un appui
 > court ». L'appui **long**, lui, ne coûte rien. Sur tes touches les plus
 > utilisées, laisse la colonne « double » vide.
+
+**La touche B2 de Civil 3D est une vraie touche modificatrice.** Elle ne
+tape rien : elle enfonce Ctrl ou Maj et les **garde enfoncés** tant que
+ton doigt reste dessus, pour que tu cliques à la souris pendant ce temps.
+
+| Ce que tu fais | Ce que le PC reçoit |
+|---|---|
+| tu appuies et tu **maintiens** | **Ctrl** enfoncé, relâché quand tu lâches |
+| tu appuies **brièvement**, puis tu **maintiens** | **Maj** enfoncé, relâché quand tu lâches |
+
+Le modificateur descend **dès l'appui**, sans aucun délai. Détail et
+limites dans [`docs/09`](docs/09-ecran-et-gestes.md).
+
+**Et si tu as des LED RGB** (`docs/10`) : chaque profil a sa couleur, la
+touche utilisée passe au blanc, une panne HID met tout en rouge.
 L'écran affiche les trois colonnes en permanence, et **saute sur la touche
 que tu viens d'utiliser en la surlignant** :
 
@@ -176,7 +194,8 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   ├── inputs.py                 anti-rebond des entrées
 │   ├── display.py                écran : tableau, défilement, veille
 │   ├── sh1106.py                 pilote de l'écran (MIT, robert-hh)
-│   ├── led.py                    respiration et flash
+│   ├── led.py                    respiration et flash du bouton ESC
+│   ├── rgb.py                    LED RGB des touches (WS2812 ou PWM)
 │   ├── diag.py                   diagnostic, n'envoie jamais de touche
 │   ├── runtime.py                mémoire partagée boot.py / main.py
 │   └── lib/usb/device/           bibliothèque USB officielle (MIT)
@@ -193,7 +212,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   └── generer_code_complet.py   régénère CODE_COMPLET.md
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             89 tests du firmware, exécutables sur PC
+│   ├── test_logic.py             118 tests du firmware, exécutables sur PC
 │   ├── test_pc.py                25 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
@@ -219,7 +238,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 114 tests ... OK
+→ Ran 143 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport
