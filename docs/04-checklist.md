@@ -151,7 +151,8 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 [ ] soudures faites en moins de 5 s par pastille, fer à 300-320 °C
 [ ] alimentées en 5 V (VBUS), PAS en 3,3 V
 [ ] GND commun avec la carte
-[ ] résistance 330 à 470 Ω en série sur le fil de données, côté LED
+[ ] résistance 220 à 470 Ω en série sur le fil de données, côté LED
+[ ] sa valeur VÉRIFIÉE au multimètre avant soudure (déjà vu : une « 150 » à 1 MΩ)
 [ ] condensateur 470 µF entre 5 V et GND, au plus près du ruban
 [ ] bande marquée du condensateur côté GND (à l'envers, il explose)
 [ ] multimètre AVANT branchement : pas de court-circuit +5V / GND

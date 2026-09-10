@@ -143,7 +143,7 @@ projet.
 | Depuis | À travers | Vers |
 |---|---|---|
 | **VBUS (5 V)** | *(rien, ou la 1N4148 si scintillements)* | **+5V** du ruban |
-| **GPIO16** | **330 Ω** | **DIN** du ruban |
+| **GPIO16** | **une résistance de 220 à 470 Ω** | **DIN** du ruban |
 | **GND** | — | **GND** du ruban |
 
 Plus le **condensateur 470 µF entre +5V et GND**, soudé au plus près du
@@ -158,7 +158,7 @@ ruban.
                                   (le GND doit être COMMUN, sans quoi
                                    le signal n'a aucune référence)
 
-   GPIO16 ──── 330 à 470 Ω ────► DIN du ruban
+   GPIO16 ──── 220 à 470 Ω ────► DIN du ruban
               (au plus près de la première LED)
 ```
 
@@ -173,8 +173,12 @@ Fais-le dans cet ordre : chaque étape se vérifie avant la suivante.
 3. **Soude trois fils** d'une quinzaine de centimètres, un par pastille.
    Repère-les tout de suite — rouge pour le 5 V, une autre couleur pour
    DIN, noir pour GND. Une erreur ici ne se voit plus une fois en place.
-4. **Soude la résistance de 330 Ω** sur le fil de DIN, **du côté du
-   ruban**, pas du côté de la carte.
+4. **Soude la résistance** sur le fil de DIN, **du côté du ruban**, pas
+   du côté de la carte. N'importe quelle valeur entre **220 et 470 Ω**
+   convient — 300, 320, 330, 390, 470 : prends celle que tu as. Elle ne
+   règle aucun courant, elle amortit le signal ; c'est sa **longueur de
+   patte**, pas sa valeur, qui compte. Une seule résistance vaut mieux
+   que deux en série.
 5. **Soude le condensateur 470 µF** entre les fils +5V et GND, lui aussi
    au plus près du ruban. **Sa bande marquée va sur le GND.**
 6. **Multimètre, ruban NON branché** — vérifie qu'il n'y a **pas de
@@ -192,9 +196,15 @@ Fais-le dans cet ordre : chaque étape se vérifie avant la suivante.
 1. **Le 5 V vient de VBUS, jamais du 3,3 V.** Le régulateur 3,3 V de la
    carte n'a pas la marge, et les WS2812 sont prévues pour 5 V.
 
-2. **La résistance de 330 à 470 Ω sur le fil de données** amortit les
+2. **La résistance de 220 à 470 Ω sur le fil de données** amortit les
    réflexions du signal et protège le GPIO. Elle se place **côté LED**,
-   pas côté carte.
+   pas côté carte, et le plus court possible.
+
+   La valeur n'est pas critique du tout : contrairement à la résistance
+   d'une LED ordinaire, elle ne fixe aucun courant. Tout ce qui est entre
+   220 et 470 Ω fait le travail. **Une seule résistance vaut mieux que
+   deux en série** : deux soudures de plus, une patte plus longue, sur un
+   signal qui commute en quelques nanosecondes.
 
 3. **Le condensateur de 470 µF entre 5 V et GND**, au plus près des
    LED. Elles commutent en quelques nanosecondes et tirent des pointes de

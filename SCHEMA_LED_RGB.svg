@@ -23,7 +23,7 @@
 
 <!-- ================= 330 ohms ================= -->
 <rect x="470" y="298" width="110" height="26" fill="white" stroke="#172b45" stroke-width="2"/>
-<text x="470" y="288" class="small">330 Ω</text>
+<text x="452" y="288" class="small">220 à 470 Ω</text>
 <path d="M580,310 L700,310" class="data"/>
 <path d="M700,310 L700,360" class="data"/>
 <path d="M700,360 L873,360" class="data"/>

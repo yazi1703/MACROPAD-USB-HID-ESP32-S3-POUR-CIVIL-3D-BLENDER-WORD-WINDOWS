@@ -4146,7 +4146,7 @@ class Led:
 
 ## device/rgb.py
 
-`303 lignes - sha256 763f6a72d61525e1`
+`305 lignes - sha256 93227ad4834cce8f`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -4204,8 +4204,10 @@ CE QUI RISQUE DE CRAMER, OU DE FAIRE REDEMARRER LA CARTE
    un niveau haut d'au moins 3,5 V : on est JUSTE en dessous. Souvent ca
    passe, parfois non - et quand ca ne passe pas, les couleurs sautent au
    hasard. Deux remedes eprouves :
-     * une resistance de 330 a 470 ohms EN SERIE sur le fil de donnees,
-       au plus pres de la premiere LED (elle protege aussi le GPIO) ;
+     * une resistance de 220 a 470 ohms EN SERIE sur le fil de donnees,
+       au plus pres de la premiere LED (elle protege aussi le GPIO). Sa
+       valeur exacte n'a aucune importance : elle amortit le signal, elle
+       ne fixe aucun courant ;
      * si ca scintille encore, alimente la guirlande en ~4,3 V en
        intercalant une diode 1N4148 entre le 5 V et son VCC : le seuil
        descend a 3,0 V et le probleme disparait.
