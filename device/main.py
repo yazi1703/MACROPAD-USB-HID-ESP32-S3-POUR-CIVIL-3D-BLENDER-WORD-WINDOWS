@@ -210,9 +210,7 @@ def run():
             label, actions = C.HID_TEST, TESTS[C.HID_TEST]
 
         print("%s B%d %s %s" % (manager.name, index + 1, geste, label or "-"))
-        maintenant = ticks_ms()
-        display.surligner(index, maintenant)
-        rgb.touche(index, maintenant)
+        # L'ecran et les LED ont deja reagi au moment de l'appui.
         if not actions:
             print("   (aucune macro sur ce geste)")
             return
@@ -315,6 +313,15 @@ def run():
                     if nom.startswith("B"):
                         index = int(nom[1:]) - 1
                         if front == 1:
+                            # L'ECRAN ET LES LED REAGISSENT ICI, sur le
+                            # front physique, et pas dans declencher().
+                            # Une touche qui a un double appui attend
+                            # GESTE_DOUBLE_MS avant de savoir quelle macro
+                            # envoyer : attendre cela pour allumer la LED
+                            # donnait un quart de seconde de retard, tres
+                            # perceptible sous le doigt.
+                            display.surligner(index, now)
+                            rgb.touche(index, now)
                             geste = gestes.appui(index, now)
                         else:
                             geste = gestes.relachement(index, now)

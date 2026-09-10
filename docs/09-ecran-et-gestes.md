@@ -158,6 +158,11 @@ C'est le comportement le plus utile au quotidien : **dès que tu appuies,
 l'écran saute sur la ligne de cette touche et la met en surbrillance**
 (fond blanc, texte noir) pendant 1,3 seconde (`HIGHLIGHT_MS`).
 
+Le surlignage part **du front d'appui**, pas du départ de la macro. La
+nuance compte : sur une touche qui a un double appui, la macro n'est
+décidée que 260 ms plus tard, et attendre ce moment donnait un retard
+très perceptible. Les LED RGB suivent la même règle.
+
 Trois choses arrivent en même temps :
 
 1. si la touche n'était pas dans les quatre lignes visibles, la fenêtre se

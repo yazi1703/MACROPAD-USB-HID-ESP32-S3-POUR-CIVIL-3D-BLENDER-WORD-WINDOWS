@@ -223,7 +223,18 @@ RGB_RESPIRATION = True
 RGB_RESPIRATION_MS = 4000   # duree d'un cycle complet
 RGB_RESPIRATION_MIN = 0.35  # luminosite au creux de la respiration
 
-RGB_MS = 25                 # au plus un envoi toutes les 25 ms
+# --- reaction a l'appui ------------------------------------------------
+# Un appui fait monter la LED de la touche, et elle redescend toute seule.
+# L'impulsion S'AJOUTE a ce qui reste : deux appuis coup sur coup montent
+# deux fois plus haut. Le plafond du courant reste RGB_LUMINOSITE, quoi
+# qu'il arrive.
+RGB_IMPULSION = 1.0         # ce qu'un appui ajoute (1.0 = double la clarte)
+RGB_IMPULSION_MAX = 3.0     # au-dela, ca ne monte plus
+RGB_RETOMBEE_MS = 700       # duree du retour au calme, PAR unite
+
+RGB_MS = 16                 # un envoi au plus toutes les 16 ms (~60 par
+                            # seconde) : c'est ce qui rend la retombee
+                            # fluide sans occuper le processeur
 RGB_VEILLE_MS = 300000      # 5 minutes sans appui -> extinction
 
 SCREEN_DIM_MS = 180000      # 3 minutes  -> contraste minimal

@@ -1245,7 +1245,9 @@ class LedsRgb(unittest.TestCase):
 
             def write(self):
                 self.ecritures += 1
-                self.vues.append(tuple(self.pixels))
+                # On retient l'instant : c'est ce qui permet de verifier
+                # QUAND la LED a reagi, et pas seulement qu'elle a reagi.
+                self.vues.append((clock[0], tuple(self.pixels)))
                 NeoPixel.derniere = self
 
         NeoPixel.derniere = None
@@ -1331,23 +1333,79 @@ class LedsRgb(unittest.TestCase):
         r, v, b = rgb.limiter(C.RGB_COULEUR_DEFAUT)
         self.assertEqual(objet.materiel.pixels[0], (v, r, b))
 
-    def test_la_touche_utilisee_passe_en_blanc(self):
+    def _clarte(self, objet, index):
+        return sum(objet.materiel.pixels[index])
+
+    def test_un_appui_intensifie_sa_touche_tout_de_suite(self):
         objet = self._rgb()
         objet.profil(C.RGB_COULEURS["WORD"])
-        objet.tick(100)
-        objet.touche(3, 200)
-        objet.tick(300)
-        import rgb
-        blanc = rgb.limiter((255, 255, 255))
-        fond = rgb.limiter(C.RGB_COULEURS["WORD"])
-        self.assertEqual(objet.materiel.pixels[3], blanc)
-        self.assertNotEqual(objet.materiel.pixels[2], blanc)
-        r, v, b = fond
-        self.assertEqual(objet.materiel.pixels[2], (v, r, b))
+        objet.tick(0)
+        repos = self._clarte(objet, 3)
 
-        # Puis elle revient a la couleur du profil.
-        objet.tick(300 + C.HIGHLIGHT_MS + 50)
-        self.assertEqual(objet.materiel.pixels[3], (v, r, b))
+        objet.touche(3, 100)
+        objet.tick(100)               # le tout premier tour de boucle
+        self.assertGreater(self._clarte(objet, 3), repos,
+                           "la LED n'a pas reagi des le premier tour")
+        # Et seulement celle-la.
+        self.assertEqual(self._clarte(objet, 2), repos)
+
+    def test_deux_appuis_montent_deux_fois_plus_haut(self):
+        objet = self._rgb()
+        objet.profil(C.RGB_COULEURS["WORD"])
+        objet.tick(0)
+
+        objet.touche(3, 10)
+        objet.tick(10)
+        un = self._clarte(objet, 3)
+        objet.touche(3, 20)           # deuxieme appui, coup sur coup
+        objet.tick(30)
+        deux = self._clarte(objet, 3)
+        self.assertGreater(deux, un, "le second appui n'a rien ajoute")
+
+    def test_la_retombee_est_progressive_et_revient_au_calme(self):
+        objet = self._rgb()
+        objet.profil(C.RGB_COULEURS["WORD"])
+        objet.tick(0)
+        repos = self._clarte(objet, 1)
+
+        objet.touche(1, 10)
+        objet.tick(10)
+        etapes = []
+        instant = 10
+        while instant < 10 + C.RGB_RETOMBEE_MS + 200:
+            instant += C.RGB_MS
+            objet.tick(instant)
+            etapes.append(self._clarte(objet, 1))
+
+        # Elle ne retombe pas d'un coup : plusieurs valeurs intermediaires.
+        intermediaires = set(v for v in etapes if repos < v < etapes[0])
+        self.assertGreater(len(intermediaires), 5,
+                           "la retombee est brutale : %d paliers"
+                           % len(intermediaires))
+        # Elle ne remonte jamais en chemin.
+        for precedent, suivant in zip(etapes, etapes[1:]):
+            self.assertLessEqual(suivant, precedent + 1)
+        # Et on finit par revenir a la couleur du profil.
+        self.assertEqual(etapes[-1], repos)
+
+    def test_l_empilement_est_plafonne(self):
+        objet = self._rgb()
+        objet.profil(C.RGB_COULEURS["WORD"])
+        for n in range(20):
+            objet.touche(0, 10)       # vingt appuis, sans laisser retomber
+        self.assertLessEqual(objet.niveaux[0], C.RGB_IMPULSION_MAX)
+
+    def test_meme_a_fond_le_plafond_de_courant_tient(self):
+        """LA verification qui compte : l'impulsion ne peut pas faire
+        redemarrer la carte a force d'appuyer."""
+        objet = self._rgb()
+        objet.profil((255, 255, 255))     # le pire cas, du blanc
+        for n in range(20):
+            objet.touche(2, 10)
+        objet.tick(10)
+        for canal in objet.materiel.pixels[2]:
+            self.assertLessEqual(canal, C.RGB_LUMINOSITE,
+                                 "le plafond de courant est franchi")
 
     def test_panne_hid_passe_au_rouge_et_revient(self):
         objet = self._rgb()
@@ -1449,18 +1507,32 @@ class LedsRgb(unittest.TestCase):
             objet.tick(instant)
         self.assertEqual(objet.materiel.pixels[0], premiere)
 
-    def test_la_touche_utilisee_ne_respire_pas(self):
-        # Le retour visuel doit etre franc : la touche pressee est en
-        # blanc plein, pas en blanc qui palpite.
-        self._regler(RGB_RESPIRATION=True)
+    def test_l_impulsion_s_ajoute_a_la_respiration(self):
+        # Un appui doit se voir autant en haut qu'en bas du cycle de
+        # respiration : l'impulsion s'AJOUTE, elle ne multiplie pas.
+        self._regler(RGB_RESPIRATION=True, RGB_RESPIRATION_MS=4000)
         objet = self._rgb()
         objet.profil(C.RGB_COULEURS["WORD"])
-        import rgb
-        blanc = rgb.limiter((255, 255, 255))
-        for instant in range(0, 800, 100):
-            objet.touche(2, instant)
-            objet.tick(instant)
-            self.assertEqual(objet.materiel.pixels[2], blanc)
+
+        objet.tick(0)                       # creux de la respiration
+        creux = self._clarte(objet, 2)
+        objet.touche(2, 0)
+        objet.tick(0)
+        gain_en_bas = self._clarte(objet, 2) - creux
+
+        objet2 = self._rgb()
+        objet2.profil(C.RGB_COULEURS["WORD"])
+        # On avance par petits pas, comme la vraie boucle : un saut d'un
+        # seul coup serait ignore, c'est justement la garde anti-saut.
+        for instant in range(0, 2001, 100):
+            objet2.tick(instant)            # jusqu'au sommet du cycle
+        sommet = self._clarte(objet2, 2)
+        objet2.touche(2, 2000)
+        objet2.tick(2000)
+        gain_en_haut = self._clarte(objet2, 2) - sommet
+
+        self.assertGreater(sommet, creux)   # la respiration fait son travail
+        self.assertAlmostEqual(gain_en_bas, gain_en_haut, delta=3)
 
     def test_l_horloge_qui_saute_ne_fait_pas_sauter_la_couleur(self):
         # Un tour de boucle tres long (garbage collector, ecriture flash)
@@ -1534,11 +1606,50 @@ class LedsRgb(unittest.TestCase):
         self.assertGreater(bande.ecritures, 10,
                            "le ruban n'a pas ete rafraichi")
         # Il a pris la couleur du profil de depart, puis celle du suivant.
-        self.assertGreater(len(set(bande.vues)), 1,
+        self.assertGreater(len(set(v[1] for v in bande.vues)), 1,
                            "la couleur n'a jamais change")
         # Et il est ETEINT a l'arret : main.run() passe par rgb.close().
         self.assertEqual(bande.pixels[0], (0, 0, 0),
                          "les LED sont restees allumees apres l'arret")
+
+    def test_la_led_suit_le_doigt_et_pas_la_macro(self):
+        """La panne constatee : un quart de seconde de retard a l'appui.
+
+        La touche 1 a un double appui : le firmware attend donc
+        GESTE_DOUBLE_MS avant de savoir quelle macro envoyer. Tant que la
+        LED etait allumee par declencher(), elle heritait de cette
+        attente. Elle doit maintenant reagir au FRONT D'APPUI.
+        """
+        import main, runtime
+        self._regler(RGB_RESPIRATION=False)
+        Pin.levels = {}
+        clock[0] = 0
+        transport = Transport()
+        appui, relache = 2600, 2660
+
+        def sommeil_simule(ms):
+            clock[0] += ms
+            Pin.levels[4] = 0 if appui <= clock[0] < relache else 1
+            if clock[0] >= 3400:
+                raise KeyboardInterrupt()
+
+        with patch.object(runtime, 'interface', transport), \
+             patch.object(runtime, 'safe_mode', False), \
+             patch.object(main, 'sleep_ms', sommeil_simule):
+            with self.assertRaises(KeyboardInterrupt):
+                main.run()
+
+        bande = sys.modules['neopixel'].NeoPixel.derniere
+        # La macro de l'appui court ne part qu'a relache + GESTE_DOUBLE_MS.
+        macro = relache + C.GESTE_DOUBLE_MS
+        tot = [pixels for instant, pixels in bande.vues
+               if appui <= instant < appui + 60]
+        self.assertTrue(tot, "aucun rafraichissement dans les 60 ms")
+        # Dans ces 60 premieres millisecondes, la LED 1 est deja plus
+        # claire que ses voisines - bien avant que la macro ne parte.
+        self.assertTrue(
+            any(sum(image[0]) > sum(image[1]) for image in tot),
+            "la LED n'a pas reagi avant %d ms" % (macro - appui))
 
     # --- le test de cablage du REPL --------------------------------------
     def test_diag_rgb_parcourt_toutes_les_led(self):

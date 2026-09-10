@@ -365,7 +365,7 @@ touche que tu presses passer au blanc un instant.
 |---|---|
 | **Le pad prend la couleur du logiciel actif** | tu cliques dans Civil 3D, le pad devient bleu ; dans Blender, orange. C'est le compagnon PC qui dit quel logiciel est au premier plan, et la couleur suit toute seule |
 | **La couleur respire** | elle monte et redescend en douceur sur 4 secondes, comme la LED du bouton ESC. Vivant, mais jamais clignotant |
-| **La touche utilisée passe au blanc** | franc, sans respiration : c'est un retour visuel, il doit être net |
+| **La touche sur laquelle tu appuies s'intensifie** | **dès le front d'appui**, sans attendre de savoir quelle macro partira. Deux appuis coup sur coup montent deux fois plus haut, puis tout redescend en douceur |
 | **Panne HID : tout passe au rouge** | tu le vois du coin de l'œil, sans lire le bandeau |
 | **Extinction après 5 minutes** | `RGB_VEILLE_MS` — pour les yeux, pour les LED, et surtout pour le courant. Le premier appui rallume |
 
@@ -378,6 +378,33 @@ comme ça qu'un logiciel que tu ajoutes toi-même reçoit sa couleur.**
 
 Les couleurs d'usine, elles, sont dans `RGB_COULEURS` (`config.py`) — ce
 sont celles qu'on retrouve après un retour aux valeurs d'usine.
+
+### Régler la réaction à l'appui
+
+```python
+RGB_IMPULSION = 1.0        # ce qu'un appui ajoute (1.0 = double la clarté)
+RGB_IMPULSION_MAX = 3.0    # au-delà, ça ne monte plus
+RGB_RETOMBEE_MS = 700      # durée du retour au calme, PAR unité
+RGB_MS = 16                # ~60 rafraîchissements par seconde
+```
+
+Trois choix expliquent ce que tu ressens sous le doigt :
+
+* **la LED réagit au front d'appui**, pas au départ de la macro. C'est
+  important : une touche qui a un double appui attend `GESTE_DOUBLE_MS`
+  (260 ms) avant de savoir quelle macro envoyer. Allumer la LED à ce
+  moment-là donnait un quart de seconde de retard, parfaitement
+  perceptible ;
+* **l'impulsion s'ajoute** à ce qui reste de la précédente. Deux appuis
+  rapides montent deux fois plus haut, dix appuis ne montent pas dix fois
+  plus haut (`RGB_IMPULSION_MAX`) ;
+* **elle s'ajoute aussi à la respiration** au lieu de la multiplier : un
+  appui se voit autant en haut qu'en bas du cycle.
+
+La retombée dure `RGB_RETOMBEE_MS` **par unité** : un appui redescend en
+0,7 s, deux appuis en 1,4 s. Le plafond de courant, lui, reste celui de
+`RGB_LUMINOSITE` quoi qu'il arrive — un test le vérifie en empilant vingt
+appuis sur du blanc.
 
 ### Régler la respiration
 

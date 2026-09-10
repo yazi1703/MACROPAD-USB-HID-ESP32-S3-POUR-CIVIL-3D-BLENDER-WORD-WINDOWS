@@ -13,8 +13,11 @@ CE QUE CA FAIT
   et redescend sur RGB_RESPIRATION_MS. Une couleur fixe se remarque une
   fois puis s'oublie ; une couleur qui respire reste vivante sans jamais
   clignoter ni attirer l'oeil au mauvais moment ;
-* la touche que tu viens d'utiliser s'allume en blanc un instant, comme
-  la surbrillance de l'ecran ;
+* la touche sur laquelle tu appuies S'INTENSIFIE aussitot, puis revient
+  a la couleur du profil en douceur. Deux appuis coup sur coup montent
+  deux fois plus haut : l'impulsion s'ajoute a ce qui reste de la
+  precedente, au lieu de la remplacer. La LED reagit au DOIGT, sur le
+  front d'appui, sans attendre de savoir quelle macro partira ;
 * apres RGB_VEILLE_MS sans rien toucher, tout s'eteint - pour les yeux,
   pour la duree de vie des LED, et surtout pour le courant.
 
@@ -77,9 +80,6 @@ from math import cos, pi
 from time import ticks_ms, ticks_diff, ticks_add
 import config as C
 
-_BLANC = (255, 255, 255)
-
-
 def respiration(phase_ms):
     """Facteur de luminosite (0.0 a 1.0) a un instant du cycle.
 
@@ -108,8 +108,10 @@ class Rgb:
         self.nb = 0
         self.base = (0, 0, 0)          # couleur du profil courant
         self._erreur = False           # panne HID : tout passe au rouge
-        self.surbrillance = -1
-        self._surbrillance_t = 0
+        # Une "energie" par touche : elle monte a chaque appui et redescend
+        # toute seule. C'est ce qui fait qu'un appui se voit tout de suite
+        # et que deux appuis montent deux fois plus haut.
+        self.niveaux = [0.0] * max(int(getattr(C, "RGB_COUNT", 6)), 1)
         self._activite = ticks_ms()
         self._eteint = False
         self._a_redessiner = True
@@ -157,7 +159,8 @@ class Rgb:
         rgb.py ne connait pas les noms de profils, seulement des couleurs.
         """
         self.base = tuple(couleur or C.RGB_COULEUR_DEFAUT)
-        self.surbrillance = -1
+        for index in range(len(self.niveaux)):
+            self.niveaux[index] = 0.0
         self._a_redessiner = True
         self.reveiller(ticks_ms())
 
@@ -173,11 +176,19 @@ class Rgb:
             self._a_redessiner = True
 
     def touche(self, index, now):
-        """La touche vient de servir : elle s'allume en blanc un instant."""
+        """Un appui vient d'avoir lieu : la LED de cette touche s'intensifie.
+
+        On AJOUTE l'impulsion a ce qui reste de la precedente, plafonnee :
+        deux appuis rapides montent deux fois plus haut, dix appuis ne
+        montent pas dix fois plus haut. Le plafond du courant, lui, reste
+        celui de limiter() - personne ne peut faire redemarrer la carte a
+        force d'appuyer.
+        """
         self.reveiller(now)
-        if 0 <= index < max(self.nb, 1):
-            self.surbrillance = index
-            self._surbrillance_t = ticks_add(now, C.HIGHLIGHT_MS)
+        if 0 <= index < len(self.niveaux):
+            plafond = getattr(C, "RGB_IMPULSION_MAX", 3.0)
+            niveau = self.niveaux[index] + getattr(C, "RGB_IMPULSION", 1.0)
+            self.niveaux[index] = plafond if niveau > plafond else niveau
             self._a_redessiner = True
 
     def reveiller(self, now):
@@ -192,11 +203,6 @@ class Rgb:
         if not self.actif:
             return
 
-        if (self.surbrillance >= 0
-                and ticks_diff(now, self._surbrillance_t) >= 0):
-            self.surbrillance = -1
-            self._a_redessiner = True
-
         if (not self._eteint
                 and ticks_diff(now, self._activite) > C.RGB_VEILLE_MS):
             self._eteint = True
@@ -207,10 +213,22 @@ class Rgb:
         # macropad par ailleurs.
         ecoule = ticks_diff(now, self._dernier)
         self._dernier = now
+        if not (0 < ecoule < 1000):
+            ecoule = 0                 # un saut d'horloge ne fait rien sauter
         if getattr(C, "RGB_RESPIRATION", True) and not self._eteint:
-            if 0 < ecoule < 1000:      # un saut d'horloge ne fait pas sauter
-                self._phase += ecoule  # la couleur
+            self._phase += ecoule
             self._a_redessiner = True
+
+        # Les impulsions redescendent toutes seules, proportionnellement au
+        # temps ecoule : la retombee dure RGB_RETOMBEE_MS par unite, quelle
+        # que soit la vitesse de la boucle.
+        if ecoule:
+            perte = float(ecoule) / getattr(C, "RGB_RETOMBEE_MS", 700)
+            for index in range(len(self.niveaux)):
+                if self.niveaux[index] > 0:
+                    reste = self.niveaux[index] - perte
+                    self.niveaux[index] = reste if reste > 0 else 0.0
+                    self._a_redessiner = True
 
         if not self._a_redessiner or ticks_diff(now, self._prochain) < 0:
             return
@@ -226,18 +244,27 @@ class Rgb:
             self._peindre_tout((0, 0, 0))
             return
         fond = tuple(C.RGB_COULEUR_ERREUR) if self._erreur else self.base
+        # Le souffle de la respiration, entre son plancher et 1.0. Les
+        # impulsions des touches s'AJOUTENT par-dessus : un appui monte
+        # donc pareil, que la respiration soit en haut ou en bas de son
+        # cycle. C'est ce qu'on attend d'un retour visuel.
+        souffle = 1.0
         if getattr(C, "RGB_RESPIRATION", True):
-            fond = _attenuer(fond, respiration(self._phase))
+            souffle = respiration(self._phase)
+
         if self.type == "PWM":
-            # Une seule LED : la surbrillance n'a pas de sens, on montre
-            # simplement la couleur du profil.
-            self._peindre_tout(fond)
+            # Une seule LED pour tout le pad : elle prend l'impulsion la
+            # plus forte du moment.
+            plus_haut = 0.0
+            for niveau in self.niveaux:
+                if niveau > plus_haut:
+                    plus_haut = niveau
+            self._peindre_tout(_attenuer(fond, souffle + plus_haut))
             return
+
         for index in range(self.nb):
-            # La touche que tu viens d'utiliser ne respire pas : elle est
-            # en blanc franc, sinon le retour visuel serait mou.
-            couleur = _BLANC if index == self.surbrillance else fond
-            self._pixel(index, couleur)
+            niveau = self.niveaux[index] if index < len(self.niveaux) else 0.0
+            self._pixel(index, _attenuer(fond, souffle + niveau))
         self.materiel.write()
 
     def _peindre_tout(self, couleur):
