@@ -59,11 +59,12 @@ CE QUI RISQUE DE CRAMER, OU DE FAIRE REDEMARRER LA CARTE
        intercalant une diode 1N4148 entre le 5 V et son VCC : le seuil
        descend a 3,0 V et le probleme disparait.
 
-4. UN CONDENSATEUR DE 470 a 1000 uF entre 5 V et GND, au plus pres des
-   LED. Elles commutent tres vite et tirent des pointes de courant ; sans
-   reservoir local, ces pointes se voient sur toute l'alimentation. Tu en
-   as : mets-en un. ATTENTION A LA POLARITE, un chimique monte a l'envers
-   gonfle et explose.
+4. UN CONDENSATEUR DE 470 uF entre 5 V et GND, au plus pres des LED.
+   Elles commutent tres vite et tirent des pointes de courant ; sans
+   reservoir local, ces pointes se voient sur toute l'alimentation.
+   100 uF suffisent pour six LED ; les valeurs de 1000 uF qu'on lit
+   partout visent des rubans de cinquante ou cent LED. ATTENTION A LA
+   POLARITE : un chimique monte a l'envers gonfle et explose.
 
 5. NE JAMAIS brancher le fil de donnees sur une LED deja alimentee alors
    que la carte est hors tension : le courant passerait par la diode de

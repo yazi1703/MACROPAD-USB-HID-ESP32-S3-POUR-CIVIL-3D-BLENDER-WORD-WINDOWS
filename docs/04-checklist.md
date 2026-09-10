@@ -152,7 +152,10 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 [ ] alimentées en 5 V (VBUS), PAS en 3,3 V
 [ ] GND commun avec la carte
 [ ] résistance 330 à 470 Ω en série sur le fil de données, côté LED
-[ ] condensateur 470 à 1000 µF entre 5 V et GND, POLARITÉ vérifiée
+[ ] condensateur 470 µF entre 5 V et GND, au plus près du ruban
+[ ] bande marquée du condensateur côté GND (à l'envers, il explose)
+[ ] multimètre AVANT branchement : pas de court-circuit +5V / GND
+[ ] branché dans l'ordre : GND, puis +5V, puis DIN en dernier
 [ ] RGB_LUMINOSITE laissé à 40 (ou consommation mesurée si tu l'augmentes)
 [ ] essai 0 : la LED déjà soudée sur la carte (GPIO48) répond au REPL
 [ ] essai 1 : une LED câblée s'allume

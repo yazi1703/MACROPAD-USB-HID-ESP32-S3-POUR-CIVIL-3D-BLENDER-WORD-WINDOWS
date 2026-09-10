@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="880" viewBox="0 0 1400 880">
+<rect width="1400" height="880" fill="#f8fafc"/>
+<style>text{font-family:Arial,sans-serif;fill:#172b45}.small{font-size:17px}.label{font-size:20px}.title{font-size:30px;font-weight:bold}.box{fill:white;stroke:#94a3b8;stroke-width:2}.v5{fill:none;stroke:#dc2626;stroke-width:3}.data{fill:none;stroke:#2563eb;stroke-width:3}.gnd{fill:none;stroke:#475569;stroke-width:3}.opt{fill:none;stroke:#94a3b8;stroke-width:2;stroke-dasharray:6 5}</style>
+
+<text x="45" y="52" class="title">MACROPAD ESP32-S3 • RUBAN WS2812B — 6 LED</text>
+<text x="45" y="86" class="label">Rouge = 5 V • Bleu = données • Gris = masse • Tous les GND communs</text>
+
+<!-- ================= carte ================= -->
+<rect x="50" y="170" width="260" height="400" rx="8" class="box"/>
+<text x="75" y="212" class="label">ESP32-S3 N16R8</text>
+<text x="75" y="240" class="small">broches déjà utilisées :</text>
+<text x="75" y="264" class="small">4,5,6,7,12,13 • 8,9 • 10,11 • 14,15</text>
+
+<text x="200" y="295" class="label">GPIO16</text>
+<path d="M310,310 L470,310" class="data"/>
+
+<text x="215" y="425" class="label">5V</text>
+<text x="185" y="448" class="small">(VBUS)</text>
+<path d="M310,440 L430,440" class="v5"/>
+
+<text x="210" y="545" class="label">GND</text>
+<path d="M310,560 L700,560" class="gnd"/>
+
+<!-- ================= 330 ohms ================= -->
+<rect x="470" y="298" width="110" height="26" fill="white" stroke="#172b45" stroke-width="2"/>
+<text x="470" y="288" class="small">330 Ω</text>
+<path d="M580,310 L700,310" class="data"/>
+<path d="M700,310 L700,360" class="data"/>
+<path d="M700,360 L873,360" class="data"/>
+<text x="600" y="345" class="small">au plus près du ruban</text>
+
+<!-- ================= diode optionnelle ================= -->
+<rect x="430" y="400" width="190" height="80" rx="6" class="opt"/>
+<text x="443" y="424" class="small">1N4148 (si scintillement)</text>
+<rect x="470" y="428" width="90" height="26" fill="white" stroke="#172b45" stroke-width="2"/>
+<text x="483" y="447" class="small">1N4148</text>
+<path d="M560,441 L575,441" class="v5"/>
+<path d="M568,431 L568,451" fill="none" stroke="#172b45" stroke-width="3"/>
+<text x="443" y="472" class="small">bande vers le ruban ▸</text>
+<path d="M620,440 L660,440" class="v5"/>
+<path d="M660,440 L660,380" class="v5"/>
+<path d="M660,380 L790,380" class="v5"/>
+<path d="M790,380 L790,430" class="v5"/>
+<path d="M790,430 L873,430" class="v5"/>
+
+<!-- ================= condensateur ================= -->
+<path d="M730,380 L730,412" class="v5"/>
+<path d="M706,412 L754,412" fill="none" stroke="#172b45" stroke-width="4"/>
+<path d="M706,428 L754,428" fill="none" stroke="#172b45" stroke-width="4"/>
+<path d="M730,428 L730,492" class="gnd"/>
+<text x="762" y="408" class="small">+</text>
+<text x="632" y="428" class="small">470 µF</text>
+<text x="596" y="502" class="small">POLARITÉ : la bande</text>
+<text x="596" y="524" class="small">marquée est le −</text>
+<text x="596" y="546" class="small">(100 µF suffirait aussi</text>
+<text x="596" y="568" class="small">pour six LED)</text>
+
+<!-- masse vers le ruban -->
+<path d="M760,560 L760,492" class="gnd"/>
+<circle cx="760" cy="560" r="5" fill="#172b45"/>
+<circle cx="760" cy="492" r="5" fill="#172b45"/>
+<circle cx="730" cy="492" r="5" fill="#172b45"/>
+
+<!-- ================= entrée du ruban ================= -->
+<rect x="780" y="255" width="210" height="270" rx="8" class="box"/>
+<text x="800" y="292" class="label">SOUDURES</text>
+<text x="800" y="316" class="small">de la 1re LED</text>
+
+<text x="800" y="345" class="label">DIN</text>
+<circle cx="880" cy="360" r="7" fill="#2563eb"/>
+
+<text x="800" y="415" class="label">+5V</text>
+<circle cx="880" cy="430" r="7" fill="#dc2626"/>
+
+<text x="800" y="478" class="label">GND</text>
+<circle cx="880" cy="492" r="7" fill="#475569"/>
+<path d="M730,492 L873,492" class="gnd"/>
+
+<!-- ================= ruban ================= -->
+<path d="M990,400 L1040,400" fill="none" stroke="#94a3b8" stroke-width="3"/>
+<rect x="1040" y="330" width="320" height="140" rx="8" class="box"/>
+<text x="1040" y="318" class="label">6 LED WS2812B 5050</text>
+<rect x="1055" y="365" width="40" height="40" rx="4" fill="#fef3c7" stroke="#172b45" stroke-width="2"/>
+<rect x="1105" y="365" width="40" height="40" rx="4" fill="#fef3c7" stroke="#172b45" stroke-width="2"/>
+<rect x="1155" y="365" width="40" height="40" rx="4" fill="#fef3c7" stroke="#172b45" stroke-width="2"/>
+<rect x="1205" y="365" width="40" height="40" rx="4" fill="#fef3c7" stroke="#172b45" stroke-width="2"/>
+<rect x="1255" y="365" width="40" height="40" rx="4" fill="#fef3c7" stroke="#172b45" stroke-width="2"/>
+<rect x="1305" y="365" width="40" height="40" rx="4" fill="#fef3c7" stroke="#172b45" stroke-width="2"/>
+<path d="M1100,352 L1100,418" fill="none" stroke="#cbd5e1" stroke-width="2"/>
+<path d="M1150,352 L1150,418" fill="none" stroke="#cbd5e1" stroke-width="2"/>
+<path d="M1200,352 L1200,418" fill="none" stroke="#cbd5e1" stroke-width="2"/>
+<path d="M1250,352 L1250,418" fill="none" stroke="#cbd5e1" stroke-width="2"/>
+<path d="M1300,352 L1300,418" fill="none" stroke="#cbd5e1" stroke-width="2"/>
+<path d="M1055,440 L1345,440" fill="none" stroke="#16a34a" stroke-width="3"/>
+<path d="M1345,440 L1330,433 M1345,440 L1330,447" fill="none" stroke="#16a34a" stroke-width="3"/>
+<text x="1090" y="462" class="small">sens des flèches du ruban</text>
+<text x="1040" y="500" class="small">On entre TOUJOURS par DIN.</text>
+<text x="1040" y="524" class="small">Couper au milieu des pastilles.</text>
+
+<!-- ================= notes ================= -->
+<rect x="45" y="610" width="1310" height="230" rx="8" class="box"/>
+<text x="65" y="648" class="label">CE QU'IL NE FAUT PAS RATER</text>
+<text x="65" y="684" class="small">1.  Le 5 V vient de VBUS, jamais du 3V3 : le régulateur 3,3 V de la carte n'a pas la marge, et les WS2812B sont prévues pour 5 V.</text>
+<text x="65" y="714" class="small">2.  Ne brancher que SIX LED. Le rouleau entier (300 LED) tirerait 18 A en blanc plein — il lui faut une alimentation dédiée.</text>
+<text x="65" y="744" class="small">3.  Le condensateur se monte au plus près du ruban, entre +5V et GND. Sa bande marquée est le moins : à l'envers, il explose.</text>
+<text x="65" y="774" class="small">4.  La 1N4148 n'est à ajouter QUE si les couleurs scintillent : elle fait tomber le ruban à ~4,3 V, ce qui rend le 3,3 V de données confortable.</text>
+<text x="65" y="804" class="small">5.  Alimenter la carte et le ruban ensemble. Jamais de données sur un ruban alimenté pendant que la carte est éteinte.</text>
+</svg>

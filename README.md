@@ -23,7 +23,7 @@ ouvert, compte les appuis, et se configure entièrement depuis une page web
 | vérifier le brochage broche par broche | [`docs/02-cablage.md`](docs/02-cablage.md) |
 | cocher que tout est bon | [`docs/04-checklist.md`](docs/04-checklist.md) |
 | **comprendre l'écran et les trois gestes** | [`docs/09-ecran-et-gestes.md`](docs/09-ecran-et-gestes.md) |
-| **câbler les LED RGB sans faire redémarrer la carte** | [`docs/10-led-rgb.md`](docs/10-led-rgb.md) |
+| **câbler les LED RGB sans faire redémarrer la carte** | [`docs/10-led-rgb.md`](docs/10-led-rgb.md) + [`SCHEMA_LED_RGB.svg`](SCHEMA_LED_RGB.svg) |
 | savoir ce qui a été corrigé et pourquoi | [`docs/06-corrections.md`](docs/06-corrections.md) |
 | **que le macropad suive le logiciel actif** | [`docs/08-detection-auto.md`](docs/08-detection-auto.md) — le script PC |
 | **modifier les macros depuis le PC** | lancer `pc/macropad_auto.bat`, puis `http://127.0.0.1:8765` |
@@ -180,6 +180,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 ├── README.md                     ce fichier
 ├── DEPENDENCIES.lock.json        versions et empreintes SHA-256 figées
 ├── SCHEMA_CABLAGE.svg / .png     schéma de câblage
+├── SCHEMA_LED_RGB.svg           schéma du ruban WS2812B
 ├── CODE_COMPLET.md               copie lisible de tout le firmware
 ├── RAPPORT_TESTS.md              ce qui a été vérifié, et comment
 ├── device/                       >>> LE FIRMWARE : contenu à copier sur la carte

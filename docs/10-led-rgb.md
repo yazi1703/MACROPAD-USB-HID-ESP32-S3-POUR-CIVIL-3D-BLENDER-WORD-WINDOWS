@@ -134,8 +134,23 @@ projet.
 
 ## 10.3 Câblage WS2812
 
+> **Schéma complet : [`SCHEMA_LED_RGB.svg`](../SCHEMA_LED_RGB.svg)** — à
+> ouvrir dans un navigateur, il est fait pour être lu pendant que tu
+> soudes.
+
+**Trois fils, trois composants.**
+
+| Depuis | À travers | Vers |
+|---|---|---|
+| **VBUS (5 V)** | *(rien, ou la 1N4148 si scintillements)* | **+5V** du ruban |
+| **GPIO16** | **330 Ω** | **DIN** du ruban |
+| **GND** | — | **GND** du ruban |
+
+Plus le **condensateur 470 µF entre +5V et GND**, soudé au plus près du
+ruban.
+
 ```
-   VBUS (5 V) ──┬──────────────► VCC / 5V du ruban
+   VBUS (5 V) ──┬──────────────► +5V du ruban
                 │
              470 µF            (chimique : ATTENTION A LA POLARITE)
                 │
@@ -147,6 +162,31 @@ projet.
               (au plus près de la première LED)
 ```
 
+### Le montage, dans l'ordre
+
+Fais-le dans cet ordre : chaque étape se vérifie avant la suivante.
+
+1. **Coupe six LED** du rouleau, au milieu des pastilles, flèches
+   repérées. Note de quel côté est **DIN**.
+2. **Étame les trois pastilles d'entrée** (+5V, DIN, GND) : fer à
+   300-320 °C, 5 secondes maximum par pastille.
+3. **Soude trois fils** d'une quinzaine de centimètres, un par pastille.
+   Repère-les tout de suite — rouge pour le 5 V, une autre couleur pour
+   DIN, noir pour GND. Une erreur ici ne se voit plus une fois en place.
+4. **Soude la résistance de 330 Ω** sur le fil de DIN, **du côté du
+   ruban**, pas du côté de la carte.
+5. **Soude le condensateur 470 µF** entre les fils +5V et GND, lui aussi
+   au plus près du ruban. **Sa bande marquée va sur le GND.**
+6. **Multimètre, ruban NON branché** — vérifie qu'il n'y a **pas de
+   court-circuit** entre le fil +5V et le fil GND. En position
+   continuité, tu dois entendre un bip très bref (le condensateur qui se
+   charge) puis plus rien. Un bip continu = court-circuit, cherche avant
+   d'aller plus loin.
+7. **Branche GND en premier**, puis +5V, puis DIN en dernier. C'est
+   l'ordre qui protège le GPIO : jamais de données sur un ruban qui n'a
+   pas déjà sa masse commune.
+8. **Lance `diag.rgb()`** (§10.5) avant de toucher à `config.py`.
+
 **Les quatre points qui comptent :**
 
 1. **Le 5 V vient de VBUS, jamais du 3,3 V.** Le régulateur 3,3 V de la
@@ -156,11 +196,17 @@ projet.
    réflexions du signal et protège le GPIO. Elle se place **côté LED**,
    pas côté carte.
 
-3. **Le condensateur de 470 à 1000 µF entre 5 V et GND**, au plus près
-   des LED. Elles commutent en quelques nanosecondes et tirent des
-   pointes de courant ; sans ce réservoir local, les pointes se voient
-   sur toute l'alimentation. Tu en as → mets-en un. **La patte marquée
-   d'une bande est le moins : à l'envers, un chimique gonfle et explose.**
+3. **Le condensateur de 470 µF entre 5 V et GND**, au plus près des
+   LED. Elles commutent en quelques nanosecondes et tirent des pointes de
+   courant ; sans ce réservoir local, les pointes se voient sur toute
+   l'alimentation. **La patte marquée d'une bande est le moins : à
+   l'envers, un chimique gonfle et explose.**
+
+   *Quelle valeur ?* 470 µF est la valeur de référence. **100 µF suffit
+   largement pour six LED** — le 1000 µF qu'on lit partout vise des
+   rubans de cinquante ou cent LED, où les pointes sont dix fois plus
+   grosses. Et si tu veux monter, des condensateurs **en parallèle
+   s'additionnent** : trois 100 µF côte à côte font 300 µF.
 
 4. **Le niveau logique.** Ton GPIO sort du 3,3 V ; une WS2812 alimentée
    en 5 V attend au moins 3,5 V pour un « 1 ». **On est juste en
@@ -175,6 +221,17 @@ projet.
    La diode fait chuter environ 0,7 V : le ruban est alimenté en ~4,3 V,
    son seuil descend à 3,0 V, et ton 3,3 V passe largement. C'est le
    truc le plus simple et le plus fiable, et tu as les diodes.
+
+   > **La limite de la 1N4148 :** c'est une diode de signal, bonne pour
+   > environ **200 mA**. Six LED plafonnées par le firmware en tirent
+   > ~56 mA, on est très à l'aise. Mais si un jour tu montes
+   > `RGB_LUMINOSITE`, **c'est cette diode qui devient le maillon
+   > faible** avant même l'USB : passe alors à une 1N4007 (1 A) ou une
+   > Schottky 1N5819, qui a l'avantage de ne faire chuter que 0,3 V.
+
+   **Ne la monte pas d'entrée.** Commence sans : sur du WS2812**B**, le
+   3,3 V passe le plus souvent. Tu ne l'ajoutes que si `diag.rgb()` te
+   montre des couleurs qui sautent.
 
 **Ne branche jamais le fil de données sur des LED alimentées alors que la
 carte est éteinte** : le courant entrerait par la diode de protection du
