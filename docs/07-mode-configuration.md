@@ -79,6 +79,9 @@ les 224 Ko de RAM de la carte.
 | **Couleur des LED du profil** | ✅ carré de couleur à côté du titre |
 | **Table des logiciels détectés** | ✅ programme, profil, abrégé écran |
 | **Compteur d'usage** | ✅ affiché en bout de ligne, avec sa barre |
+| **Capturer un raccourci au clavier** | ✅ bouton ⌨ : tu appuies, la page écrit le nom |
+| Télécharger une sauvegarde | ✅ fichier JSON |
+| **Restaurer une sauvegarde** | ✅ elle est chargée dans le formulaire, tu vérifies, tu enregistres |
 | Revenir aux valeurs d'usine | ✅ bouton dédié |
 | Séquences à plusieurs actions | ❌ réservées à `profiles.py` |
 
@@ -116,6 +119,40 @@ rien. Détail dans [`docs/09`](09-ecran-et-gestes.md).
 
 **Le libellé fait 6 caractères au maximum** : c'est ce que laisse la
 largeur de l'écran une fois les trois colonnes de gestes posées.
+
+### Ne plus deviner les noms de touches
+
+`SUPPR` ou `DELETE` ? `PAGEDOWN` ou `PGDN` ? Tu n'as plus à savoir : à côté
+de chaque champ de valeur, pour les types *touche*, *combinaison* et
+*maintenir*, un petit bouton **⌨**. Tu cliques dessus, tu **appuies sur la
+combinaison** sur ton vrai clavier, et la page écrit `CTRL+SHIFT+P` toute
+seule.
+
+Deux détails qui comptent :
+
+* la page lit la touche **physique**, pas le caractère produit. Le
+  résultat ne dépend donc pas de la disposition de ton clavier —
+  exactement comme le firmware, qui raisonne lui aussi en touches
+  physiques ;
+* **AltGr** se présente comme Ctrl+Alt sous Windows. La page le reconnaît
+  et écrit `ALTGR`, pas `CTRL+ALT`.
+
+Un modificateur seul fonctionne aussi : appuie juste sur Ctrl et tu
+obtiens `CTRL` — c'est ce qu'il faut pour le type *maintenir*.
+
+### Sauvegarder, et surtout restaurer
+
+**« Télécharger la sauvegarde »** te donne un fichier JSON avec tout :
+profils, macros, gestes, couleurs, logiciels détectés.
+
+**« Restaurer une sauvegarde »** le recharge. Il est mis dans le
+formulaire **sans être appliqué** : tu vois ce que tu restaures, et rien
+ne part vers le macropad tant que tu n'as pas cliqué sur **Enregistrer**.
+Un fichier illisible ou qui n'est pas une sauvegarde du macropad est
+refusé avec un message, sans rien casser.
+
+> Garde une sauvegarde dès que ta configuration te convient. C'est ta
+> seule copie en dehors de la carte.
 
 ### Les logiciels détectés
 

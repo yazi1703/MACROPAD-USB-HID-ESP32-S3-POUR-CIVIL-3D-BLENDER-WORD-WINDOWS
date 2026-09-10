@@ -663,6 +663,9 @@ border-radius:7px;padding:7px 9px;font:13px/1.2 ui-monospace,monospace;
 width:100%}
 input[type=color]{width:42px;flex:0 0 42px;padding:2px;height:33px;
 cursor:pointer}
+.val{display:flex;gap:5px;align-items:center}
+.cap{flex:0 0 30px;padding:6px 0;font-size:14px;line-height:1}
+.cap.on{background:#3d7bfd;color:#fff}
 input:focus,select:focus{outline:0;border-color:#3d7bfd}
 table{width:100%;border-collapse:collapse}
 td,th{padding:3px 5px 3px 0;vertical-align:middle}
@@ -722,6 +725,7 @@ defile.</p>
 <div class=bar2>
 <button class=p onclick=save()>Enregistrer</button>
 <button onclick=dl()>Telecharger la sauvegarde</button>
+<button onclick=restaurer()>Restaurer une sauvegarde</button>
 <button class=d onclick=usine()>Valeurs d'usine</button>
 </div>
 <div id=msg></div>
@@ -756,6 +760,60 @@ function inp(val,max,cb,fin){var i=el("input");i.value=val||"";
 function sel(val,cb){var s=el("select");TYPES.forEach(function(t){
  var o=el("option",{value:t[0]},[t[1]]);if(t[0]==val)o.selected=true;
  s.appendChild(o);});s.onchange=function(){cb(s.value);render();};return s;}
+
+// =====================================================================
+// CAPTURE D'UN RACCOURCI
+// =====================================================================
+// Plutot que de deviner comment s'ecrit une touche (SUPPR ? DELETE ?
+// PAGEDOWN ?), tu cliques sur le bouton et tu APPUIES sur la combinaison.
+// On lit ev.code, c'est-a-dire la touche PHYSIQUE : le resultat ne depend
+// donc pas de la disposition du clavier, exactement comme le firmware qui
+// raisonne lui aussi en touches physiques.
+var TOUCHES={Escape:"ESC",Tab:"TAB",Space:"SPACE",Enter:"ENTER",
+NumpadEnter:"ENTER",Backspace:"BACKSPACE",Delete:"SUPPR",Insert:"INSERT",
+Home:"HOME",End:"END",PageUp:"PAGEUP",PageDown:"PAGEDOWN",
+ArrowUp:"UP",ArrowDown:"DOWN",ArrowLeft:"LEFT",ArrowRight:"RIGHT",
+PrintScreen:"PRINTSCREEN",ContextMenu:"MENU",CapsLock:"CAPSLOCK"};
+var MODIFS={ControlLeft:"CTRL",ControlRight:"CTRL",ShiftLeft:"SHIFT",
+ShiftRight:"SHIFT",AltLeft:"ALT",AltRight:"ALTGR",MetaLeft:"WIN",
+MetaRight:"WIN"};
+
+function nomTouche(ev){
+ var code=ev.code||"";
+ // AltGr se presente comme Ctrl+Alt sous Windows : on le detecte a part.
+ var altgr=(code=="AltRight")||
+  (ev.getModifierState&&ev.getModifierState("AltGraph"));
+ if(MODIFS[code])return altgr?"ALTGR":MODIFS[code];
+
+ var base="";
+ if(code.slice(0,3)=="Key")base=code.slice(3);
+ else if(code.slice(0,5)=="Digit")base=code.slice(5);
+ else if(code.slice(0,6)=="Numpad"&&TOUCHES[code])base=TOUCHES[code];
+ else if(code.charAt(0)=="F"&&code.length<=3&&!isNaN(code.slice(1)))base=code;
+ else if(TOUCHES[code])base=TOUCHES[code];
+ if(!base)return "";
+
+ var parties=[];
+ if(altgr)parties.push("ALTGR");
+ else{if(ev.ctrlKey)parties.push("CTRL");if(ev.altKey)parties.push("ALT");}
+ if(ev.shiftKey)parties.push("SHIFT");
+ if(ev.metaKey)parties.push("WIN");
+ parties.push(base);
+ return parties.join("+");}
+
+function capture(champ,cb){
+ var b=el("button",{cls:"s cap",
+  title:"Cliquer, puis appuyer sur la combinaison voulue"},["\u2328"]);
+ b.onclick=function(){
+  b.className="s cap on";champ.value="";
+  champ.onkeydown=function(ev){
+   var nom=nomTouche(ev);
+   if(!nom)return;
+   if(ev.preventDefault)ev.preventDefault();
+   champ.value=nom;cb(nom);
+   champ.onkeydown=null;b.className="s cap";};
+  if(champ.focus)champ.focus();};
+ return b;}
 
 function maxUse(){var m=1;for(var n in D.profils)
  (D.profils[n].touches||[]).forEach(function(t){if(t.usages>m)m=t.usages;});
@@ -800,7 +858,13 @@ function ligne(p,i,tb,mx){
   ct.appendChild(sel(k[g].type,function(v){k[g].type=v;}));
   tr.appendChild(ct);
   var cv=el("td",{},[]);
-  cv.appendChild(inp(k[g].valeur,60,function(v){k[g].valeur=v;}));
+  var champ=inp(k[g].valeur,60,function(v){k[g].valeur=v;});
+  var boite=el("div",{cls:"val"},[champ]);
+  // Le bouton de capture n'a de sens que pour une touche, une
+  // combinaison ou un maintien - pas pour du texte.
+  if(k[g].type=="key"||k[g].type=="combo"||k[g].type=="maintien")
+   boite.appendChild(capture(champ,function(v){k[g].valeur=v;}));
+  cv.appendChild(boite);
   tr.appendChild(cv);
   if(gi==0){
    var u=k.usages||0;
@@ -879,6 +943,35 @@ function dl(){var a=document.createElement("a");
  a.href=URL.createObjectURL(new Blob([JSON.stringify(D,null,2)],
   {type:"application/json"}));
  a.download="macropad_config.json";a.click();}
+// =====================================================================
+// RESTAURER UNE SAUVEGARDE
+// =====================================================================
+// Le bouton "Telecharger" existait depuis le debut, mais rien ne
+// permettait de RECHARGER le fichier : la sauvegarde ne servait donc a
+// rien. On charge le fichier dans le formulaire SANS l'appliquer, pour
+// que tu voies ce que tu restaures avant de cliquer sur Enregistrer.
+function charger_sauvegarde(texte){
+ var d;
+ try{d=JSON.parse(texte);}
+ catch(e){say("Fichier illisible : "+e,0);return false;}
+ if(!d||!d.ordre||!d.ordre.length||!d.profils){
+  say("Ce fichier n'est pas une sauvegarde du macropad.",0);return false;}
+ D=d;N=d.touches||N;
+ if(!D.apps)D.apps={repli:{profil:"WINDOWS",abrege:"Win"},liste:[]};
+ render();
+ say("Sauvegarde chargee : "+D.ordre.length+" profils. Verifie, puis "+
+  "clique sur Enregistrer pour l'appliquer au macropad.",1);
+ return true;}
+
+function restaurer(){
+ var i=el("input",{type:"file",accept:".json,application/json"});
+ i.onchange=function(){
+  var f=i.files&&i.files[0];if(!f)return;
+  var lecteur=new FileReader();
+  lecteur.onload=function(){charger_sauvegarde(lecteur.result);};
+  lecteur.readAsText(f);};
+ i.click();}
+
 function usine(){if(!confirm("Revenir aux valeurs d'usine ?"))return;
  fetch("/api/usine",{method:"POST"}).then(function(){location.reload();});}
 function save(){fetch("/api/profils",{method:"POST",

@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 167 tests PC réussis ; 22 fichiers Python compilés avec succès.**
+**Résultat : 170 tests PC réussis ; 22 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 167 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  142 pour le firmware, 25 pour le compagnon Windows.
+- 170 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  145 pour le firmware, 25 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -24,7 +24,9 @@
 
 **Base V0.** Navigation dans les deux sens ; anti-rebond, rebonds et maintien ; démarrage avec touche tenue ; retour circulaire des ticks ; 26 lettres FR, underscore, macros et ENTER ; Caps Lock ; refus atomique d'un texte non pris en charge ; pressions/relâchements de Ctrl+Shift+Esc ; ESC au milieu d'Alt+Tab/texte ; endpoint occupé sans perte immédiate ; file bornée ; déconnexion sans reprise de macro ; faute et timeout avec annulation/libération ; respiration, flash et passage des ticks ; SAFE MODE sans initialisation HID et retour REPL ; absence/panne OLED ; une page transmise par tick ; boucle main simulée avec macro Civil3D, NEXT et ESC ; rapports de huit octets produits par la classe officielle KeyboardInterface.
 
-**La page de configuration** (`PageDeConfigurationIntacte`, 6 tests). La page servie par `device/portal.py` et celle servie par `pc/macropad_auto.py` sont comparees a leur source unique `tools/page_config.html` ; le JavaScript est verifie syntaxiquement par `node --check` ; enfin il est **execute hors navigateur** avec un DOM minimal (`tests/page_smoke.js`), une fois avec les valeurs d'usine — on compte alors les cartes de profil, les listes deroulantes et les lignes de logiciels produites — une fois avec une configuration vide, pour verifier que la page explique pourquoi elle n'a rien a montrer, et une fois en TAPANT dans les champs pour verifier que chaque saisie arrive bien sur la touche voulue - et nulle part ailleurs - dans ce qui part vers le macropad. Ces tests sont nes du bug de la correction 11 : un antislash mal interprete cassait tout le script, et la page restait vide sans le moindre message.
+**La page de configuration** (`PageDeConfigurationIntacte`, 10 tests). La page servie par `device/portal.py` et celle servie par `pc/macropad_auto.py` sont comparees a leur source unique `tools/page_config.html` ; le JavaScript est verifie syntaxiquement par `node --check` ; enfin il est **execute hors navigateur** avec un DOM minimal (`tests/page_smoke.js`), une fois avec les valeurs d'usine — on compte alors les cartes de profil, les listes deroulantes et les lignes de logiciels produites — une fois avec une configuration vide, pour verifier que la page explique pourquoi elle n'a rien a montrer, et une fois en TAPANT dans les champs pour verifier que chaque saisie arrive bien sur la touche voulue - et nulle part ailleurs - dans ce qui part vers le macropad. La capture de raccourci et la restauration d'une sauvegarde sont exercees de la meme facon : on fabrique de faux evenements clavier et on verifie les noms produits - dont AltGr, qui se presente comme Ctrl+Alt sous Windows et ne doit pas ressortir en CTRL+ALT -, puis on passe CHAQUE nom du tableau de la page dans layouts.key_code du firmware. Une page qui ecrirait DELETE la ou le firmware attend SUPPR fabriquerait des macros refusees a l'enregistrement sans que rien n'explique pourquoi ; ce test l'interdit. La restauration est verifiee sur une sauvegarde valable, sur un fichier illisible et sur un JSON etranger.
+
+Ces tests sont nes du bug de la correction 11 : un antislash mal interprete cassait tout le script, et la page restait vide sans le moindre message.
 
 **La touche modificatrice** (`ToucheModificatrice`, 14 tests). La machine a etats (appui maintenu, appui bref puis maintenu, second appui hors delai, touche a un seul maintien) ; le modificateur reste present dans TOUS les rapports envoyes, y compris pendant qu'une macro se deroule par-dessus ; le relachement le libere ; et surtout les quatre filets contre un modificateur coince cote PC : ESC, changement de profil, deconnexion USB, macro intapable refusee sans rien envoyer.
 
@@ -161,6 +163,8 @@ test_la_courbe_de_respiration ... ok
 test_la_led_suit_le_doigt_et_pas_la_macro ... ok
 test_la_luminosite_plafonne_vraiment_le_courant ... ok
 test_la_retombee_est_progressive_et_revient_au_calme ... ok
+test_le_demarrage_annonce_l_etat_des_led ... ok
+test_le_demarrage_dit_pourquoi_rien_ne_s_allume ... ok
 test_materiel_absent_ne_plante_pas ... ok
 test_meme_a_fond_le_plafond_de_courant_tient ... ok
 test_montage_pwm_anode_commune ... ok
@@ -217,11 +221,14 @@ test_vendor_report_bytes ... ok
 
 --- PageDeConfigurationIntacte
 test_compagnon_pc_sert_la_meme_page ... ok
+test_la_capture_de_raccourci_donne_des_noms_valides ... ok
 test_la_couleur_des_led_se_choisit_par_profil ... ok
 test_la_page_previent_quand_elle_n_a_rien_recu ... ok
 test_la_page_se_construit_avec_de_vraies_donnees ... ok
+test_la_restauration_d_une_sauvegarde ... ok
 test_le_javascript_de_la_page_est_valide ... ok
 test_portail_wifi_sert_la_page_source ... ok
+test_tous_les_noms_du_tableau_de_capture_sont_connus ... ok
 test_une_saisie_va_bien_sur_la_touche_ou_on_la_tape ... ok
 
 --- PageWebDeConfiguration
@@ -302,7 +309,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 165 tests
+Ran 170 tests
 
 OK
 ```

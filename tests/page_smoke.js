@@ -76,7 +76,8 @@ function fetch(url, options) {
 new Function('document', 'window', 'fetch', 'URL', 'Blob', 'confirm',
              'location',
              script + '\n;globalThis.__page={D:function(){return D;},' +
-                      'save:save};')(
+                      'save:save,nomTouche:nomTouche,' +
+                      'charger_sauvegarde:charger_sauvegarde};')(
   document, window, fetch, URL, Blob, confirm, location);
 
 // --- outils d'inspection ---------------------------------------------
@@ -165,6 +166,35 @@ setTimeout(function () {
         ? envoye.profils[envoye.ordre[1]] : null;
       vu.couleur2 = second ? second.couleur : null;
       vu.message = registre.msg.textContent;
+
+      // ---- capture d'un raccourci au clavier -------------------------
+      const nom = globalThis.__page.nomTouche;
+      vu.capture = {
+        ctrl_maj_p: nom({ code: 'KeyP', ctrlKey: true, shiftKey: true }),
+        f5: nom({ code: 'F5' }),
+        f12: nom({ code: 'F12' }),
+        ctrl_seul: nom({ code: 'ControlLeft' }),
+        maj_seul: nom({ code: 'ShiftRight' }),
+        suppr: nom({ code: 'Delete' }),
+        fleche: nom({ code: 'ArrowUp' }),
+        altgr: nom({ code: 'AltRight' }),
+        win_e: nom({ code: 'KeyE', metaKey: true }),
+        ctrl_1: nom({ code: 'Digit1', ctrlKey: true }),
+        echap: nom({ code: 'Escape' }),
+        inconnu: nom({ code: 'Lang1' })
+      };
+
+      // ---- restauration d'une sauvegarde -----------------------------
+      // En dernier : elle remplace tout le contenu du formulaire.
+      vu.restaure_bonne = globalThis.__page.charger_sauvegarde(
+        JSON.stringify(donnees));
+      vu.message_restaure = registre.msg.textContent;
+      vu.restaure_cassee = globalThis.__page.charger_sauvegarde('{pas du json');
+      vu.restaure_etrangere = globalThis.__page.charger_sauvegarde(
+        '{"autre": 1}');
+      vu.message_refus = registre.msg.textContent;
+      vu.cartes_apres_restauration = registre.profs.children.length;
+
       console.log(JSON.stringify(vu));
     }, 0);
   } else {

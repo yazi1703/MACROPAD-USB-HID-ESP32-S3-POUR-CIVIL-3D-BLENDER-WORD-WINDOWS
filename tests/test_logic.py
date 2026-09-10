@@ -1954,6 +1954,74 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         self.assertEqual(vu["couleur2"],
                          configuration["profils"][deuxieme]["couleur"])
 
+    def test_la_capture_de_raccourci_donne_des_noms_valides(self):
+        """Tu cliques, tu appuies, la page ecrit le nom a ta place.
+
+        Le point delicat : les noms produits doivent etre EXACTEMENT ceux
+        que comprend le firmware. Une page qui ecrirait DELETE la ou
+        layouts.py attend SUPPR fabriquerait des macros refusees a
+        l'enregistrement, sans que rien n'explique pourquoi.
+        """
+        import store
+        vu = self._construire(store.vers_json(6))
+        capture = vu["capture"]
+
+        self.assertEqual(capture["ctrl_maj_p"], "CTRL+SHIFT+P")
+        self.assertEqual(capture["f5"], "F5")
+        self.assertEqual(capture["win_e"], "WIN+E")
+        self.assertEqual(capture["ctrl_1"], "CTRL+1")
+        self.assertEqual(capture["suppr"], "SUPPR")
+        self.assertEqual(capture["fleche"], "UP")
+        self.assertEqual(capture["echap"], "ESC")
+        # Un modificateur seul : c'est ce qu'il faut pour un "maintien".
+        self.assertEqual(capture["ctrl_seul"], "CTRL")
+        self.assertEqual(capture["maj_seul"], "SHIFT")
+        # AltGr se presente comme Ctrl+Alt sous Windows : il ne doit pas
+        # ressortir en "CTRL+ALT".
+        self.assertEqual(capture["altgr"], "ALTGR")
+        # Une touche exotique ne produit rien plutot qu'un nom invente.
+        self.assertEqual(capture["inconnu"], "")
+
+        # LA verification : le firmware accepte-t-il ces noms ?
+        from layouts import compile_actions
+        for cle, nom in capture.items():
+            if not nom:
+                continue
+            touches = tuple(nom.split("+"))
+            compile_actions([("combo", touches)], C.KEYBOARD_LAYOUT)
+
+    def test_tous_les_noms_du_tableau_de_capture_sont_connus(self):
+        """Le tableau complet, pas seulement ceux qu'on a essayes."""
+        from layouts import key_code
+        tableaux = self.re.findall(r"var (?:TOUCHES|MODIFS)=\{(.*?)\};",
+                                   self.source, self.re.S)
+        self.assertEqual(len(tableaux), 2, "tableaux de capture introuvables")
+        noms = set()
+        for tableau in tableaux:
+            noms.update(self.re.findall(r'"([A-Z0-9]+)"', tableau))
+        self.assertGreater(len(noms), 15, "tableau de capture trop court")
+        for nom in noms:
+            key_code(nom, C.KEYBOARD_LAYOUT)      # leve si inconnu
+        # Et les formes fabriquees : lettres, chiffres, touches de fonction.
+        for nom in ["A", "Z", "0", "9"] + ["F%d" % n for n in range(1, 13)]:
+            key_code(nom, C.KEYBOARD_LAYOUT)
+
+    def test_la_restauration_d_une_sauvegarde(self):
+        """Le bouton Telecharger existait ; il manquait celui du retour."""
+        import store
+        vu = self._construire(store.vers_json(6))
+
+        self.assertTrue(vu["restaure_bonne"])
+        self.assertIn("4 profils", vu["message_restaure"])
+        # Elle CHARGE le formulaire sans appliquer : le message le dit.
+        self.assertIn("Enregistrer", vu["message_restaure"])
+        self.assertEqual(vu["cartes_apres_restauration"], 4)
+
+        # Un fichier illisible ou etranger est refuse, sans rien casser.
+        self.assertFalse(vu["restaure_cassee"])
+        self.assertFalse(vu["restaure_etrangere"])
+        self.assertIn("sauvegarde du macropad", vu["message_refus"])
+
     def test_la_page_previent_quand_elle_n_a_rien_recu(self):
         """Macropad absent ou mode --simuler : il faut le DIRE.
 
