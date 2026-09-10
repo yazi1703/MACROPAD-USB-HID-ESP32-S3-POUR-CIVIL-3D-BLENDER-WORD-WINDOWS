@@ -316,9 +316,14 @@ flèches vont **du DIN vers la suite**, on entre toujours par DIN).
 diagnostic dédié, à lancer dans le REPL de Thonny :
 
 ```python
->>> import diag
->>> diag.rgb()
+import diag
+diag.rgb()
 ```
+
+> **Tape ces deux lignes sans les `>>>`.** Le `>>>` est l'invite du REPL,
+> Thonny l'affiche tout seul — le coller avec la commande donne
+> `SyntaxError: invalid syntax`. C'est pour ça que les commandes de ce
+> guide sont écrites sans invite.
 
 Il fait trois choses, dans cet ordre :
 

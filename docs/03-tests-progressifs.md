@@ -25,7 +25,7 @@ les erreurs qui détruisent la carte.
 5. Vérifie que le REPL répond :
 
 ```
->>> print("bonjour")
+print("bonjour")
 bonjour
 ```
 
@@ -78,8 +78,8 @@ que sur le PC.
 Rien de branché sauf l'USB.
 
 ```python
->>> import diag
->>> diag.run(seconds=1)
+import diag
+diag.run(seconds=1)
 ```
 
 ### Ce que tu dois voir
@@ -124,8 +124,8 @@ réintroduirais la PSRAM dans le chemin des transferts USB. Laisse comme ça.
 Teste aussi le redémarrage :
 
 ```python
->>> import machine
->>> machine.reset()
+import machine
+machine.reset()
 ```
 
 ---
@@ -136,8 +136,8 @@ Débranche l'USB. Câble uniquement l'OLED : **VCC sur 3V3** (jamais 5 V),
 GND, SDA sur GPIO8, SCL sur GPIO9. Rebranche.
 
 ```python
->>> import diag
->>> diag.run(seconds=1)
+import diag
+diag.run(seconds=1)
 ```
 
 ### Ce que tu dois voir
@@ -161,8 +161,8 @@ et à l'écran : `DIAGNOSTIC` / `HID DISABLED`, **sans décalage horizontal**.
 Débranche. Câble B1 à B4 (GPIO4, 5, 6, 7 vers GND). Rebranche.
 
 ```python
->>> import diag
->>> diag.run(seconds=30)
+import diag
+diag.run(seconds=30)
 ```
 
 ### Ce que tu dois voir
@@ -184,7 +184,7 @@ OUT sur GPIO10 et GPIO11. Rebranche **sans poser les doigts dessus** : ces
 modules se calibrent à la mise sous tension.
 
 ```python
->>> diag.run(seconds=30)
+diag.run(seconds=30)
 ```
 
 ### Ce que tu dois voir
@@ -210,7 +210,7 @@ Débranche. Câble **uniquement le contact** (GPIO14 vers GND), pas encore la
 LED. Rebranche.
 
 ```python
->>> diag.run(seconds=30)
+diag.run(seconds=30)
 ```
 
 ### Ce que tu dois voir
@@ -231,8 +231,8 @@ composant.
 Câble l'étage LED, rebranche, puis :
 
 ```python
->>> import diag
->>> diag.run(seconds=30, led_test=True)
+import diag
+diag.run(seconds=30, led_test=True)
 ```
 
 ### Ce que tu dois voir
@@ -260,8 +260,8 @@ C'est l'étape décisive. **Branche maintenant aussi le port USB natif.**
 ### 7a. Vérification AZERTY, sans rien envoyer
 
 ```python
->>> import diag
->>> diag.keymap("_MATCHPROP")
+import diag
+diag.keymap("_MATCHPROP")
 ```
 
 Le `_` doit ressortir en **touche 37, sans Maj**. S'il ressort en touche 45

@@ -610,8 +610,8 @@ condensateurs : le signal PWM sera déformé, et le quartz peut souffrir.
 2. Ou fais le test logiciel, avant de câbler la LED :
 
 ```python
->>> from machine import Pin, PWM
->>> p = PWM(Pin(15), freq=2000, duty_u16=32768)
+from machine import Pin, PWM
+p = PWM(Pin(15), freq=2000, duty_u16=32768)
 ```
 
 Branche provisoirement une LED ordinaire avec une résistance de 1 kΩ entre

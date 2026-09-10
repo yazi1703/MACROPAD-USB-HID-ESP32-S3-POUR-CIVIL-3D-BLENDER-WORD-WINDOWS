@@ -13,18 +13,21 @@ travailles.
 =====================================================================
 COMMENT L'UTILISER DANS THONNY
 =====================================================================
-Dans la zone du bas (le REPL, celle où il y a ">>>") :
+Dans la zone du bas (le REPL, celle où il y a ">>>"). Tape les commandes
+SANS le ">>>" : c'est l'invite, Thonny l'affiche tout seul, et la coller
+avec la commande donne "SyntaxError: invalid syntax".
 
-    >>> import diag
-    >>> diag.run()              # 20 secondes de surveillance des entrées
-    >>> diag.run(seconds=60)    # plus long
-    >>> diag.run(led_test=True) # ajoute le test de la LED
+
+    import diag
+    diag.run()              # 20 secondes de surveillance des entrées
+    diag.run(seconds=60)    # plus long
+    diag.run(led_test=True) # ajoute le test de la LED
 
 Test par test :
 
-    >>> diag.keymap()               # vérifie l'AZERTY, sans matériel
-    >>> diag.keymap("_ISOLATEOBJECTS")
-    >>> diag.rgb()                  # câblage des LED RGB, une par une
+    diag.keymap()               # vérifie l'AZERTY, sans matériel
+    diag.keymap("_ISOLATEOBJECTS")
+    diag.rgb()                  # câblage des LED RGB, une par une
 
 Pour arrêter avant la fin : Ctrl-C, ou le bouton STOP de Thonny.
 """
@@ -63,8 +66,8 @@ def rgb(nb=None, broche=None, luminosite=12):
     test n'utilise pas rgb.py : il parle directement aux LED, pour que ce
     soit bien TON cablage qui soit teste, et pas la configuration.
 
-        >>> diag.rgb()          # utilise RGB_PIN et RGB_COUNT
-        >>> diag.rgb(6, 16)     # six LED sur GPIO16
+        diag.rgb()          # utilise RGB_PIN et RGB_COUNT
+        diag.rgb(6, 16)     # six LED sur GPIO16
 
     Ce que tu dois voir, dans l'ordre :
 
