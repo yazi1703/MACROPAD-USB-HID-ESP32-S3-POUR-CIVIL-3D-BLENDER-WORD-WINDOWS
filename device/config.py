@@ -256,7 +256,15 @@ GESTE_LONG_MS = 400
 # Deux appuis séparés de moins que ce délai forment un double appui.
 # ATTENTION : seules les touches qui ont RÉELLEMENT une macro de double
 # appui attendent ce délai. Les autres partent instantanément.
-GESTE_DOUBLE_MS = 260
+#
+# POURQUOI 200 ET PLUS 260 : dans les valeurs d'usine, une seule touche a
+# encore un double appui — B1, le presse-papiers, et c'est la touche la
+# plus utilisée du pad. Ce délai est exactement le retard de son Ctrl+C.
+# 200 ms reste très confortable pour un double appui volontaire (le
+# double-clic de Windows est réglé à 500 ms par défaut, mais un doigt qui
+# tape deux fois exprès sur un macropad met 100 à 150 ms), et rend 60 ms
+# au copier. Si tu rates des collages, remonte-le : c'est sans danger.
+GESTE_DOUBLE_MS = 200
 
 DEBOUNCE_MS = 25        # anti-rebond des touches B1 à B4
 ESC_DEBOUNCE_MS = 20    # anti-rebond du bouton ESC
@@ -296,6 +304,19 @@ PROFILE_SPLASH_MS = 500     # durée d'affichage du nom du profil en grand
 # L'écran affiche un tableau : une ligne par touche, trois colonnes
 # (appui court, appui long, double appui). Quatre lignes tiennent à
 # l'écran ; s'il y a plus de touches, le tableau défile tout seul.
+# =====================================================================
+# COMBINAISONS DE PLUSIEURS TOUCHES
+# =====================================================================
+# Deux doigts poses "en meme temps" arrivent en realite a 10 a 40 ms
+# d'ecart ; deux appuis volontairement successifs sont a plus de 150 ms.
+# 50 ms separe proprement les deux cas.
+#
+# Cette fenetre ne ralentit AUCUNE touche : voir l'explication en tete de
+# combos.py. Seules les touches membres d'une combinaison la traversent,
+# et un appui court part de toute facon au relachement.
+GESTE_COMBO_MS = 50
+COMBO_FLASH_MS = 1200       # duree de l'affichage "B3+B4 / VUE PREC."
+
 TABLE_SCROLL_MS = 2500      # temps d'affichage avant de faire défiler d'un cran
 HIGHLIGHT_MS = 1300         # durée du surlignage de la touche utilisée
 

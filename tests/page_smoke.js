@@ -117,6 +117,17 @@ function boutons(noeud, libelle, sortie) {
   noeud.children.forEach(function (e) { boutons(e, libelle, sortie); });
   return sortie;
 }
+// Retrouver un champ par son infobulle plutot que par sa position : les
+// combinaisons sont en nombre variable, compter les champs qui les
+// precedent rendrait ce fichier faux au premier ajout.
+function parTitre(noeud, fragment, sortie) {
+  sortie = sortie || [];
+  if (noeud.tag === 'input' && (noeud.title || '').indexOf(fragment) >= 0) {
+    sortie.push(noeud);
+  }
+  noeud.children.forEach(function (e) { parTitre(e, fragment, sortie); });
+  return sortie;
+}
 function listes(noeud, sortie) {
   sortie = sortie || [];
   if (noeud.tag === 'select') { sortie.push(noeud); }
@@ -160,6 +171,26 @@ setTimeout(function () {
     const ca = champs(registre.apps);
     if (ca.length >= 6) { saisir(ca[5], 'AbRg'); }   // abrege du 2e
 
+    // ---- les combinaisons, sur la carte qui en a ---------------------
+    // Meme piege que pour les touches : chaque champ doit ecrire dans SA
+    // combinaison. On modifie donc la PREMIERE et on regarde la DERNIERE.
+    let carteCombos = null;
+    profs.children.forEach(function (carte) {
+      if (!carteCombos && parTitre(carte, 'appuyees ensemble').length > 1) {
+        carteCombos = carte;
+      }
+    });
+    vu.carte_combos = profs.children.indexOf(carteCombos);
+    if (carteCombos) {
+      const duo = parTitre(carteCombos, 'appuyees ensemble');
+      const lib = parTitre(carteCombos, 'libelle affiche');
+      vu.combos_affiches = duo.length;
+      vu.combo_touches_lues = duo[0].value;
+      vu.combo_dernier_libelle_avant = lib[lib.length - 1].value;
+      saisir(duo[0], '5 et 6');        // volontairement mal ecrit
+      saisir(lib[0], 'ESSAI');
+    }
+
     // ---- on enchaine une etape : commande, pause, validation --------
     // Chaque clic redessine la page : il faut recollecter les elements
     // apres chaque action, comme le ferait un vrai navigateur.
@@ -192,6 +223,15 @@ setTimeout(function () {
         ? envoye.apps.liste[1].abrege : null;
       vu.app1_abrege = (envoye && envoye.apps.liste[0])
         ? envoye.apps.liste[0].abrege : null;
+      const pc = (envoye && carteCombos)
+        ? envoye.profils[envoye.ordre[vu.carte_combos]] : null;
+      vu.combos_envoyes = pc && pc.combos ? pc.combos.length : 0;
+      vu.combo1 = pc && pc.combos ? pc.combos[0] : null;
+      vu.combo_dernier_libelle = (pc && pc.combos)
+        ? pc.combos[pc.combos.length - 1].label : null;
+      // Un profil SANS combinaison ne doit pas s'en voir inventer une.
+      const p0 = envoye ? envoye.profils[envoye.ordre[0]] : null;
+      vu.combos_profil_sans = (p0 && p0.combos) ? p0.combos.length : -1;
       vu.couleurs = cc.length;
       vu.couleur1 = p ? p.couleur : null;
       const second = (envoye && envoye.ordre[1])

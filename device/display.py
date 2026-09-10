@@ -234,28 +234,39 @@ class Display:
         o.hline(0, _SEPARATEUR_Y, 128, 1)
         self._dessiner_bas()
 
-    def _texte_double(self, texte):
-        """Ecrit un texte en police doublee, centre.
+    def _ecrire_grand(self, texte, y0, echelle):
+        """Ecrit un texte centre, en police 8x8 agrandie 'echelle' fois.
 
         MicroPython ne fournit qu'une police 8x8. Pour l'agrandir on dessine
         le texte dans une petite image en memoire, puis on recopie chaque
-        pixel sous forme d'un carre de 2x2 sur l'ecran.
+        pixel sous forme d'un carre de echelle x echelle sur l'ecran.
         """
         import framebuf
         o = self.oled
-        o.fill(0)
-        echelle = 2 if len(texte) <= 8 else 1
         largeur = len(texte) * 8
         tampon = framebuf.FrameBuffer(bytearray(128), 128, 8,
                                       framebuf.MONO_HLSB)
         tampon.text(texte, 0, 0, 1)
         x0 = max(0, (128 - largeur * echelle) // 2)
-        y0 = (64 - 8 * echelle) // 2
         for x in range(min(128, largeur)):
             for y in range(8):
                 if tampon.pixel(x, y):
                     o.fill_rect(x0 + x * echelle, y0 + y * echelle,
                                 echelle, echelle, 1)
+
+    def _texte_double(self, texte):
+        """Un texte seul, aussi gros que possible, au milieu de l'ecran."""
+        self.oled.fill(0)
+        echelle = 2 if len(texte) <= 8 else 1
+        self._ecrire_grand(texte, (64 - 8 * echelle) // 2, echelle)
+
+    def _deux_lignes(self, haut, bas):
+        """Le nom de la combinaison en gros, son libelle juste dessous."""
+        o = self.oled
+        o.fill(0)
+        echelle = 2 if len(haut) <= 8 else 1
+        self._ecrire_grand(haut, 24 - 4 * echelle, echelle)
+        o.text(bas, max(0, (128 - len(bas) * 8) // 2), 44, 1)
 
     # ==================================================================
     # Rafraichissements
@@ -374,6 +385,27 @@ class Display:
             else:
                 self.splash_until = None
                 self._vue_principale()
+            self.pending_page = 0
+        except Exception as exc:
+            self.disable(exc)
+
+    def flash(self, ligne1, ligne2, now):
+        """Prend l'ecran un instant : "B3+B4" en gros, le libelle dessous.
+
+        Une combinaison ne correspond a aucune ligne du tableau : le
+        surlignage habituel ne peut donc pas la montrer. On reutilise le
+        mecanisme du splash de profil - tick() remet la vue normale tout
+        seul a l'echeance, sans rien bloquer dans la boucle principale.
+        """
+        self.reveiller(now)
+        if not self.oled:
+            return
+        # Sinon on retrouverait, au retour, la touche surlignee par l'appui
+        # qui a servi a former la combinaison : trompeur.
+        self.surbrillance = -1
+        try:
+            self._deux_lignes(str(ligne1)[:16], str(ligne2)[:16])
+            self.splash_until = ticks_add(now, C.COMBO_FLASH_MS)
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)

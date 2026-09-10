@@ -53,7 +53,7 @@ deux résumés**. Le résumé prend :
 |---|---|---|
 | **court** | appuie et relâche normalement | — |
 | **long** | garde appuyé **≥ 400 ms** | `GESTE_LONG_MS` |
-| **double** | deux appuis en **moins de 260 ms** | `GESTE_DOUBLE_MS` |
+| **double** | deux appuis en **moins de 200 ms** | `GESTE_DOUBLE_MS` |
 
 L'appui long **part tout seul dès le seuil atteint**, sans attendre que tu
 relâches : tu sens la commande arriver sous le doigt, et l'écran surligne
@@ -61,13 +61,13 @@ la ligne au même instant. Relâcher ensuite ne déclenche rien de plus.
 
 ### Le point important : aucune latence là où tu n'en veux pas
 
-Un macropad qui attend 260 ms à chaque appui « pour voir si un deuxième
+Un macropad qui attend 200 ms à chaque appui « pour voir si un deuxième
 arrive » serait insupportable. Ici, **c'est décidé touche par touche** :
 
 * la touche n'a **pas** de macro « double » → l'appui court part **au
   relâchement**, immédiatement, comme avant ;
 * la touche **a** une macro « double » → et seulement dans ce cas, le
-  firmware attend 260 ms avant de conclure « c'était un court ».
+  firmware attend 200 ms avant de conclure « c'était un court ».
 
 Autrement dit, tu ne paies l'attente que sur les touches où tu as demandé
 le double appui. Laisse la colonne `DBL` vide sur tes touches les plus
@@ -118,7 +118,7 @@ touche ordinaire à maintenir.
 ### Deux choix assumés
 
 **Le modificateur descend dès l'appui, sans le moindre délai.** Attendre
-260 ms pour voir si un second appui arrive rendrait la touche
+200 ms pour voir si un second appui arrive rendrait la touche
 inutilisable : un modificateur qui traîne, c'est un clic raté.
 
 **Conséquence : le premier appui bref de la séquence « bref puis
@@ -160,7 +160,7 @@ l'écran saute sur la ligne de cette touche et la met en surbrillance**
 
 Le surlignage part **du front d'appui**, pas du départ de la macro. La
 nuance compte : sur une touche qui a un double appui, la macro n'est
-décidée que 260 ms plus tard, et attendre ce moment donnait un retard
+décidée que 200 ms plus tard, et attendre ce moment donnait un retard
 très perceptible. Les LED RGB suivent la même règle.
 
 Trois choses arrivent en même temps :
@@ -239,7 +239,7 @@ Dans `config.py` :
 
 ```python
 GESTE_LONG_MS = 400          # seuil de l'appui long
-GESTE_DOUBLE_MS = 260        # fenêtre du double appui
+GESTE_DOUBLE_MS = 200        # fenêtre du double appui
 TABLE_SCROLL_MS = 2500       # défilement du tableau
 HIGHLIGHT_MS = 1300          # durée du surlignage
 DOC_SCROLL_MS = 70           # ms par pixel du nom de fichier
@@ -295,3 +295,8 @@ Toutes les animations sont pilotées par comparaison de dates dans
 | L'écran est noir | plus de 15 minutes sans appui. Un appui le rallume |
 | La colonne du milieu affiche `-` partout | aucune macro longue définie dans ce profil |
 | Un résumé de macro est tronqué | 4 caractères par colonne de geste, c'est la largeur de l'écran. Le libellé, lui, en a 6 |
+
+> **Un quatrième geste existe : deux touches appuyées ensemble.** Il a son
+> propre fichier, parce qu'il pose une question à lui seul — comment
+> attendre le second doigt sans ralentir le premier :
+> [`docs/11-combinaisons.md`](11-combinaisons.md).

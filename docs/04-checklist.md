@@ -128,6 +128,29 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 [ ] GESTE_LONG_MS / GESTE_DOUBLE_MS ajustés à ton doigt si besoin
 ```
 
+## Les combinaisons — deux touches ensemble (V1)
+
+```
+[ ] B4+B5 lance _PEDIT, et NI _PLINE NI _ISOLATEOBJECTS
+[ ] B3+B6 ouvre les hachures
+[ ] l'écran annonce la combinaison en gros, puis revient tout seul
+[ ] B3 seule tape toujours F3 : le collecteur ne mange aucun appui
+[ ] B3 maintenue lance toujours _ZOOM E au bout de 400 ms, SANS retard
+[ ] ESC pendant que deux doigts descendent n'envoie QUE Échap
+[ ] GESTE_COMBO_MS monté à 70 si les combinaisons t'échappent
+```
+
+## Les commandes AutoLISP de Civil 3D (V1)
+
+```
+[ ] macropad_tools.lsp chargé (APPLOAD -> Suite de démarrage)
+[ ] le dossier est dans les chemins approuvés (TRUSTEDPATHS)
+[ ] MPVIEWNEXT / MPVIEWPREV parcourent les vues enregistrées
+[ ] MPLAYEROFF éteint bien le calque de l'objet désigné
+[ ] MPLAYERRESTORE le rallume
+[ ] les 4 commandes répondent encore après un redémarrage de Civil 3D
+```
+
 ## La touche modificatrice — Civil 3D B2 (V1)
 
 ```

@@ -28,6 +28,7 @@ ORDRE = [
     "runtime.py",
     "inputs.py",
     "gestures.py",
+    "combos.py",
     "layouts.py",
     "store.py",
     "stats.py",

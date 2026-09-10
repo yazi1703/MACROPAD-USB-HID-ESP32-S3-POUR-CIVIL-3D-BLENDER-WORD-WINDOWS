@@ -69,6 +69,7 @@ DOUBLE = "double"
 GESTES = (COURT, LONG, DOUBLE)
 
 LABEL_MAX = 6          # largeur d'un libelle sur l'ecran OLED
+COMBO_LABEL_MAX = 16   # une combinaison s'affiche sur une ligne entiere
 
 
 def K(label, court, long=None, double=None):
@@ -94,7 +95,7 @@ def K(label, court, long=None, double=None):
 #   appui long   -> Ctrl+Z   annuler
 #
 # A savoir : c'est la SEULE touche a avoir un double appui dans les
-# valeurs d'usine. Une touche qui en a un attend GESTE_DOUBLE_MS (260 ms)
+# valeurs d'usine. Une touche qui en a un attend GESTE_DOUBLE_MS (200 ms)
 # avant de conclure "c'etait un appui court" - ici, avant de copier. Sur
 # une touche ou tu veux zero attente, laisse la colonne "double" vide et
 # sers-toi de l'appui long, qui lui ne coute rien.
@@ -121,31 +122,40 @@ PROFILES = {
 
     # -----------------------------------------------------------------
     # Le "_" devant les commandes AutoCAD force la commande INTERNATIONALE :
-    # _MATCHPROP fonctionne meme sur un Civil 3D installe en francais.
+    # _PLINE fonctionne meme sur un Civil 3D installe en francais.
+    #
+    # CHAQUE TOUCHE PORTE UNE FAMILLE : c'est ce qui rend le profil facile
+    # a retenir. Appui court et appui long vont toujours ensemble.
     "CIVIL3D": [
         presse_papiers(),
-        # LA TOUCHE MODIFICATRICE. Elle ne tape rien : elle enfonce Ctrl
-        # ou Maj et les GARDE enfonces tant que ton doigt reste dessus.
-        #   appui maintenu             -> Ctrl  (Ctrl+clic : selectionner)
-        #   appui bref puis maintenu   -> Maj   (Maj+clic : deselectionner)
-        # Ta main gauche tient le modificateur, ta main droite reste a la
-        # souris. Voir gestures.py pour le detail.
-        K("CTRL",   [("maintien", ("CTRL",))],
-          double=[("maintien", ("SHIFT",))]),
-        K("MATCH",  [("text_enter", "_MATCHPROP")],
-          long=[("combo", ("CTRL", "Y"))]),                # retablir
+
+        # LA TOUCHE MODIFICATRICE. Elle ne tape rien : elle enfonce Maj ou
+        # Ctrl et les GARDE enfonces tant que ton doigt reste dessus.
+        #   appui maintenu             -> MAJ   (Maj+clic : deselectionner)
+        #   appui bref puis maintenu   -> CTRL  (Ctrl+clic : ajouter)
+        # Maj est en premier parce que c'est le maintien INSTANTANE, et
+        # c'est celui que tu utilises le plus, main droite a la souris.
+        K("MAJ",    [("maintien", ("SHIFT",))],
+          double=[("maintien", ("CTRL",))]),
+
+        # Affichage : accrochages, et vue globale en appui long.
+        K("F3",     [("key", "F3")],
+          long=[("text_enter", "_ZOOM E")]),
+
+        # Famille polyligne. "_ZOOM E" et "_PLINE" tiennent sur une seule
+        # ligne parce que dans la ligne de commande AutoCAD, l'espace vaut
+        # Entree : l'option part avec la commande.
+        K("PLINE",  [("text_enter", "_PLINE")],
+          long=[("text_enter", "_SPLINE")]),
+
+        # Famille isolation.
         K("ISOLE",  [("text_enter", "_ISOLATEOBJECTS")],
-          long=[("text_enter", "_UNISOLATEOBJECTS")]),     # tout remontrer
-        # "_ZOOM E" en une seule ligne : dans la ligne de commande
-        # AutoCAD, l'espace vaut Entree. Le E choisit donc l'option
-        # Etendu, et tu vois tout le dessin d'un seul appui. Si ta
-        # version ne suit pas, remets simplement "_ZOOM".
-        K("ZOOM",   [("text_enter", "_ZOOM E")],
-          double=[("text_enter", "_REGEN")]),              # regenerer
-        # _HATCH etait sur B2, que la touche modificatrice occupe
-        # desormais : il passe en appui long, ou il ne coute aucun retard.
-        K("ENREG",  [("combo", ("CTRL", "S"))],
-          long=[("text_enter", "_HATCH")]),                # hachures
+          long=[("text_enter", "_UNISOLATEOBJECTS")]),
+
+        # Famille selection : selectionner les semblables, puis reproduire
+        # une mise en forme sur ce qui est selectionne.
+        K("SELSIM", [("text_enter", "_SELECTSIMILAR")],
+          long=[("text_enter", "_MATCHPROP")]),
     ],
 
     # -----------------------------------------------------------------
@@ -183,6 +193,44 @@ PROFILES = {
         K("CAPTUR", [("combo", ("WIN", "SHIFT", "S"))]),
     ],
 }
+
+# =====================================================================
+# LES COMBINAISONS
+# =====================================================================
+# Deux touches appuyees EN MEME TEMPS declenchent une macro a elles, et
+# surtout pas celles des deux touches. Voir combos.py pour la mecanique,
+# et docs/11-combinaisons.md pour le raisonnement.
+#
+# Les numeros sont ceux que tu vois sur le pad : COMBO((3, 4), ...) c'est
+# bien B3 et B4.
+def COMBO(touches, label, actions):
+    return (tuple(numero - 1 for numero in touches), label, actions)
+
+
+# Trois familles, trois geometries - c'est ce qui les rend memorisables :
+#
+#   les deux paires du bord    -> les vues, gauche = avant, droite = apres
+#   la paire du milieu, sur B4 -> la famille polyligne
+#   les deux diagonales        -> les calques, cacher / remontrer
+#   les deux extremes          -> les hachures
+#
+# _HATCHEDIT n'y figure pas volontairement : dans AutoCAD, un double-clic
+# sur une hachure ouvre deja son editeur.
+COMBOS = {
+    "CIVIL3D": [
+        COMBO((3, 4), "VUE PREC.",  [("text_enter", "MPVIEWPREV")]),
+        COMBO((5, 6), "VUE SUIV.",  [("text_enter", "MPVIEWNEXT")]),
+        COMBO((4, 5), "PEDIT",      [("text_enter", "_PEDIT")]),
+        COMBO((3, 5), "CALQUE OFF", [("text_enter", "MPLAYEROFF")]),
+        COMBO((4, 6), "CALQUE ON",  [("text_enter", "MPLAYERRESTORE")]),
+        COMBO((3, 6), "HACHURES",   [("text_enter", "_HATCH")]),
+    ],
+}
+# MPVIEWPREV, MPVIEWNEXT, MPLAYEROFF et MPLAYERRESTORE sont les commandes
+# AutoLISP de civil3d/macropad_tools.lsp. Elles s'ecrivent SANS le "_" :
+# le souligne demande la version internationale d'une commande AutoCAD
+# native, une commande LISP n'a pas de traduction.
+
 
 # Nom affiche a l'ecran quand il differe de la cle interne.
 TITLES = {"CIVIL3D": "CIVIL 3D"}

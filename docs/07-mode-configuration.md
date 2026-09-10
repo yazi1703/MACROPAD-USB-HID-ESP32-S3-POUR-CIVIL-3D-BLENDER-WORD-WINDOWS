@@ -93,12 +93,29 @@ Chaque touche occupe trois lignes dans la page, une par geste :
 |---|---|---|
 | **court** | appuie et relâche | c'est la macro principale |
 | **long** | garde appuyé ≥ 400 ms | vide |
-| **double** | deux appuis en moins de 260 ms | vide |
+| **double** | deux appuis en moins de 200 ms | vide |
 
 Les deux durées se règlent dans `config.py` (`GESTE_LONG_MS`,
 `GESTE_DOUBLE_MS`). Une touche qui n'a **pas** de macro « double » part
 dès le relâchement : tu ne paies l'attente que là où tu t'en sers.
 Voir le [chapitre 9](09-ecran-et-gestes.md) pour le détail.
+
+### Les combinaisons
+
+Sous le tableau de chaque profil, un second tableau plus court :
+**deux touches appuyées en même temps**, leur libellé, et leur macro —
+avec exactement le même éditeur d'étapes.
+
+| Colonne | Ce qu'on y met |
+|---|---|
+| **Touches** | les numéros gravés sur le pad : `3+4`, ou `3 4`, ou même `3 et 4` |
+| **Libellé** | ce que l'écran affichera, 16 caractères au plus |
+| **Action** | même chose que pour un geste, suites d'étapes comprises |
+
+Deux règles y sont vérifiées à l'enregistrement : il faut **au moins deux
+touches**, et un `maintien` y est **refusé** — il n'aurait aucune touche
+unique à surveiller pour se relâcher, et Ctrl resterait enfoncé.
+Le [chapitre 11](11-combinaisons.md) détaille le reste.
 
 ### Les cinq types de macro
 

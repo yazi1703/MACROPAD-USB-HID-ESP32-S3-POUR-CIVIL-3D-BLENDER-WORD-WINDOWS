@@ -81,9 +81,10 @@ class Logic(unittest.TestCase):
             for _, gestes in macros:
                 for actions in gestes.values():
                     self.assertTrue(compile_actions(actions,'FR_AZERTY'))
-        # B3 et B4 de CIVIL3D ecrivent une commande _XXX suivie d'Entree.
-        # B1 est le presse-papiers, B2 la touche modificatrice.
-        for index in (2,3):
+        # B4, B5 et B6 de CIVIL3D ecrivent une commande _XXX suivie
+        # d'Entree. B1 est le presse-papiers, B2 la touche modificatrice
+        # et B3 la touche F3.
+        for index in (3,4,5):
             seq=compile_actions(PROFILES['CIVIL3D'][index][1]['court'],'FR_AZERTY')
             self.assertEqual(seq[0],(37,)); self.assertEqual(seq[-1],(40,))
         self.assertEqual(compile_actions([('combo',('CTRL','Z'))],'FR_AZERTY'),[(-1,26)])
@@ -190,10 +191,12 @@ class Logic(unittest.TestCase):
         def simulated_sleep(ms):
             clock[0]+=ms
             # Chronologie physique : appui macro, changement profil, ESC.
-            # On se sert de B3 (GPIO6, _MATCHPROP) : B1 est le presse-papiers
+            # On se sert de B4 (GPIO7, _PLINE) : B1 est le presse-papiers
             # et son double appui retarde volontairement l'appui court, B2
-            # est la touche modificatrice.
-            Pin.levels[6]=0 if 2600 <= clock[0] < 2660 else 1
+            # est la touche modificatrice, B3 ne tape qu'une touche.
+            # B4 est membre de combinaisons : cet appui de 60 ms traverse
+            # donc le collecteur, qui doit le rendre intact.
+            Pin.levels[7]=0 if 2600 <= clock[0] < 2660 else 1
             Pin.levels[11]=1 if 2700 <= clock[0] < 2780 else 0
             Pin.levels[14]=0 if 2900 <= clock[0] < 2960 else 1
             if clock[0] >= 3200: raise KeyboardInterrupt()
@@ -411,7 +414,8 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
     def test_rotation_sur_six_touches(self):
         from profiles import ProfileManager
         import store
-        profils, ordre, titres, couleurs, apps, repli, origine = store.charger(6)
+        (profils, ordre, titres, couleurs, combos,
+         apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, 'usine')
         p = ProfileManager(ordre, C.DEFAULT_PROFILE, profils, 6)
         self.assertEqual(len(p.macros), 6)
@@ -421,10 +425,12 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
     # --- enregistrement JSON --------------------------------------------
     def test_aller_retour_json(self):
         import store
-        profils, ordre, titres, couleurs, apps, repli = store.defauts()
-        ok, raison = store.enregistrer(profils, ordre, titres, couleurs, apps, repli, 6)
+        profils, ordre, titres, couleurs, combos, apps, repli = store.defauts()
+        ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
+                                       combos, apps, repli, 6)
         self.assertTrue(ok, raison)
-        relus, ordre2, titres2, couleurs2, apps2, repli2, origine = store.charger(6)
+        (relus, ordre2, titres2, couleurs2, combos2,
+         apps2, repli2, origine) = store.charger(6)
         self.assertEqual(origine, 'fichier')
         self.assertEqual(ordre2, ordre)
         self.assertEqual(apps2, apps)          # la table des logiciels survit
@@ -441,24 +447,27 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
 
     def test_macro_intapable_refusee(self):
         import store
-        profils, ordre, titres, couleurs, apps, repli = store.defauts()
+        profils, ordre, titres, couleurs, combos, apps, repli = store.defauts()
         profils['CIVIL3D'][0] = ('KO', {'court': [('key', 'TOUCHE_BIDON')]})
-        ok, raison = store.enregistrer(profils, ordre, titres, couleurs, apps, repli, 6)
+        ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
+                                       combos, apps, repli, 6)
         self.assertFalse(ok)
         self.assertIn('CIVIL3D', raison)
 
     def test_libelle_trop_long_refuse(self):
         import store
-        profils, ordre, titres, couleurs, apps, repli = store.defauts()
+        profils, ordre, titres, couleurs, combos, apps, repli = store.defauts()
         profils['WORD'][0] = ('BEAUCOUPTROPLONG', {'court': [('key', 'A')]})
-        ok, raison = store.enregistrer(profils, ordre, titres, couleurs, apps, repli, 6)
+        ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
+                                       combos, apps, repli, 6)
         self.assertFalse(ok)
 
     def test_fichier_corrompu_repli_sur_usine(self):
         import store
         with open(C.PROFILES_FILE, 'w') as f:
             f.write('{ ceci n est pas du JSON')
-        profils, ordre, titres, couleurs, apps, repli, origine = store.charger(6)
+        (profils, ordre, titres, couleurs, combos,
+         apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, 'usine')      # ne doit PAS planter
         self.assertEqual(len(profils['CIVIL3D']), 6)
 
@@ -470,7 +479,8 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
                 'profils': {'X': {'titre': 'X', 'touches': [touche] * 6}}}
         with open(C.PROFILES_FILE, 'w') as f:
             J.dump(data, f)
-        profils, ordre, titres, couleurs, apps, repli, origine = store.charger(6)
+        (profils, ordre, titres, couleurs, combos,
+         apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, 'usine')
 
     def test_conversion_combo(self):
@@ -571,6 +581,24 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
                 clock[0] += 20
                 ecran.tick(clock[0])
 
+        # L'affichage des combinaisons. Il ecrit en police doublee sur
+        # deux lignes : c'est le dessin le plus haut de tout le firmware,
+        # donc le plus expose au debordement vertical.
+        essais = [(indices, label)
+                  for liste in P.COMBOS.values()
+                  for indices, label, _actions in liste]
+        essais += [((0, 1), ''),                       # libelle vide
+                   ((0, 1, 2, 3, 4, 5), 'X' * 16),     # les deux pires cas
+                   ((0, 1), 'X' * 32)]                 # libelle trop long
+        for indices, label in essais:
+            from combos import nom_touches
+            ecran.flash(nom_touches(indices), label, clock[0])
+            for _ in range(C.COMBO_FLASH_MS + 20):
+                ecran.tick(clock[0])
+                clock[0] += 1
+        # ... et l'ecran est bien revenu au tableau tout seul.
+        self.assertIsNone(ecran.splash_until)
+
         # Le nom de fichier le plus long possible, avec le plus long des
         # abreges : c'est le pire cas de la ligne du bas.
         ecran.set_document('Blender|' + 'M' * 48)
@@ -664,14 +692,20 @@ class PageWebDeConfiguration(unittest.TestCase):
         civil = data["profils"]["CIVIL3D"]["touches"]
         self.assertEqual(len(civil), 6)
         # Chaque geste est une SUITE d'etapes, meme quand il n'y en a qu'une.
-        self.assertEqual(civil[2]["court"][0]["valeur"], "_MATCHPROP")
-        self.assertEqual(civil[2]["court"][0]["type"], "text_enter")
+        self.assertEqual(civil[3]["court"][0]["valeur"], "_PLINE")
+        self.assertEqual(civil[3]["court"][0]["type"], "text_enter")
         # Les combinaisons sont lisibles dans le formulaire.
         self.assertEqual(civil[0]["court"][0]["valeur"], "CTRL+C")
         self.assertEqual(civil[0]["double"][0]["valeur"], "CTRL+V")
         self.assertEqual(civil[0]["long"][0]["valeur"], "CTRL+Z")
-        # L'appui long de B3 retablit (Ctrl+Y).
-        self.assertEqual(civil[2]["long"][0]["valeur"], "CTRL+Y")
+        # L'appui long de B3 montre toute la vue.
+        self.assertEqual(civil[2]["long"][0]["valeur"], "_ZOOM E")
+        # Les combinaisons voyagent avec le profil, en numeros de touches
+        # lisibles : [3, 4] c'est bien B3 et B4.
+        combos = data["profils"]["CIVIL3D"]["combos"]
+        self.assertEqual(combos[0]["touches"], [3, 4])
+        self.assertEqual(combos[0]["label"], "VUE PREC.")
+        self.assertEqual(combos[0]["actions"][0]["valeur"], "MPVIEWPREV")
         # La table des logiciels voyage avec la configuration.
         self.assertTrue(any(a["exe"] == "acad.exe"
                             for a in data["apps"]["liste"]))
@@ -692,7 +726,8 @@ class PageWebDeConfiguration(unittest.TestCase):
 
         # La modification doit etre relue telle quelle par le firmware.
         import store
-        profils, ordre, titres, couleurs, apps, repli, origine = store.charger(6)
+        (profils, ordre, titres, couleurs, combos,
+         apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(profils["CIVIL3D"][0][0], "TALUS")
         # L'appui long enregistre est bien relu.
@@ -714,7 +749,7 @@ class PageWebDeConfiguration(unittest.TestCase):
         self.assertIn("WORD", resultat["raison"])
         # Rien ne doit avoir ete ecrit : on reste sur les profils d'usine.
         import store
-        self.assertEqual(store.charger(6)[6], "usine")
+        self.assertEqual(store.charger(6)[7], "usine")
 
     def test_enregistrement_refuse_un_json_casse(self):
         import json as J
@@ -725,9 +760,9 @@ class PageWebDeConfiguration(unittest.TestCase):
     def test_retour_usine(self):
         import store
         store.enregistrer(*store.defauts(), nb_touches=6)
-        self.assertEqual(store.charger(6)[6], "fichier")
+        self.assertEqual(store.charger(6)[7], "fichier")
         self._requete("POST", "/api/usine")
-        self.assertEqual(store.charger(6)[6], "usine")
+        self.assertEqual(store.charger(6)[7], "usine")
 
     def test_chemin_inconnu(self):
         self.assertIn(b"404", self._requete("GET", "/nimportequoi"))
@@ -826,8 +861,8 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         self.assertEqual(data["touches"], 6)
         self.assertEqual(data["ordre"], list(C.PROFILES_ORDER))
         self.assertEqual(
-            data["profils"]["CIVIL3D"]["touches"][2]["court"][0]["valeur"],
-            "_MATCHPROP")
+            data["profils"]["CIVIL3D"]["touches"][3]["court"][0]["valeur"],
+            "_PLINE")
 
     # --- ecriture de la configuration par le PC -------------------------
     def _envoyer_config(self, lien, source, data):
@@ -859,7 +894,8 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         self.assertIn((link.EVT_RECHARGER, None), evenements)
         self.assertTrue(any(s.startswith("#OK:") for s in sorties), sorties)
 
-        profils, ordre, titres, couleurs, apps, repli, origine = store.charger(6)
+        (profils, ordre, titres, couleurs, combos,
+         apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(profils["CIVIL3D"][0][0], "TALUS")
         # L'appui long enregistre est bien relu.
@@ -880,7 +916,7 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         self.assertNotIn((link.EVT_RECHARGER, None), evenements)
         self.assertTrue(any(s.startswith("#KO:") for s in sorties), sorties)
         # Rien n'a ete ecrit : on reste sur les profils d'usine.
-        self.assertEqual(store.charger(6)[6], "usine")
+        self.assertEqual(store.charger(6)[7], "usine")
 
     def test_json_casse_refuse(self):
         lien, source, sorties = self._lien()
@@ -983,21 +1019,489 @@ class GestesCourtLongDouble(unittest.TestCase):
     def test_configurer_depuis_les_macros(self):
         import profiles as P
         self.G.configurer(P.PROFILES['CIVIL3D'])
-        # B3 MATCH a un appui long (retablir), pas de double.
+        # B3 F3 a un appui long (la vue globale), pas de double.
         self.assertTrue(self.G.a_long[2])
         self.assertFalse(self.G.a_double[2])
-        # B5 ZOOM a un double appui.
-        self.assertTrue(self.G.a_double[4])
         # B1 est le presse-papiers : les trois gestes sont occupes.
         self.assertTrue(self.G.a_long[0])
         self.assertTrue(self.G.a_double[0])
-        # B4 ISOLE n'a pas de double appui : aucun retard, aucune
-        # attente. C'est ce qui garde les touches instantanees.
-        self.assertFalse(self.G.a_double[3])
+        # Et surtout : AUCUNE des touches de commande n'a de double appui.
+        # C'est ce qui les garde instantanees - un double appui, c'est
+        # GESTE_DOUBLE_MS d'attente avant de savoir quoi envoyer.
+        for index in (2, 3, 4, 5):
+            self.assertFalse(self.G.a_double[index], "B%d" % (index + 1))
         # B2 est la touche modificatrice : mode a part.
         self.assertTrue(self.G.a_maintien[1])
         self.assertTrue(self.G.a_maintien2[1])
         self.assertFalse(self.G.a_maintien[0])
+
+
+class CombinaisonsSimultanees(unittest.TestCase):
+    """Deux touches ensemble = une macro a elles.
+
+    Le point qui a decide de toute la conception : ne pas ralentir les
+    appuis simples. On le verifie ici touche par touche, et jusque dans
+    l'horodatage transmis a la machine a gestes.
+    """
+
+    def setUp(self):
+        clock[0] = 0
+        from combos import Combos, APPUI, RELACHEMENT, nom_touches
+        self.APPUI, self.RELACHEMENT = APPUI, RELACHEMENT
+        self.nom_touches = nom_touches
+        self.C = Combos(6, fenetre_ms=50)
+        self.C.configurer([
+            ((2, 3), "VUE PREV", [("text_enter", "MPVIEWPREV")]),
+            ((4, 5), "VUE SUIV", [("text_enter", "MPVIEWNEXT")]),
+        ])
+
+    # --- ce qui ne doit RIEN couter --------------------------------------
+    def test_une_touche_hors_combinaison_passe_sans_delai(self):
+        # B1 (index 0) n'entre dans aucune combinaison.
+        self.assertFalse(self.C.membres[0])
+        combo, differes = self.C.appui(0, 100)
+        self.assertIsNone(combo)
+        self.assertEqual(differes, [(self.APPUI, 0, 100)])
+        combo, differes = self.C.relachement(0, 160)
+        self.assertEqual(differes, [(self.RELACHEMENT, 0, 160)])
+
+    def test_une_tape_rapide_sur_une_membre_ne_perd_rien(self):
+        # Appui puis relachement AVANT la fin de la fenetre : on libere
+        # tout au relachement, donc aucune latence ajoutee.
+        combo, differes = self.C.appui(2, 100)
+        self.assertIsNone(combo)
+        self.assertEqual(differes, [])              # retenu un instant
+
+        combo, differes = self.C.relachement(2, 130)
+        self.assertIsNone(combo)
+        self.assertEqual(differes, [(self.APPUI, 2, 100),
+                                    (self.RELACHEMENT, 2, 130)])
+
+    def test_l_horodatage_d_origine_est_preserve(self):
+        # Touche membre gardee enfoncee : l'appui n'est transmis qu'a la
+        # fin de la fenetre, mais avec l'instant du VRAI appui. Sans
+        # cela, tout appui long partirait en retard.
+        self.C.appui(2, 100)
+        combo, differes = self.C.service(120)        # fenetre encore ouverte
+        self.assertEqual(differes, [])
+        combo, differes = self.C.service(150)        # fenetre fermee
+        self.assertIsNone(combo)
+        self.assertEqual(differes, [(self.APPUI, 2, 100)])
+
+    # --- la reconnaissance -------------------------------------------------
+    def test_deux_touches_ensemble_declenchent_la_combinaison(self):
+        self.C.appui(2, 100)
+        combo, differes = self.C.appui(3, 120)
+        self.assertIsNotNone(combo)
+        cle, libelle, actions = combo
+        self.assertEqual(cle, (2, 3))
+        self.assertEqual(libelle, "VUE PREV")
+        self.assertEqual(actions, [("text_enter", "MPVIEWPREV")])
+        # ET SURTOUT : aucun appui simple n'est parti.
+        self.assertEqual(differes, [])
+
+    def test_l_ordre_des_doigts_n_a_pas_d_importance(self):
+        self.C.appui(3, 100)
+        combo, _ = self.C.appui(2, 115)
+        self.assertEqual(combo[0], (2, 3))
+
+    def test_deux_appuis_trop_espaces_restent_deux_appuis(self):
+        self.C.appui(2, 100)
+        combo, differes = self.C.appui(3, 400)       # bien hors fenetre
+        self.assertIsNone(combo)
+        # Le premier appui est libere, le second ouvre sa propre fenetre.
+        self.assertEqual(differes, [(self.APPUI, 2, 100)])
+        combo, differes = self.C.service(460)
+        self.assertEqual(differes, [(self.APPUI, 3, 400)])
+
+    def test_les_relachements_de_la_combinaison_sont_avales(self):
+        self.C.appui(2, 100)
+        self.C.appui(3, 120)
+        combo, differes = self.C.relachement(2, 300)
+        self.assertEqual(differes, [])
+        combo, differes = self.C.relachement(3, 320)
+        self.assertEqual(differes, [])
+        # Et on est bien revenu au repos : une nouvelle paire fonctionne.
+        self.C.appui(2, 400)
+        combo, _ = self.C.appui(3, 420)
+        self.assertIsNotNone(combo)
+
+    def test_rouler_les_doigts_ne_declenche_pas_une_seconde_fois(self):
+        self.C.appui(4, 100)
+        combo, _ = self.C.appui(5, 115)
+        self.assertIsNotNone(combo)
+        # On garde B5 et B6 enfoncees, et on pose un doigt sur B3.
+        combo, differes = self.C.appui(2, 200)
+        self.assertIsNone(combo)
+        self.assertEqual(differes, [], "un appui parasite a ete transmis")
+        combo, differes = self.C.relachement(2, 260)
+        self.assertEqual(differes, [])
+
+    # --- annulations -------------------------------------------------------
+    def test_esc_abandonne_une_combinaison_en_attente(self):
+        self.C.appui(2, 100)
+        self.C.reinitialiser()                       # ce que fait ESC
+        combo, differes = self.C.service(200)
+        self.assertIsNone(combo)
+        self.assertEqual(differes, [], "un appui retenu est parti apres ESC")
+
+    def test_apres_esc_le_relachement_ne_reveille_rien(self):
+        self.C.appui(2, 100)
+        self.C.reinitialiser()
+        combo, differes = self.C.relachement(2, 200)
+        self.assertIsNone(combo)
+        # Le relachement est transmis, mais la machine a gestes l'ignore
+        # puisque l'appui n'a jamais eu lieu de son point de vue.
+        self.assertEqual(differes, [(self.RELACHEMENT, 2, 200)])
+
+    # --- extension a trois touches -----------------------------------------
+    def test_une_paire_attend_si_un_trio_peut_encore_se_former(self):
+        self.C.configurer([
+            ((2, 3), "PAIRE", [("key", "F5")]),
+            ((2, 3, 4), "TRIO", [("key", "F6")]),
+        ])
+        self.C.appui(2, 100)
+        combo, _ = self.C.appui(3, 115)
+        self.assertIsNone(combo, "la paire a declenche alors qu'un trio "
+                                 "pouvait encore se former")
+        # La troisieme arrive : c'est le trio.
+        combo, _ = self.C.appui(4, 130)
+        self.assertEqual(combo[1], "TRIO")
+
+    def test_le_trio_ne_venant_pas_la_paire_part_a_la_fin_de_la_fenetre(self):
+        self.C.configurer([
+            ((2, 3), "PAIRE", [("key", "F5")]),
+            ((2, 3, 4), "TRIO", [("key", "F6")]),
+        ])
+        self.C.appui(2, 100)
+        self.C.appui(3, 115)
+        combo, differes = self.C.service(160)
+        self.assertEqual(combo[1], "PAIRE")
+        self.assertEqual(differes, [])
+
+    def test_une_paire_sans_trio_declenche_sans_attendre(self):
+        # Aucune combinaison plus grande ne partage ces touches : inutile
+        # d'attendre la fin de la fenetre.
+        self.C.appui(2, 100)
+        combo, _ = self.C.appui(3, 101)
+        self.assertIsNotNone(combo)
+
+    def test_une_combinaison_d_une_seule_touche_est_ignoree(self):
+        self.C.configurer([((2,), "ABSURDE", [("key", "F5")])])
+        self.assertFalse(self.C.membres[2],
+                         "une touche seule ne doit pas devenir une "
+                         "combinaison : elle deviendrait inutilisable")
+
+    def test_nom_pour_l_ecran(self):
+        self.assertEqual(self.nom_touches((2, 3)), "B3+B4")
+        self.assertEqual(self.nom_touches((0, 2, 5)), "B1+B3+B6")
+
+    # --- l'integration avec la machine a gestes ---------------------------
+    def test_l_appui_long_d_une_touche_membre_part_a_l_heure(self):
+        """LE test qui compte : une touche membre d'une combinaison ne
+        doit pas voir son appui long decale par la fenetre."""
+        from gestures import Gestes, LONG
+        gestes = Gestes(6, long_ms=400, double_ms=200)
+        gestes.configurer([
+            ("", {}), ("", {}),
+            ("ZOOM", {"court": [("key", "F3")], "long": [("key", "F5")]}),
+            ("", {}), ("", {}), ("", {}),
+        ])
+
+        def transmettre(differes):
+            sortis = []
+            for front, index, instant in differes:
+                geste = (gestes.appui(index, instant) if front == self.APPUI
+                         else gestes.relachement(index, instant))
+                if geste:
+                    sortis.append((index, geste))
+            return sortis
+
+        # Appui a t=100, garde enfonce. La fenetre se ferme a 150.
+        transmettre(self.C.appui(2, 100)[1])
+        transmettre(self.C.service(120)[1])
+        transmettre(self.C.service(150)[1])          # l'appui est transmis
+
+        # A t=499, l'appui long ne doit pas encore etre parti...
+        self.assertEqual(gestes.service(499), [])
+        # ...et a t=500, soit 400 ms apres le VRAI appui, il part.
+        self.assertEqual(gestes.service(500), [(2, LONG)])
+
+
+class CombinaisonsDansLaBoucleReelle(unittest.TestCase):
+    """Le collecteur branche sur main.py, du GPIO jusqu'aux octets USB.
+
+    Les tests precedents verifient le collecteur seul. Ceux-ci font
+    tourner la VRAIE boucle de main.py, avec de vrais rebonds de contact
+    et de vrais paquets clavier : c'est le seul endroit ou un cablage
+    oublie se voit.
+    """
+
+    def setUp(self):
+        clock[0] = 0
+        Pin.levels = {}
+        try:
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    def _boucle(self, chronologie, fin=3200):
+        """Fait tourner main.run() en pilotant les GPIO a chaque ms."""
+        import main, runtime
+        transport = Transport()
+
+        def sleep_simule(ms):
+            clock[0] += ms
+            chronologie(clock[0])
+            if clock[0] >= fin:
+                raise KeyboardInterrupt()
+
+        with patch.object(runtime, 'interface', transport), \
+             patch.object(runtime, 'safe_mode', False), \
+             patch.object(runtime, 'config_mode', False), \
+             patch.object(main, 'sleep_ms', sleep_simule):
+            with self.assertRaises(KeyboardInterrupt):
+                main.run()
+        return [rapport for rapport in transport.sent if rapport]
+
+    @staticmethod
+    def _attendu(actions):
+        return compile_actions(actions, C.KEYBOARD_LAYOUT)
+
+    def test_deux_touches_ensemble_tapent_la_commande_de_la_combinaison(self):
+        """B3+B4 tape MPVIEWPREV, et surtout PAS F3 ni _PLINE."""
+        def chrono(t):
+            # Doigts poses a 12 ms d'intervalle : personne n'appuie deux
+            # touches a la milliseconde pres.
+            Pin.levels[6] = 0 if 2600 <= t < 2700 else 1     # B3
+            Pin.levels[7] = 0 if 2612 <= t < 2700 else 1     # B4
+
+        rapports = self._boucle(chrono)
+        attendu = self._attendu([("text_enter", "MPVIEWPREV")])
+        self.assertEqual(rapports, attendu)
+        # Les macros des deux touches seules ne sont jamais parties.
+        self.assertNotIn(self._attendu([("key", "F3")])[0], rapports)
+        self.assertNotIn(self._attendu([("text_enter", "_PLINE")])[0], rapports)
+
+    def test_une_touche_membre_seule_garde_sa_macro(self):
+        """Le collecteur rend l'appui intact : B3 seule tape toujours F3."""
+        def chrono(t):
+            Pin.levels[6] = 0 if 2600 <= t < 2700 else 1
+
+        rapports = self._boucle(chrono)
+        self.assertEqual(rapports, self._attendu([("key", "F3")]))
+
+    def test_un_appui_long_sur_une_touche_membre_part_a_l_heure(self):
+        """Le vrai enjeu de l'horodatage d'origine, mesure de bout en bout.
+
+        Sans lui, l'appui long partirait avec le retard de la fenetre.
+        """
+        import main, runtime
+        transport = Transport()
+        instants = []
+
+        def sleep_simule(ms):
+            clock[0] += ms
+            Pin.levels[6] = 0 if 2600 <= clock[0] < 3400 else 1
+            # Le PREMIER rapport non vide : le tout premier tick() du
+            # clavier envoie un rapport vide, il ne compte pas.
+            if not instants and [r for r in transport.sent if r]:
+                instants.append(clock[0])
+            if clock[0] >= 3600:
+                raise KeyboardInterrupt()
+
+        with patch.object(runtime, 'interface', transport), \
+             patch.object(runtime, 'safe_mode', False), \
+             patch.object(runtime, 'config_mode', False), \
+             patch.object(main, 'sleep_ms', sleep_simule):
+            with self.assertRaises(KeyboardInterrupt):
+                main.run()
+
+        rapports = [rapport for rapport in transport.sent if rapport]
+        self.assertEqual(rapports, self._attendu([("text_enter", "_ZOOM E")]))
+        # L'appui est DETECTE apres le filtre anti-rebond, et la macro
+        # longue part GESTE_LONG_MS plus tard - PAS une fenetre de
+        # combinaison de plus. C'est tout l'interet de l'horodatage
+        # d'origine, et cet ecart de 50 ms se sentirait sous le doigt.
+        theorique = 2600 + C.DEBOUNCE_MS + C.GESTE_LONG_MS
+        self.assertGreaterEqual(instants[0], theorique)
+        self.assertLess(instants[0] - theorique, 4 * C.LOOP_MS,
+                        "parti a %d au lieu de %d" % (instants[0], theorique))
+
+    def test_esc_annule_une_combinaison_en_cours_de_formation(self):
+        """Exigence explicite : ESC ne declenche jamais rien d'autre."""
+        def chrono(t):
+            Pin.levels[6] = 0 if 2600 <= t < 2900 else 1     # B3 maintenue
+            # ESC pendant la fenetre, donc avant que le sort de B3 soit fixe.
+            Pin.levels[14] = 0 if 2630 <= t < 2690 else 1
+
+        rapports = self._boucle(chrono)
+        # ESC est parti, et rien d'autre : ni F3, ni la vue globale de
+        # l'appui long, alors que B3 est restee enfoncee 300 ms.
+        self.assertEqual(rapports, self._attendu([("key", "ESC")]))
+
+
+class CombinaisonsDansLaConfiguration(unittest.TestCase):
+    """Les combinaisons voyagent dans profils.json comme le reste.
+
+    Meme exigence que pour les macros : rien n'est enregistre sans avoir
+    ete verifie, et un fichier ecrit AVANT les combinaisons doit continuer
+    de se relire sans rien perdre.
+    """
+
+    def setUp(self):
+        try:
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    # --- les valeurs d'usine -------------------------------------------
+    def test_les_combinaisons_d_usine_sont_chargees(self):
+        import store, profiles as P
+        combos = store.defauts()[4]
+        self.assertEqual(combos["CIVIL3D"], list(P.COMBOS["CIVIL3D"]))
+        # Un profil sans combinaison n'en invente pas.
+        self.assertEqual(combos.get("WORD", []), [])
+
+    def test_les_valeurs_d_usine_sont_saines(self):
+        import store, profiles as P
+        profils = store.defauts()[0]
+        self.assertEqual(
+            store.verifier_combos(P.COMBOS, profils, 6), [])
+
+    def test_aucune_combinaison_ne_touche_la_modificatrice(self):
+        """B2 tient Maj ou Ctrl enfoncee : la prendre dans une combinaison
+        la rendrait inutilisable pour ce a quoi elle sert."""
+        import profiles as P
+        for nom, liste in P.COMBOS.items():
+            for indices, label, _actions in liste:
+                self.assertNotIn(0, indices, "%s %s" % (nom, label))
+                self.assertNotIn(1, indices, "%s %s" % (nom, label))
+
+    # --- aller-retour vers le fichier ----------------------------------
+    def test_aller_retour_par_le_fichier(self):
+        import store
+        profils, ordre, titres, couleurs, combos, apps, repli = store.defauts()
+        ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
+                                       combos, apps, repli, 6)
+        self.assertTrue(ok, raison)
+        relus = store.charger(6)[4]
+        self.assertEqual(relus["CIVIL3D"], combos["CIVIL3D"])
+        self.assertEqual(store.charger(6)[7], "fichier")
+
+    def test_les_numeros_du_fichier_sont_ceux_du_pad(self):
+        """Dans le JSON, [3, 4] c'est B3 et B4 - pas les indices internes."""
+        import store
+        data = store.vers_json(6)
+        combos = data["profils"]["CIVIL3D"]["combos"]
+        premiere = combos[0]
+        self.assertEqual(premiere["touches"], [3, 4])
+        # ... et en interne, ces memes touches portent 2 et 3.
+        interne = store.combos_depuis_json(combos)
+        self.assertEqual(interne[0][0], (2, 3))
+
+    def test_le_libelle_est_tronque_pas_refuse(self):
+        import store
+        interne = store.combos_depuis_json(
+            [{"touches": [3, 4], "label": "X" * 40, "actions": []}])
+        self.assertEqual(len(interne[0][1]), 16)
+
+    # --- migration d'un fichier ecrit avant les combinaisons -------------
+    def _fichier_sans_combos(self):
+        import store, json as J
+        data = store.vers_json(6)
+        for bloc in data["profils"].values():
+            bloc.pop("combos")
+        data.pop("origine", None)
+        with open(C.PROFILES_FILE, "w") as fichier:
+            J.dump(data, fichier)
+
+    def test_un_fichier_sans_combos_recupere_celles_d_usine(self):
+        import store, profiles as P
+        self._fichier_sans_combos()
+        profils, ordre, titres, couleurs, combos, apps, repli, origine = \
+            store.charger(6)
+        self.assertEqual(origine, "fichier")     # le reste est bien relu
+        self.assertEqual(combos["CIVIL3D"], list(P.COMBOS["CIVIL3D"]))
+
+    def test_une_liste_vide_est_respectee(self):
+        """"Je n'en veux aucune" doit survivre au redemarrage."""
+        import store, json as J
+        data = store.vers_json(6)
+        data["profils"]["CIVIL3D"]["combos"] = []
+        data.pop("origine", None)
+        with open(C.PROFILES_FILE, "w") as fichier:
+            J.dump(data, fichier)
+        self.assertEqual(store.charger(6)[4]["CIVIL3D"], [])
+
+    # --- ce qui doit etre refuse ----------------------------------------
+    def _refuse(self, combos, morceau):
+        import store
+        profils = store.defauts()[0]
+        problemes = store.verifier_combos(combos, profils, 6)
+        self.assertTrue(problemes, "aucun probleme signale")
+        self.assertIn(morceau, " ; ".join(problemes))
+
+    def test_une_seule_touche_n_est_pas_une_combinaison(self):
+        self._refuse({"CIVIL3D": [((2,), "SEULE", [("key", "F3")])]},
+                     "au moins deux touches")
+
+    def test_une_touche_qui_n_existe_pas(self):
+        self._refuse({"CIVIL3D": [((2, 9), "TROP", [("key", "F3")])]},
+                     "B10 n'existe pas")
+
+    def test_la_meme_touche_deux_fois(self):
+        self._refuse({"CIVIL3D": [((2, 2), "DOUBLE", [("key", "F3")])]},
+                     "deux fois")
+
+    def test_deux_combinaisons_sur_les_memes_touches(self):
+        self._refuse({"CIVIL3D": [((2, 3), "UNE", [("key", "F3")]),
+                                  ((3, 2), "AUTRE", [("key", "F4")])]},
+                     "deja prise")
+
+    def test_un_maintien_est_impossible(self):
+        # Un maintien se relache quand SA touche se relache. Une
+        # combinaison n'en a pas une seule a surveiller : Ctrl resterait
+        # enfonce cote Windows, et plus rien ne repondrait normalement.
+        self._refuse({"CIVIL3D": [((2, 3), "CTRL",
+                                   [("maintien", ("CTRL",))])]},
+                     "resterait enfoncee")
+
+    def test_une_macro_intapable_est_refusee(self):
+        self._refuse({"CIVIL3D": [((2, 3), "EURO", [("text", "100 EUR \u20ac")])]},
+                     "B3+B4")
+
+    def test_un_profil_inconnu(self):
+        self._refuse({"INEXISTANT": [((2, 3), "X", [("key", "F3")])]},
+                     "n'existe pas")
+
+    def test_verifier_refuse_l_enregistrement(self):
+        """Le controle est bien branche sur le chemin d'enregistrement."""
+        import store
+        profils, ordre, titres, couleurs, combos, apps, repli = store.defauts()
+        combos["CIVIL3D"] = [((2,), "SEULE", [("key", "F3")])]
+        ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
+                                       combos, apps, repli, 6)
+        self.assertFalse(ok)
+        self.assertIn("au moins deux touches", raison)
+        # Et rien n'a ete ecrit : la configuration precedente est intacte.
+        self.assertFalse(os.path.exists(C.PROFILES_FILE))
+
+    def test_un_fichier_combos_illisible_retombe_sur_l_usine(self):
+        import store, json as J, profiles as P
+        data = store.vers_json(6)
+        data["profils"]["CIVIL3D"]["combos"] = "n'importe quoi"
+        data.pop("origine", None)
+        with open(C.PROFILES_FILE, "w") as fichier:
+            J.dump(data, fichier)
+        profils, ordre, titres, couleurs, combos, apps, repli, origine = \
+            store.charger(6)
+        self.assertEqual(origine, "usine")
+        self.assertEqual(combos["CIVIL3D"], list(P.COMBOS["CIVIL3D"]))
 
 
 class SuitesDEtapesEtPauses(unittest.TestCase):
@@ -1110,7 +1614,8 @@ class SuitesDEtapesEtPauses(unittest.TestCase):
     def test_l_ancienne_forme_a_une_seule_action_se_relit(self):
         # Un profils.json ecrit avant les suites range UN objet par geste.
         import store
-        profils, ordre, titres, couleurs, apps, repli = store.depuis_json({
+        (profils, ordre, titres, couleurs, combos,
+         apps, repli) = store.depuis_json({
             "version": 2, "ordre": ["X"],
             "profils": {"X": {"titre": "X", "touches": [
                 {"label": "A", "court": {"type": "combo", "valeur": "CTRL+S"}},
@@ -1257,9 +1762,11 @@ class ToucheModificatrice(unittest.TestCase):
         import profiles as P
         import store
         label, gestes = P.PROFILES["CIVIL3D"][1]
-        self.assertEqual(label, "CTRL")
-        self.assertEqual(gestes["court"], [("maintien", ("CTRL",))])
-        self.assertEqual(gestes["double"], [("maintien", ("SHIFT",))])
+        self.assertEqual(label, "MAJ")
+        # Maj d'abord : c'est le maintien INSTANTANE, et celui qu'on
+        # utilise le plus, main droite a la souris.
+        self.assertEqual(gestes["court"], [("maintien", ("SHIFT",))])
+        self.assertEqual(gestes["double"], [("maintien", ("CTRL",))])
         # Et elles restent verifiables comme n'importe quelle macro.
         self.assertEqual(store.verifier({"CIVIL3D": P.PROFILES["CIVIL3D"]},
                                         ["CIVIL3D"], 6), [])
@@ -1299,7 +1806,7 @@ class CouleursDesProfils(unittest.TestCase):
 
     def test_les_couleurs_usine_viennent_de_config(self):
         import store
-        _, _, _, couleurs, _, _ = store.defauts()
+        _, _, _, couleurs, _, _, _ = store.defauts()
         self.assertEqual(couleurs["CIVIL3D"], tuple(C.RGB_COULEURS["CIVIL3D"]))
         self.assertEqual(couleurs["BLENDER"], tuple(C.RGB_COULEURS["BLENDER"]))
 
@@ -1316,7 +1823,7 @@ class CouleursDesProfils(unittest.TestCase):
         ok, raison = store.enregistrer_json(data, 6)
         self.assertTrue(ok, raison)
 
-        _, _, _, couleurs, _, _, origine = store.charger(6)
+        _, _, _, couleurs, _, _, _, origine = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(couleurs["WORD"], (0x12, 0x34, 0x56))
         # Les autres n'ont pas bouge.
@@ -1333,7 +1840,7 @@ class CouleursDesProfils(unittest.TestCase):
             del bloc["couleur"]
         ok, raison = store.enregistrer_json(data, 6)
         self.assertTrue(ok, raison)
-        _, _, _, couleurs, _, _, _ = store.charger(6)
+        _, _, _, couleurs, _, _, _, _ = store.charger(6)
         self.assertEqual(couleurs["CIVIL3D"], tuple(C.RGB_COULEURS["CIVIL3D"]))
 
 
@@ -2037,8 +2544,13 @@ class PageDeConfigurationIntacte(unittest.TestCase):
 
         profils = len(configuration["ordre"])
         self.assertEqual(vu["cartes"], profils)
-        # Une liste deroulante par geste : 6 touches x 3 gestes par profil.
-        self.assertEqual(vu["listes"], profils * 6 * 3)
+        # Une liste deroulante par etape : 6 touches x 3 gestes par
+        # profil, plus une par etape de combinaison.
+        etapes_combos = sum(
+            max(1, len(combo["actions"]))
+            for bloc in configuration["profils"].values()
+            for combo in bloc.get("combos", []))
+        self.assertEqual(vu["listes"], profils * 6 * 3 + etapes_combos)
         self.assertIn("source", vu["src"])
         self.assertIn("appuis", vu["cnt"])
         # Les logiciels : une ligne d'en-tete, une par logiciel, une pour
@@ -2078,6 +2590,41 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         self.assertEqual(vu["app2_abrege"], "AbRg")
         self.assertEqual(vu["app1_abrege"], "C3D")
         self.assertIn("Enregistre", vu["message"])
+
+    def test_les_combinaisons_s_editent_et_repartent_entieres(self):
+        """Elles s'affichent, se modifient, et survivent a l'enregistrement.
+
+        Le risque propre aux combinaisons : une page qui les ignore les
+        RENVERRAIT VIDES a l'enregistrement, et effacerait en silence tout
+        ce que la carte avait. On verifie donc ce qui part reellement sur
+        le fil, pas ce qui est dessine.
+        """
+        import store, profiles as P
+        configuration = store.vers_json(6)
+        vu = self._construire(configuration)
+
+        nom = configuration["ordre"][vu["carte_combos"]]
+        attendues = configuration["profils"][nom]["combos"]
+        self.assertEqual(vu["combos_affiches"], len(attendues))
+        # Les numeros affiches sont ceux du pad : "3+4", pas "2+3".
+        self.assertEqual(vu["combo_touches_lues"],
+                         "+".join(str(n) for n in attendues[0]["touches"]))
+
+        # Tout est reparti, et en entier.
+        self.assertEqual(vu["combos_envoyes"], len(attendues))
+        # La saisie mal ecrite "5 et 6" a ete comprise...
+        self.assertEqual(vu["combo1"]["touches"], [5, 6])
+        self.assertEqual(vu["combo1"]["label"], "ESSAI")
+        # ...et la derniere combinaison n'a surtout pas bouge : c'est le
+        # piege du « var » de boucle, deja rencontre sur les touches.
+        self.assertEqual(vu["combo_dernier_libelle"],
+                         vu["combo_dernier_libelle_avant"])
+        self.assertEqual(vu["combo_dernier_libelle"], attendues[-1]["label"])
+
+        # Un profil qui n'a aucune combinaison n'en renvoie pas une seule,
+        # mais renvoie bien une liste vide plutot que rien : sinon la
+        # carte remettrait celles d'usine a chaque enregistrement.
+        self.assertEqual(vu["combos_profil_sans"], 0)
 
     def test_la_couleur_des_led_se_choisit_par_profil(self):
         """Un selecteur de couleur par profil, et il vise le bon profil."""
@@ -2192,7 +2739,8 @@ class AncienFichierDeConfiguration(unittest.TestCase):
                 {"label": "", "type": "none", "valeur": ""},
             ]}},
         }
-        profils, ordre, titres, couleurs, apps, repli = store.depuis_json(ancien, 6)
+        (profils, ordre, titres, couleurs, combos,
+         apps, repli) = store.depuis_json(ancien, 6)
         touches = profils["CIVIL3D"]
 
         self.assertEqual(len(touches), 6)          # complete a six touches
@@ -2221,7 +2769,7 @@ class AncienFichierDeConfiguration(unittest.TestCase):
                  "court": {"type": "combo", "valeur": "CTRL+B"}},
             ]}},
         }
-        profils, _, _, _, _, _ = store.depuis_json(recent, 6)
+        profils, _, _, _, _, _, _ = store.depuis_json(recent, 6)
         self.assertEqual(profils["WORD"][0][1]["court"],
                          [("combo", ("CTRL", "B"))])
 

@@ -37,6 +37,11 @@ TROIS GESTES PAR TOUCHE
 Appui court, appui long, double appui : voir gestures.py. Une touche sans
 macro double part instantanement au relachement ; on ne paie le delai
 d'attente que la ou on s'en sert.
+
+Et deux touches ensemble : voir combos.py. Les fronts des touches membres
+d'une combinaison passent d'abord par le collecteur, qui les rend a la
+machine a gestes AVEC LEUR HORODATAGE D'ORIGINE quand ce n'etait pas une
+combinaison. Les autres touches ne le traversent meme pas.
 """
 
 from time import ticks_ms, ticks_diff, sleep_ms
@@ -46,6 +51,7 @@ import store
 from inputs import Inputs
 from profiles import ProfileManager, TESTS, COURT
 from gestures import Gestes, FIN
+from combos import Combos, APPUI, nom_touches
 from stats import Stats
 from display import Display
 from hid_keyboard import HIDKeyboard
@@ -127,7 +133,7 @@ def run():
         return
 
     # --- Chargement de la configuration --------------------------------
-    profils, ordre, titres, couleurs, apps, repli, origine = \
+    profils, ordre, titres, couleurs, table_combos, apps, repli, origine = \
         store.charger(NB_TOUCHES)
     print("Macros chargees depuis :", origine)
 
@@ -139,6 +145,11 @@ def run():
         for label, gestes_touche in profils[nom]:
             for actions in (gestes_touche or {}).values():
                 compile_actions(actions, C.KEYBOARD_LAYOUT)
+    # Les valeurs d'usine ne passent jamais par store.charger() : c'est ici
+    # qu'une combinaison mal ecrite dans profiles.py doit se voir.
+    problemes = store.verifier_combos(table_combos, profils, NB_TOUCHES)
+    if problemes:
+        raise ValueError("combinaisons : " + " ; ".join(problemes))
     if C.HID_TEST is not None and C.HID_TEST not in TESTS:
         raise ValueError("HID_TEST invalide")
 
@@ -147,6 +158,8 @@ def run():
     stats = Stats(NB_TOUCHES)
     gestes = Gestes(NB_TOUCHES, C.GESTE_LONG_MS, C.GESTE_DOUBLE_MS)
     gestes.configurer(manager.macros)
+    combos = Combos(NB_TOUCHES, C.GESTE_COMBO_MS)
+    combos.configurer(table_combos.get(manager.name))
 
     led = None
     try:
@@ -169,6 +182,9 @@ def run():
                         manager.macros, ticks_ms(),
                         manager.index, len(ordre), splash)
         gestes.configurer(manager.macros)
+        # configurer() reinitialise le collecteur : changer de profil
+        # abandonne donc toute combinaison en cours de formation.
+        combos.configurer(table_combos.get(manager.name))
         # La couleur suit le logiciel : c'est le profil actif qui la donne,
         # et le PC change de profil tout seul selon la fenetre active.
         rgb.profil(couleurs.get(manager.name))
@@ -179,9 +195,9 @@ def run():
         Appele quand une page web vient d'enregistrer : les changements
         prennent effet immediatement, sans RESET.
         """
-        nonlocal manager, titres, ordre, couleurs
+        nonlocal manager, titres, ordre, couleurs, table_combos
         try:
-            (neufs, ordre_neuf, titres_neufs, couleurs_neuves,
+            (neufs, ordre_neuf, titres_neufs, couleurs_neuves, combos_neuves,
              _apps, _repli, origine_neuve) = store.charger(NB_TOUCHES)
             nouveau = ProfileManager(ordre_neuf, manager.name, neufs, NB_TOUCHES)
         except Exception as exc:
@@ -189,6 +205,7 @@ def run():
             return
         manager, titres, ordre = nouveau, titres_neufs, ordre_neuf
         couleurs = couleurs_neuves
+        table_combos = combos_neuves
         afficher(False)
         print("Macros rechargees depuis :", origine_neuve)
 
@@ -224,6 +241,48 @@ def run():
             keyboard.maintenir(actions)
         else:
             keyboard.submit(actions)
+
+    def declencher_combo(combo, now):
+        """Execute la macro d'une combinaison de touches."""
+        indices, label, actions = combo
+        nom = nom_touches(indices)
+        print("%s %s %s" % (manager.name, nom, label or "-"))
+        # Une combinaison ne correspond a aucune ligne du tableau : sans cet
+        # affichage, rien ne dirait laquelle est partie.
+        display.flash(nom, label, now)
+        # Les LED des deux touches ont deja reagi a l'appui physique, dans
+        # la boucle : rien a rallumer ici.
+        if C.HID_TEST is not None:
+            # En mode test, seul l'appui court sur B1 agit.
+            print("   (HID_TEST : les combinaisons sont inactives)")
+            return
+        if not actions:
+            print("   (aucune macro sur cette combinaison)")
+            return
+        # On compte CHAQUE touche membre : le compteur mesure l'usage des
+        # touches - pour l'implantation du boitier, et pour reperer une
+        # touche qui ne sert a rien - pas celui des macros.
+        for index in indices:
+            stats.compter(manager.name, index)
+        if not keyboard:
+            print("   (HID desactive : rien n'est tape)")
+            return
+        keyboard.submit(actions)
+
+    def router(differes):
+        """Transmet a la machine a gestes les fronts rendus par le collecteur.
+
+        L'instant transmis est celui de l'appui REEL, pas celui de la fin
+        de la fenetre : un appui long sur une touche membre part donc a
+        GESTE_LONG_MS pile, sans le retard de la fenetre.
+        """
+        for front, index, instant in differes:
+            if front == APPUI:
+                geste = gestes.appui(index, instant)
+            else:
+                geste = gestes.relachement(index, instant)
+            if geste:
+                declencher(index, geste)
 
     afficher(False)
     print("Profil :", manager.name,
@@ -276,6 +335,9 @@ def run():
                     # --- 1. ESC : priorite absolue --------------------
                     if nom == "ESC":
                         if front == 1:
+                            # ESC annule aussi une combinaison en train de
+                            # se former, sans rien declencher.
+                            combos.reinitialiser()
                             if keyboard:
                                 keyboard.escape(now)
                                 # tick() tout de suite : le paquet part dans
@@ -322,11 +384,18 @@ def run():
                             # perceptible sous le doigt.
                             display.surligner(index, now)
                             rgb.touche(index, now)
-                            geste = gestes.appui(index, now)
+                            combo, differes = combos.appui(index, now)
                         else:
-                            geste = gestes.relachement(index, now)
-                        if geste:
-                            declencher(index, geste)
+                            combo, differes = combos.relachement(index, now)
+                        if combo:
+                            declencher_combo(combo, now)
+                        router(differes)
+
+                # Fin de la fenetre des combinaisons.
+                combo, differes = combos.service(now)
+                if combo:
+                    declencher_combo(combo, now)
+                router(differes)
 
                 # Appuis longs et doubles appuis arrives a echeance.
                 for index, geste in gestes.service(now):

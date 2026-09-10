@@ -392,7 +392,7 @@ Trois choix expliquent ce que tu ressens sous le doigt :
 
 * **la LED réagit au front d'appui**, pas au départ de la macro. C'est
   important : une touche qui a un double appui attend `GESTE_DOUBLE_MS`
-  (260 ms) avant de savoir quelle macro envoyer. Allumer la LED à ce
+  (200 ms) avant de savoir quelle macro envoyer. Allumer la LED à ce
   moment-là donnait un quart de seconde de retard, parfaitement
   perceptible ;
 * **l'impulsion s'ajoute** à ce qui reste de la précédente. Deux appuis

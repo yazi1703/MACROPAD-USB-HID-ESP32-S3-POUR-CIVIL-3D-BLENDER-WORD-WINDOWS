@@ -360,11 +360,30 @@ dessin pour lui donner le focus.
 
 | Touche | Attendu |
 |---|---|
-| B1 | `_MATCHPROP` puis Entrée : la copie de propriétés démarre |
-| B2 | `_HATCH` : la boîte de hachures s'ouvre |
-| B3 | annulation de la dernière action |
-| B4 | `_ISOLATEOBJECTS` : demande de sélection |
+| B1 | Ctrl+C : copie la sélection |
+| B2 maintenue | Maj enfoncée : Maj+clic retire de la sélection |
+| B3 | F3 : les accrochages aux objets s'allument ou s'éteignent |
+| B4 | `_PLINE` : la polyligne démarre |
+| B5 | `_ISOLATEOBJECTS` : demande de sélection |
+| B6 | `_SELECTSIMILAR` : demande de sélection |
 | ESC | annule la commande en cours, dans tous les profils |
+
+Et les **combinaisons**, deux touches appuyées en même temps — d'abord
+`B4+B5`, qui n'a pas besoin du LISP :
+
+| Touches | Attendu |
+|---|---|
+| B4 + B5 | `_PEDIT` démarre, et **ni `_PLINE` ni `_ISOLATEOBJECTS`** |
+| B3 + B6 | `_HATCH` : la boîte de hachures s'ouvre |
+| B3 + B4 | `MPVIEWPREV` — **seulement si le LISP est chargé**, voir [`civil3d/README.md`](../civil3d/README.md) |
+
+L'écran doit annoncer chaque combinaison en gros pendant une seconde
+(`B4+B5` au-dessus de `PEDIT`), puis revenir au tableau tout seul.
+
+> **Si les combinaisons partent mal** — tu obtiens les deux macros
+> séparées au lieu de la combinaison — c'est que tes deux doigts arrivent
+> à plus de 50 ms d'écart. Monte `GESTE_COMBO_MS` à 70 dans `config.py`.
+> Le détail est dans [`docs/11`](11-combinaisons.md).
 
 Vérifie aussi :
 

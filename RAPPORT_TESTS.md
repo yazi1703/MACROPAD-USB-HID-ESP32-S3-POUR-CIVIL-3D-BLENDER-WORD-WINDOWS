@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 178 tests PC réussis ; 22 fichiers Python compilés avec succès.**
+**Résultat : 216 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 178 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  153 pour le firmware, 25 pour le compagnon Windows.
+- 216 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  191 pour le firmware, 25 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -41,6 +41,40 @@ Le diagnostic de cablage `diag.rgb()`, qu'on lance dans le REPL avant meme d'act
 La reaction a l'appui a ses propres tests, nes d'une latence constatee sur le materiel : la LED s'intensifie des le premier tour de boucle et seulement la sienne, deux appuis coup sur coup montent plus haut qu'un seul, la retombee passe par plus de cinq paliers sans jamais remonter et finit exactement sur la couleur du profil, l'empilement est plafonne, et - le test qui compte - vingt appuis empiles sur du blanc ne franchissent pas le plafond de courant. Un dernier verifie que l'impulsion s'AJOUTE a la respiration : le gain est le meme en haut et en bas du cycle.
 
 Enfin, deux tests font tourner main.run() en entier avec RGB_ENABLED a True et un faux ruban horodate. Le second reproduit la latence d'origine : il appuie sur la touche 1, celle qui a un double appui et dont la macro ne part donc qu'apres GESTE_DOUBLE_MS, et exige que la LED ait deja reagi dans les 60 premieres millisecondes. Il echoue sur la version precedente : rien ne sert de savoir que rgb.py fonctionne seul si l'activer fait tomber la boucle principale. Il verifie que le ruban est rafraichi tout au long de la boucle, qu'il change de couleur au changement de profil, et qu'il est ETEINT a l'arret.
+
+**Les combinaisons de touches** (`CombinaisonsSimultanees`,
+`CombinaisonsDansLaBoucleReelle` et `CombinaisonsDansLaConfiguration`,
+37 tests). Le collecteur d'abord, seul : une touche qui n'entre dans
+aucune combinaison ne traverse meme pas le module ; un appui court sur une
+touche membre part au relachement, sans un seul tour d'attente ; un appui
+maintenu est transmis a la fin de la fenetre AVEC SON HORODATAGE
+D'ORIGINE, ce qui est toute la conception ; la fenetre se ferme, les
+appuis retenus sont rendus intacts, ESC et le changement de profil
+abandonnent sans rien declencher, et rouler les doigts en relachant ne
+fabrique pas une seconde combinaison.
+
+Puis la meme chose dans la VRAIE boucle de `main.py`, avec de vrais
+rebonds de contact et de vrais paquets clavier : B3+B4 tape bien
+`MPVIEWPREV` et surtout pas les macros des deux touches, B3 seule tape
+toujours F3, et l'appui long sur une touche membre part a
+`GESTE_LONG_MS` **pile** - ce dernier test echoue si l'on remplace
+l'horodatage d'origine par l'heure courante, ce qui est exactement le
+defaut qu'il surveille. ESC pendant la formation d'une combinaison
+n'envoie qu'Echap, rien d'autre, alors que la touche reste enfoncee 300 ms.
+
+Cote configuration enfin : les combinaisons voyagent dans `profils.json`
+avec les numeros du pad (`[3, 4]`, c'est B3 et B4) ; un fichier ecrit
+AVANT les combinaisons recupere celles d'usine plutot que de les perdre en
+silence, tandis qu'une liste presente mais vide est respectee ; et six
+formes fautives sont refusees avec un message nomme - une seule touche, une
+touche qui n'existe pas, la meme touche deux fois, deux combinaisons sur le
+meme couple, une macro intapable, et un `maintien`, qui resterait enfonce
+cote Windows faute d'une touche unique a surveiller. La page web est
+exercee hors navigateur : elle affiche les six combinaisons de Civil 3D,
+comprend une saisie mal ecrite (`5 et 6` devient `[5, 6]`), n'ecrit pas
+dans la mauvaise ligne, et **les renvoie entieres a l'enregistrement** -
+une page qui les ignorerait effacerait en silence tout ce que la carte
+avait.
 
 **Ajouts V1.** Les six touches et leurs libellés ; la machine à états des trois gestes (appui court immédiat quand aucun double appui n'est défini, appui court retardé quand il y en a un, double appui, deux appuis trop espacés, appui long déclenché au seuil sans deuxième envoi au relâchement, touches indépendantes) ; l'aller-retour complet de la configuration par page web sans perte ; le refus d'une macro intapable et d'un libellé trop long ; le repli sur les valeurs d'usine pour un fichier corrompu ou incohérent ; **la relecture d'un `profils.json` de version 1**, dont la macro devient l'appui court ; le protocole série ligne par ligne, y compris une ligne coupée en deux envois, la lecture bornée par tour de boucle et une configuration trop volumineuse ; l'absence de séquence à deux actions dans les valeurs d'usine (que la page web tronquerait) ; **l'écran, qui ne doit jamais écrire hors des 128×64 pixels** — quatre profils, splash, surlignage de chaque touche, nom de fichier de 48 caractères en défilement, page WiFi.
 
@@ -321,7 +355,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 178 tests
+Ran 216 tests
 
 OK
 ```

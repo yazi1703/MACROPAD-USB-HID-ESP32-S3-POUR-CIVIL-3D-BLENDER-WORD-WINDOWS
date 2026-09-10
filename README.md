@@ -23,6 +23,7 @@ ouvert, compte les appuis, et se configure entièrement depuis une page web
 | vérifier le brochage broche par broche | [`docs/02-cablage.md`](docs/02-cablage.md) |
 | cocher que tout est bon | [`docs/04-checklist.md`](docs/04-checklist.md) |
 | **comprendre l'écran et les trois gestes** | [`docs/09-ecran-et-gestes.md`](docs/09-ecran-et-gestes.md) |
+| **deux touches ensemble, et les commandes Civil 3D** | [`docs/11-combinaisons.md`](docs/11-combinaisons.md) + [`civil3d/README.md`](civil3d/README.md) |
 | **câbler les LED RGB sans faire redémarrer la carte** | [`docs/10-led-rgb.md`](docs/10-led-rgb.md) + [`SCHEMA_LED_RGB.svg`](SCHEMA_LED_RGB.svg) |
 | savoir ce qui a été corrigé et pourquoi | [`docs/06-corrections.md`](docs/06-corrections.md) |
 | **que le macropad suive le logiciel actif** | [`docs/08-detection-auto.md`](docs/08-detection-auto.md) — le script PC |
@@ -80,11 +81,11 @@ BLENDER  →  CIVIL3D  →  WORD  →  WINDOWS  →  BLENDER
 |  | BLENDER | CIVIL 3D | WORD | WINDOWS |
 |---|---|---|---|---|
 | **B1** | **Ctrl+C** | **Ctrl+C** | **Ctrl+C** | **Ctrl+C** |
-| **B2** | `R` | **Ctrl / Maj maintenus** | Ctrl+B | Alt+Tab |
-| **B3** | `S` | `_MATCHPROP` + Entrée | Ctrl+I | Win+E |
-| **B4** | `Tab` | `_ISOLATEOBJECTS` + Entrée | Ctrl+U | Ctrl+Maj+Échap |
-| **B5** | `E` | `_ZOOM E` + Entrée | Ctrl+S | Win+V |
-| **B6** | `G` | Ctrl+S | Ctrl+Maj+C | Win+Maj+S |
+| **B2** | `R` | **Maj / Ctrl maintenus** | Ctrl+B | Alt+Tab |
+| **B3** | `S` | **F3** accrochages | Ctrl+I | Win+E |
+| **B4** | `Tab` | `_PLINE` + Entrée | Ctrl+U | Ctrl+Maj+Échap |
+| **B5** | `E` | `_ISOLATEOBJECTS` + Entrée | Ctrl+S | Win+V |
+| **B6** | `G` | `_SELECTSIMILAR` + Entrée | Ctrl+Maj+C | Win+Maj+S |
 
 **La touche 1 est la même dans tous les profils** — copier / coller /
 annuler, comme ESC qui est déjà global :
@@ -100,11 +101,11 @@ Les autres appuis longs et doubles des valeurs d'usine :
 | | Appui long | Double appui |
 |---|---|---|
 | **BLENDER** B6 `G` | Ctrl+Maj+Z rétablir | — |
-| **CIVIL 3D** B2 CTRL | — | **Maj maintenu** (voir ci-dessous) |
-| **CIVIL 3D** B3 MATCH | Ctrl+Y rétablir | — |
-| **CIVIL 3D** B4 ISOLE | `_UNISOLATEOBJECTS` | — |
-| **CIVIL 3D** B5 ZOOM | — | `_REGEN` |
-| **CIVIL 3D** B6 ENREG | `_HATCH` hachures | — |
+| **CIVIL 3D** B2 MAJ | — | **Ctrl maintenu** (voir ci-dessous) |
+| **CIVIL 3D** B3 F3 | `_ZOOM E` vue globale | — |
+| **CIVIL 3D** B4 PLINE | `_SPLINE` | — |
+| **CIVIL 3D** B5 ISOLE | `_UNISOLATEOBJECTS` | — |
+| **CIVIL 3D** B6 SELSIM | `_MATCHPROP` | — |
 | **WORD** B5 ENREG | F12 enregistrer sous | — |
 | **WORD** B6 FORMAT | Ctrl+Y refaire | Ctrl+Maj+V appliquer la mise en forme |
 | **WINDOWS** B3 EXPLOR | Win+D bureau | — |
@@ -112,7 +113,7 @@ Les autres appuis longs et doubles des valeurs d'usine :
 | **WINDOWS** B5 PRESSE | Win+H dictée vocale | — |
 
 > **À retenir pour tes propres macros :** seule une touche qui a un
-> **double appui** attend (260 ms) avant de conclure « c'était un appui
+> **double appui** attend (200 ms) avant de conclure « c'était un appui
 > court ». L'appui **long**, lui, ne coûte rien. Sur tes touches les plus
 > utilisées, laisse la colonne « double » vide.
 
@@ -122,11 +123,31 @@ ton doigt reste dessus, pour que tu cliques à la souris pendant ce temps.
 
 | Ce que tu fais | Ce que le PC reçoit |
 |---|---|
-| tu appuies et tu **maintiens** | **Ctrl** enfoncé, relâché quand tu lâches |
-| tu appuies **brièvement**, puis tu **maintiens** | **Maj** enfoncé, relâché quand tu lâches |
+| tu appuies et tu **maintiens** | **Maj** enfoncée, relâchée quand tu lâches |
+| tu appuies **brièvement**, puis tu **maintiens** | **Ctrl** enfoncé, relâché quand tu lâches |
 
-Le modificateur descend **dès l'appui**, sans aucun délai. Détail et
-limites dans [`docs/09`](docs/09-ecran-et-gestes.md).
+**Maj est en premier** parce que c'est le maintien **instantané**, et
+c'est celui qu'on utilise le plus, main droite à la souris (Maj+clic pour
+désélectionner). Le modificateur descend **dès l'appui**, sans aucun
+délai. Détail et limites dans [`docs/09`](docs/09-ecran-et-gestes.md).
+
+**Et deux touches appuyées ensemble font une commande de plus.** Six
+touches donnent quinze paires ; six sont utilisées dans Civil 3D, et
+**sans ralentir le moindre appui simple** :
+
+| Touches | Écran | Ce que ça fait |
+|---|---|---|
+| **B3 + B4** | `VUE PREC.` | vue enregistrée précédente |
+| **B5 + B6** | `VUE SUIV.` | vue enregistrée suivante |
+| **B4 + B5** | `PEDIT` | `_PEDIT`, la famille polyligne |
+| **B3 + B5** | `CALQUE OFF` | éteint le calque de l'objet désigné |
+| **B4 + B6** | `CALQUE ON` | rallume le dernier calque éteint |
+| **B3 + B6** | `HACHURES` | `_HATCH` |
+
+Les quatre premières passent par **tes propres commandes AutoLISP**, à
+charger une fois dans Civil 3D : voir
+[`civil3d/README.md`](civil3d/README.md). Pourquoi ça ne ralentit rien,
+et comment en ajouter : [`docs/11`](docs/11-combinaisons.md).
 
 **Et si tu as des LED RGB** (`docs/10`) : **le pad prend la couleur du
 logiciel où tu travailles**, en respiration douce — bleu dans Civil 3D,
@@ -140,13 +161,17 @@ que tu viens d'utiliser en la surlignant** :
 ┌────────────────┐
 │▓CIVIL 3D▓▓▓AUTO│
 │ CRT   LNG DBL  │
-│1MATCH -   PROP │
-│2HATCH -   ANGL │
-│3ANNUL REDO -   │
-│4ISOLE -   -    │
+│1COPIERZ   V    │
+│2MAJ   -   CTRL │
+│3F3    ZOOM-    │
+│4PLINE SPLI-    │
 │────────────────│
 │C3D A12_Phase2.d│
 └────────────────┘
+
+Le tableau défile tout seul pour montrer les six touches. Et quand une
+**combinaison** part, l'écran l'annonce une seconde en gros — `B3+B4`
+au-dessus de `VUE PREC.` — puis revient tout seul.
 ```
 
 Ce ne sont que les valeurs d'usine : **tout se change depuis la page web**
@@ -214,9 +239,12 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   ├── page_config.html          la page de configuration, source unique
 │   ├── injecter_page.py          l'injecte dans portal.py et macropad_auto.py
 │   └── generer_code_complet.py   régénère CODE_COMPLET.md
+├── civil3d/                      >>> À CHARGER DANS CIVIL 3D
+│   ├── macropad_tools.lsp        les 4 commandes des combinaisons
+│   └── README.md                 comment les charger au démarrage
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             153 tests du firmware, exécutables sur PC
+│   ├── test_logic.py             191 tests du firmware, exécutables sur PC
 │   ├── test_pc.py                25 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
@@ -242,7 +270,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 178 tests ... OK
+→ Ran 216 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport

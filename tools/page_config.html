@@ -50,6 +50,13 @@ white-space:pre-wrap;font:13px ui-monospace,monospace}
 .ok{background:#0f2e20;border:1px solid #1d6f47;color:#8ee0b4}
 .ko{background:#33131d;border:1px solid #7d2a3c;color:#f0a6b6}
 .hint{color:#6f7788;font-size:12px;margin:0 0 14px}
+.combos{margin-top:14px;border-top:1px solid #1f2531;padding-top:12px}
+.combos h3{font:600 11px system-ui;text-transform:uppercase;
+letter-spacing:.6px;color:#6f7788;margin:0 0 8px}
+.combos .hint{margin:0 0 8px}
+td.duo{width:78px}
+td.duo input{color:#3d7bfd;font:700 13px ui-monospace,monospace;
+text-align:center}
 .vide{text-align:center;padding:26px 14px}
 .vide b{display:block;font-size:15px;margin-bottom:8px;color:#e8eaee}
 .vide p{color:#8b94a6;margin:5px 0;font-size:13px}
@@ -261,6 +268,69 @@ function ligne(p,i,tb,mx){
  });
 }
 
+// =====================================================================
+// LES COMBINAISONS : DEUX TOUCHES APPUYEES ENSEMBLE
+// =====================================================================
+// Elles se rangent sous le tableau du profil, et leurs actions se
+// modifient avec le MEME editeur d'etapes que les gestes : rien de neuf
+// a apprendre, et rien de neuf a maintenir non plus.
+//
+// Les numeros sont ceux qui sont graves sur le pad : on ecrit 3+4 pour
+// B3 et B4. La conversion vers les indices internes est faite par la
+// carte, pas ici.
+function litTouches(v){
+ var out=[];
+ (v||"").split(/[^0-9]+/).forEach(function(m){
+  var n=parseInt(m,10);
+  if(n>=1&&n<=N&&out.indexOf(n)<0)out.push(n);});
+ out.sort(function(a,b){return a-b;});
+ return out;}
+
+// Une fonction a part, comme ligne() : sinon la variable de boucle serait
+// partagee par toutes les lignes et chaque champ ecrirait dans la
+// derniere combinaison.
+function ligneCombo(liste,ci,tb){
+ var c=liste[ci];
+ var tr=el("tr",{},[]);
+ var ct=inp((c.touches||[]).join("+"),11,
+  function(v){c.touches=litTouches(v);},true);
+ ct.title="numeros des touches appuyees ensemble, par exemple 3+4";
+ var c1=el("td",{cls:"duo"},[]);c1.appendChild(ct);tr.appendChild(c1);
+ var cl=inp(c.label,16,function(v){c.label=v;});
+ cl.title="libelle affiche a l'ecran quand la combinaison part";
+ var c2=el("td",{cls:"lab"},[]);c2.appendChild(cl);tr.appendChild(c2);
+ var pile=el("div",{cls:"pile"},[]);
+ etapes(c,"actions").forEach(function(e,rang){
+  pile.appendChild(ligneEtape(c,"actions",rang));});
+ pile.appendChild(el("button",{cls:"s add",title:"enchainer une etape",
+  onclick:function(){c.actions.push({type:"none",valeur:""});render();}},
+  ["+ etape"]));
+ var c3=el("td",{},[]);c3.appendChild(pile);tr.appendChild(c3);
+ tr.appendChild(el("td",{cls:"use"},[el("button",{cls:"d s",
+  title:"supprimer cette combinaison",
+  onclick:function(){liste.splice(ci,1);render();}},["x"])]));
+ tb.appendChild(tr);}
+
+function tableauCombos(p){
+ // On ne cree PAS p.combos quand il manque : une liste vide veut dire
+ // "aucune combinaison" et effacerait celles d'usine. Elle n'apparait
+ // donc que si tu cliques sur le bouton.
+ var liste=p.combos||[];
+ var bloc=el("div",{cls:"combos"},[
+  el("h3",{},["Combinaisons - deux touches appuyees ensemble"])]);
+ if(!p.combos)bloc.appendChild(el("p",{cls:"hint"},
+  ["Cette sauvegarde est anterieure aux combinaisons : celles d'usine "+
+   "seront reprises. Ajoutes-en une ici pour decider toi-meme."]));
+ var tb=el("table",{},[el("tr",{},[el("th",{},["Touches"]),
+  el("th",{},["Libelle"]),el("th",{},["Action"]),el("th",{},[""])])]);
+ for(var i=0;i<liste.length;i++)ligneCombo(liste,i,tb);
+ bloc.appendChild(tb);
+ bloc.appendChild(el("button",{cls:"s add",onclick:function(){
+  if(!p.combos)p.combos=[];
+  p.combos.push({touches:[],label:"",actions:[]});render();}},
+  ["+ combinaison"]));
+ return bloc;}
+
 function render(){
  var zone=document.getElementById("profs");zone.innerHTML="";
  var mx=maxUse();
@@ -279,7 +349,7 @@ function render(){
    el("th",{},["Libelle"]),el("th",{},["Action"]),
    el("th",{},["Usage"])])]);
   for(var i=0;i<N;i++)ligne(p,i,tb,mx);
-  zone.appendChild(el("div",{cls:"card"},[head,tb]));
+  zone.appendChild(el("div",{cls:"card"},[head,tb,tableauCombos(p)]));
  });
  renderApps();
 }

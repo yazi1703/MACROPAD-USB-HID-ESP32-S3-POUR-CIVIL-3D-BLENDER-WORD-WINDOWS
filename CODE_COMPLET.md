@@ -18,6 +18,7 @@ de `device/`, pas ce document.
 - [`device/runtime.py`](#deviceruntimepy)
 - [`device/inputs.py`](#deviceinputspy)
 - [`device/gestures.py`](#devicegesturespy)
+- [`device/combos.py`](#devicecombospy)
 - [`device/layouts.py`](#devicelayoutspy)
 - [`device/store.py`](#devicestorepy)
 - [`device/stats.py`](#devicestatspy)
@@ -39,7 +40,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`318 lignes - sha256 008661eb6dfbcc1b`
+`339 lignes - sha256 4efcbb0ce8988e7a`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -300,7 +301,15 @@ GESTE_LONG_MS = 400
 # Deux appuis séparés de moins que ce délai forment un double appui.
 # ATTENTION : seules les touches qui ont RÉELLEMENT une macro de double
 # appui attendent ce délai. Les autres partent instantanément.
-GESTE_DOUBLE_MS = 260
+#
+# POURQUOI 200 ET PLUS 260 : dans les valeurs d'usine, une seule touche a
+# encore un double appui — B1, le presse-papiers, et c'est la touche la
+# plus utilisée du pad. Ce délai est exactement le retard de son Ctrl+C.
+# 200 ms reste très confortable pour un double appui volontaire (le
+# double-clic de Windows est réglé à 500 ms par défaut, mais un doigt qui
+# tape deux fois exprès sur un macropad met 100 à 150 ms), et rend 60 ms
+# au copier. Si tu rates des collages, remonte-le : c'est sans danger.
+GESTE_DOUBLE_MS = 200
 
 DEBOUNCE_MS = 25        # anti-rebond des touches B1 à B4
 ESC_DEBOUNCE_MS = 20    # anti-rebond du bouton ESC
@@ -340,6 +349,19 @@ PROFILE_SPLASH_MS = 500     # durée d'affichage du nom du profil en grand
 # L'écran affiche un tableau : une ligne par touche, trois colonnes
 # (appui court, appui long, double appui). Quatre lignes tiennent à
 # l'écran ; s'il y a plus de touches, le tableau défile tout seul.
+# =====================================================================
+# COMBINAISONS DE PLUSIEURS TOUCHES
+# =====================================================================
+# Deux doigts poses "en meme temps" arrivent en realite a 10 a 40 ms
+# d'ecart ; deux appuis volontairement successifs sont a plus de 150 ms.
+# 50 ms separe proprement les deux cas.
+#
+# Cette fenetre ne ralentit AUCUNE touche : voir l'explication en tete de
+# combos.py. Seules les touches membres d'une combinaison la traversent,
+# et un appui court part de toute facon au relachement.
+GESTE_COMBO_MS = 50
+COMBO_FLASH_MS = 1200       # duree de l'affichage "B3+B4 / VUE PREC."
+
 TABLE_SCROLL_MS = 2500      # temps d'affichage avant de faire défiler d'un cran
 HIGHLIGHT_MS = 1300         # durée du surlignage de la touche utilisée
 
@@ -366,7 +388,7 @@ LED_RETURN_MS = 350     # retour progressif du flash vers la respiration
 
 ## device/profiles.py
 
-`260 lignes - sha256 7dd14aa0f86a01e0`
+`308 lignes - sha256 a89e86f8bfa936c4`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -440,6 +462,7 @@ DOUBLE = "double"
 GESTES = (COURT, LONG, DOUBLE)
 
 LABEL_MAX = 6          # largeur d'un libelle sur l'ecran OLED
+COMBO_LABEL_MAX = 16   # une combinaison s'affiche sur une ligne entiere
 
 
 def K(label, court, long=None, double=None):
@@ -465,7 +488,7 @@ def K(label, court, long=None, double=None):
 #   appui long   -> Ctrl+Z   annuler
 #
 # A savoir : c'est la SEULE touche a avoir un double appui dans les
-# valeurs d'usine. Une touche qui en a un attend GESTE_DOUBLE_MS (260 ms)
+# valeurs d'usine. Une touche qui en a un attend GESTE_DOUBLE_MS (200 ms)
 # avant de conclure "c'etait un appui court" - ici, avant de copier. Sur
 # une touche ou tu veux zero attente, laisse la colonne "double" vide et
 # sers-toi de l'appui long, qui lui ne coute rien.
@@ -492,31 +515,40 @@ PROFILES = {
 
     # -----------------------------------------------------------------
     # Le "_" devant les commandes AutoCAD force la commande INTERNATIONALE :
-    # _MATCHPROP fonctionne meme sur un Civil 3D installe en francais.
+    # _PLINE fonctionne meme sur un Civil 3D installe en francais.
+    #
+    # CHAQUE TOUCHE PORTE UNE FAMILLE : c'est ce qui rend le profil facile
+    # a retenir. Appui court et appui long vont toujours ensemble.
     "CIVIL3D": [
         presse_papiers(),
-        # LA TOUCHE MODIFICATRICE. Elle ne tape rien : elle enfonce Ctrl
-        # ou Maj et les GARDE enfonces tant que ton doigt reste dessus.
-        #   appui maintenu             -> Ctrl  (Ctrl+clic : selectionner)
-        #   appui bref puis maintenu   -> Maj   (Maj+clic : deselectionner)
-        # Ta main gauche tient le modificateur, ta main droite reste a la
-        # souris. Voir gestures.py pour le detail.
-        K("CTRL",   [("maintien", ("CTRL",))],
-          double=[("maintien", ("SHIFT",))]),
-        K("MATCH",  [("text_enter", "_MATCHPROP")],
-          long=[("combo", ("CTRL", "Y"))]),                # retablir
+
+        # LA TOUCHE MODIFICATRICE. Elle ne tape rien : elle enfonce Maj ou
+        # Ctrl et les GARDE enfonces tant que ton doigt reste dessus.
+        #   appui maintenu             -> MAJ   (Maj+clic : deselectionner)
+        #   appui bref puis maintenu   -> CTRL  (Ctrl+clic : ajouter)
+        # Maj est en premier parce que c'est le maintien INSTANTANE, et
+        # c'est celui que tu utilises le plus, main droite a la souris.
+        K("MAJ",    [("maintien", ("SHIFT",))],
+          double=[("maintien", ("CTRL",))]),
+
+        # Affichage : accrochages, et vue globale en appui long.
+        K("F3",     [("key", "F3")],
+          long=[("text_enter", "_ZOOM E")]),
+
+        # Famille polyligne. "_ZOOM E" et "_PLINE" tiennent sur une seule
+        # ligne parce que dans la ligne de commande AutoCAD, l'espace vaut
+        # Entree : l'option part avec la commande.
+        K("PLINE",  [("text_enter", "_PLINE")],
+          long=[("text_enter", "_SPLINE")]),
+
+        # Famille isolation.
         K("ISOLE",  [("text_enter", "_ISOLATEOBJECTS")],
-          long=[("text_enter", "_UNISOLATEOBJECTS")]),     # tout remontrer
-        # "_ZOOM E" en une seule ligne : dans la ligne de commande
-        # AutoCAD, l'espace vaut Entree. Le E choisit donc l'option
-        # Etendu, et tu vois tout le dessin d'un seul appui. Si ta
-        # version ne suit pas, remets simplement "_ZOOM".
-        K("ZOOM",   [("text_enter", "_ZOOM E")],
-          double=[("text_enter", "_REGEN")]),              # regenerer
-        # _HATCH etait sur B2, que la touche modificatrice occupe
-        # desormais : il passe en appui long, ou il ne coute aucun retard.
-        K("ENREG",  [("combo", ("CTRL", "S"))],
-          long=[("text_enter", "_HATCH")]),                # hachures
+          long=[("text_enter", "_UNISOLATEOBJECTS")]),
+
+        # Famille selection : selectionner les semblables, puis reproduire
+        # une mise en forme sur ce qui est selectionne.
+        K("SELSIM", [("text_enter", "_SELECTSIMILAR")],
+          long=[("text_enter", "_MATCHPROP")]),
     ],
 
     # -----------------------------------------------------------------
@@ -554,6 +586,44 @@ PROFILES = {
         K("CAPTUR", [("combo", ("WIN", "SHIFT", "S"))]),
     ],
 }
+
+# =====================================================================
+# LES COMBINAISONS
+# =====================================================================
+# Deux touches appuyees EN MEME TEMPS declenchent une macro a elles, et
+# surtout pas celles des deux touches. Voir combos.py pour la mecanique,
+# et docs/11-combinaisons.md pour le raisonnement.
+#
+# Les numeros sont ceux que tu vois sur le pad : COMBO((3, 4), ...) c'est
+# bien B3 et B4.
+def COMBO(touches, label, actions):
+    return (tuple(numero - 1 for numero in touches), label, actions)
+
+
+# Trois familles, trois geometries - c'est ce qui les rend memorisables :
+#
+#   les deux paires du bord    -> les vues, gauche = avant, droite = apres
+#   la paire du milieu, sur B4 -> la famille polyligne
+#   les deux diagonales        -> les calques, cacher / remontrer
+#   les deux extremes          -> les hachures
+#
+# _HATCHEDIT n'y figure pas volontairement : dans AutoCAD, un double-clic
+# sur une hachure ouvre deja son editeur.
+COMBOS = {
+    "CIVIL3D": [
+        COMBO((3, 4), "VUE PREC.",  [("text_enter", "MPVIEWPREV")]),
+        COMBO((5, 6), "VUE SUIV.",  [("text_enter", "MPVIEWNEXT")]),
+        COMBO((4, 5), "PEDIT",      [("text_enter", "_PEDIT")]),
+        COMBO((3, 5), "CALQUE OFF", [("text_enter", "MPLAYEROFF")]),
+        COMBO((4, 6), "CALQUE ON",  [("text_enter", "MPLAYERRESTORE")]),
+        COMBO((3, 6), "HACHURES",   [("text_enter", "_HATCH")]),
+    ],
+}
+# MPVIEWPREV, MPVIEWNEXT, MPLAYEROFF et MPLAYERRESTORE sont les commandes
+# AutoLISP de civil3d/macropad_tools.lsp. Elles s'ecrivent SANS le "_" :
+# le souligne demande la version internationale d'une commande AutoCAD
+# native, une commande LISP n'a pas de traduction.
+
 
 # Nom affiche a l'ecran quand il differe de la cle interne.
 TITLES = {"CIVIL3D": "CIVIL 3D"}
@@ -725,7 +795,7 @@ else:
 
 ## device/main.py
 
-`392 lignes - sha256 529ad66f9c83615f`
+`461 lignes - sha256 a8edc5de9521a063`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -767,6 +837,11 @@ TROIS GESTES PAR TOUCHE
 Appui court, appui long, double appui : voir gestures.py. Une touche sans
 macro double part instantanement au relachement ; on ne paie le delai
 d'attente que la ou on s'en sert.
+
+Et deux touches ensemble : voir combos.py. Les fronts des touches membres
+d'une combinaison passent d'abord par le collecteur, qui les rend a la
+machine a gestes AVEC LEUR HORODATAGE D'ORIGINE quand ce n'etait pas une
+combinaison. Les autres touches ne le traversent meme pas.
 """
 
 from time import ticks_ms, ticks_diff, sleep_ms
@@ -776,6 +851,7 @@ import store
 from inputs import Inputs
 from profiles import ProfileManager, TESTS, COURT
 from gestures import Gestes, FIN
+from combos import Combos, APPUI, nom_touches
 from stats import Stats
 from display import Display
 from hid_keyboard import HIDKeyboard
@@ -857,7 +933,7 @@ def run():
         return
 
     # --- Chargement de la configuration --------------------------------
-    profils, ordre, titres, couleurs, apps, repli, origine = \
+    profils, ordre, titres, couleurs, table_combos, apps, repli, origine = \
         store.charger(NB_TOUCHES)
     print("Macros chargees depuis :", origine)
 
@@ -869,6 +945,11 @@ def run():
         for label, gestes_touche in profils[nom]:
             for actions in (gestes_touche or {}).values():
                 compile_actions(actions, C.KEYBOARD_LAYOUT)
+    # Les valeurs d'usine ne passent jamais par store.charger() : c'est ici
+    # qu'une combinaison mal ecrite dans profiles.py doit se voir.
+    problemes = store.verifier_combos(table_combos, profils, NB_TOUCHES)
+    if problemes:
+        raise ValueError("combinaisons : " + " ; ".join(problemes))
     if C.HID_TEST is not None and C.HID_TEST not in TESTS:
         raise ValueError("HID_TEST invalide")
 
@@ -877,6 +958,8 @@ def run():
     stats = Stats(NB_TOUCHES)
     gestes = Gestes(NB_TOUCHES, C.GESTE_LONG_MS, C.GESTE_DOUBLE_MS)
     gestes.configurer(manager.macros)
+    combos = Combos(NB_TOUCHES, C.GESTE_COMBO_MS)
+    combos.configurer(table_combos.get(manager.name))
 
     led = None
     try:
@@ -899,6 +982,9 @@ def run():
                         manager.macros, ticks_ms(),
                         manager.index, len(ordre), splash)
         gestes.configurer(manager.macros)
+        # configurer() reinitialise le collecteur : changer de profil
+        # abandonne donc toute combinaison en cours de formation.
+        combos.configurer(table_combos.get(manager.name))
         # La couleur suit le logiciel : c'est le profil actif qui la donne,
         # et le PC change de profil tout seul selon la fenetre active.
         rgb.profil(couleurs.get(manager.name))
@@ -909,9 +995,9 @@ def run():
         Appele quand une page web vient d'enregistrer : les changements
         prennent effet immediatement, sans RESET.
         """
-        nonlocal manager, titres, ordre, couleurs
+        nonlocal manager, titres, ordre, couleurs, table_combos
         try:
-            (neufs, ordre_neuf, titres_neufs, couleurs_neuves,
+            (neufs, ordre_neuf, titres_neufs, couleurs_neuves, combos_neuves,
              _apps, _repli, origine_neuve) = store.charger(NB_TOUCHES)
             nouveau = ProfileManager(ordre_neuf, manager.name, neufs, NB_TOUCHES)
         except Exception as exc:
@@ -919,6 +1005,7 @@ def run():
             return
         manager, titres, ordre = nouveau, titres_neufs, ordre_neuf
         couleurs = couleurs_neuves
+        table_combos = combos_neuves
         afficher(False)
         print("Macros rechargees depuis :", origine_neuve)
 
@@ -954,6 +1041,48 @@ def run():
             keyboard.maintenir(actions)
         else:
             keyboard.submit(actions)
+
+    def declencher_combo(combo, now):
+        """Execute la macro d'une combinaison de touches."""
+        indices, label, actions = combo
+        nom = nom_touches(indices)
+        print("%s %s %s" % (manager.name, nom, label or "-"))
+        # Une combinaison ne correspond a aucune ligne du tableau : sans cet
+        # affichage, rien ne dirait laquelle est partie.
+        display.flash(nom, label, now)
+        # Les LED des deux touches ont deja reagi a l'appui physique, dans
+        # la boucle : rien a rallumer ici.
+        if C.HID_TEST is not None:
+            # En mode test, seul l'appui court sur B1 agit.
+            print("   (HID_TEST : les combinaisons sont inactives)")
+            return
+        if not actions:
+            print("   (aucune macro sur cette combinaison)")
+            return
+        # On compte CHAQUE touche membre : le compteur mesure l'usage des
+        # touches - pour l'implantation du boitier, et pour reperer une
+        # touche qui ne sert a rien - pas celui des macros.
+        for index in indices:
+            stats.compter(manager.name, index)
+        if not keyboard:
+            print("   (HID desactive : rien n'est tape)")
+            return
+        keyboard.submit(actions)
+
+    def router(differes):
+        """Transmet a la machine a gestes les fronts rendus par le collecteur.
+
+        L'instant transmis est celui de l'appui REEL, pas celui de la fin
+        de la fenetre : un appui long sur une touche membre part donc a
+        GESTE_LONG_MS pile, sans le retard de la fenetre.
+        """
+        for front, index, instant in differes:
+            if front == APPUI:
+                geste = gestes.appui(index, instant)
+            else:
+                geste = gestes.relachement(index, instant)
+            if geste:
+                declencher(index, geste)
 
     afficher(False)
     print("Profil :", manager.name,
@@ -1006,6 +1135,9 @@ def run():
                     # --- 1. ESC : priorite absolue --------------------
                     if nom == "ESC":
                         if front == 1:
+                            # ESC annule aussi une combinaison en train de
+                            # se former, sans rien declencher.
+                            combos.reinitialiser()
                             if keyboard:
                                 keyboard.escape(now)
                                 # tick() tout de suite : le paquet part dans
@@ -1052,11 +1184,18 @@ def run():
                             # perceptible sous le doigt.
                             display.surligner(index, now)
                             rgb.touche(index, now)
-                            geste = gestes.appui(index, now)
+                            combo, differes = combos.appui(index, now)
                         else:
-                            geste = gestes.relachement(index, now)
-                        if geste:
-                            declencher(index, geste)
+                            combo, differes = combos.relachement(index, now)
+                        if combo:
+                            declencher_combo(combo, now)
+                        router(differes)
+
+                # Fin de la fenetre des combinaisons.
+                combo, differes = combos.service(now)
+                if combo:
+                    declencher_combo(combo, now)
+                router(differes)
 
                 # Appuis longs et doubles appuis arrives a echeance.
                 for index, geste in gestes.service(now):
@@ -1551,6 +1690,285 @@ def _est_maintien(actions):
 
 ---
 
+## device/combos.py
+
+`270 lignes - sha256 ec399ffd2338a302`
+
+```python
+# -*- coding: utf-8 -*-
+"""
+combos.py - Plusieurs touches appuyees EN MEME TEMPS = une macro.
+
+=====================================================================
+CE QUE CA FAIT
+=====================================================================
+B3+B4 ensemble declenchent une macro a eux, et surtout PAS la macro de
+B3 suivie de celle de B4. Six touches offrent ainsi quinze paires, sans
+un composant de plus - et l'architecture accepte deja trois ou quatre
+touches simultanees le jour ou tu en voudras.
+
+=====================================================================
+LE PROBLEME, ET POURQUOI IL NE COUTE RIEN ICI
+=====================================================================
+Pour savoir que "B3 seule" n'est pas le debut de "B3+B4", il faut bien
+attendre un peu apres B3. Naivement, cela ajoute donc un retard a toutes
+les touches. Inacceptable.
+
+Deux choses sauvent la mise :
+
+1. SEULES LES TOUCHES MEMBRES d'une combinaison sont surveillees. B1 et
+   B2 ne passent meme pas par ce fichier.
+
+2. UN APPUI COURT PART DEJA AU RELACHEMENT, pas a l'appui. Donc :
+     - tu tapes vite -> la touche est relachee AVANT la fin de la
+       fenetre : on libere tout immediatement, zero retard ;
+     - tu la gardes enfoncee -> l'appui est transmis a la fin de la
+       fenetre, mais AVEC SON HORODATAGE D'ORIGINE. L'appui long part
+       donc toujours a GESTE_LONG_MS pile.
+
+   Cet horodatage d'origine est la piece maitresse : sans lui, un appui
+   long sur une touche membre partirait en retard.
+
+Resultat : aucune latence ajoutee, sur aucune touche.
+
+=====================================================================
+LA MACHINE A ETATS
+=====================================================================
+    LIBRE     --appui d'une membre-->     CANDIDAT
+                                          (on retient, fenetre ouverte)
+
+    CANDIDAT  --appui d'une autre-->      on ajoute a l'ensemble ;
+                                          s'il correspond a une
+                                          combinaison ET qu'aucune plus
+                                          grande ne peut encore se
+                                          former -> DECLENCHE
+
+    CANDIDAT  --fin de fenetre-->         correspondance : declenche.
+                                          sinon : on libere les appuis
+                                          retenus -> LIBRE
+
+    CANDIDAT  --relachement-->            c'etait un appui seul : on
+                                          libere tout -> LIBRE
+
+    CONSOMME  --toutes relachees-->       LIBRE
+
+Pendant CONSOMME, les autres touches de combinaison sont ignorees :
+rouler les doigts sur le pad en relachant ne doit pas declencher une
+seconde combinaison par accident.
+
+=====================================================================
+CE QUI EST GARANTI
+=====================================================================
+* ESC et changement de profil : reinitialiser() abandonne tout SANS
+  rien declencher et sans transmettre les appuis retenus ;
+* aucune touche ne peut rester enfoncee cote PC : une combinaison
+  declenche une macro ordinaire, avec les memes garanties que le reste ;
+* l'ordre des doigts n'a pas d'importance : B3+B4 et B4+B3 sont la meme
+  combinaison.
+"""
+
+from time import ticks_diff, ticks_add
+
+# Etats
+_LIBRE = 0
+_CANDIDAT = 1
+_CONSOMME = 2
+
+# Fronts transmis a la machine a gestes
+APPUI = 1
+RELACHEMENT = -1
+
+
+def nom_touches(cle):
+    """(2, 3) -> "B3+B4", pour l'ecran."""
+    return "+".join("B%d" % (index + 1) for index in cle)
+
+
+class Combos:
+    """Reconnait les appuis simultanes, et laisse passer le reste."""
+
+    def __init__(self, nb_touches, fenetre_ms=50):
+        self.nb_touches = nb_touches
+        self.fenetre_ms = fenetre_ms
+        self.table = {}                          # cle triee -> (libelle, actions)
+        self.membres = [False] * nb_touches
+        self.occupees = [False] * nb_touches     # consommees, pas encore relachees
+        self.ignorees = [False] * nb_touches     # appuyees pendant CONSOMME
+        self.retenus = []                        # [(index, instant), ...]
+        self.echeance = 0
+        self.etat = _LIBRE
+
+    # ------------------------------------------------------------------
+    def configurer(self, combos):
+        """Declare les combinaisons du profil courant.
+
+        combos : liste de (indices, libelle, actions). Les indices sont
+        ceux des touches, a partir de zero.
+        """
+        self.table = {}
+        self.membres = [False] * self.nb_touches
+        for indices, libelle, actions in (combos or []):
+            propres = []
+            for index in indices:
+                index = int(index)
+                if 0 <= index < self.nb_touches and index not in propres:
+                    propres.append(index)
+            # Une "combinaison" d'une seule touche n'en est pas une : ce
+            # serait un appui ordinaire, et elle rendrait la touche
+            # inutilisable seule.
+            if len(propres) < 2:
+                continue
+            propres.sort()
+            self.table[tuple(propres)] = (libelle, actions)
+            for index in propres:
+                self.membres[index] = True
+        self.reinitialiser()
+
+    def reinitialiser(self):
+        """Tout abandonner sans rien declencher (ESC, changement de profil)."""
+        self.etat = _LIBRE
+        self.retenus = []
+        for index in range(self.nb_touches):
+            self.occupees[index] = False
+            self.ignorees[index] = False
+
+    # ------------------------------------------------------------------
+    def appui(self, index, now):
+        """Retourne (combinaison, evenements a transmettre)."""
+        if not (0 <= index < self.nb_touches):
+            return None, [(APPUI, index, now)]
+
+        if self.etat == _CONSOMME:
+            if self.membres[index]:
+                self.ignorees[index] = True
+                return None, []
+            return None, [(APPUI, index, now)]
+
+        if not self.membres[index]:
+            # Cette touche n'entre dans aucune combinaison : rien ne la
+            # retarde, jamais.
+            return None, [(APPUI, index, now)]
+
+        if self.etat == _LIBRE:
+            self.etat = _CANDIDAT
+            self.retenus = [(index, now)]
+            self.echeance = ticks_add(now, self.fenetre_ms)
+            return None, []
+
+        # _CANDIDAT
+        if ticks_diff(now, self.echeance) >= 0:
+            # Fenetre deja expiree : ce n'est pas une combinaison. On
+            # libere ce qui etait retenu, et cette touche-ci ouvre une
+            # nouvelle fenetre.
+            differes = self._liberer()
+            self.etat = _CANDIDAT
+            self.retenus = [(index, now)]
+            self.echeance = ticks_add(now, self.fenetre_ms)
+            return None, differes
+
+        self.retenus.append((index, now))
+        return self._resoudre(False), []
+
+    def relachement(self, index, now):
+        """Retourne (None, evenements a transmettre)."""
+        if not (0 <= index < self.nb_touches):
+            return None, [(RELACHEMENT, index, now)]
+
+        if self.occupees[index]:
+            # Une touche de la combinaison qu'on vient de declencher.
+            self.occupees[index] = False
+            if not self._reste_occupee():
+                self.etat = _LIBRE
+            return None, []
+
+        if self.ignorees[index]:
+            self.ignorees[index] = False
+            return None, []
+
+        if self.etat == _CANDIDAT and self._est_retenue(index):
+            # Relachee avant la fin de la fenetre : c'etait bien un appui
+            # seul. On libere immediatement - c'est ce qui garantit zero
+            # latence sur une tape rapide.
+            differes = self._liberer()
+            differes.append((RELACHEMENT, index, now))
+            return None, differes
+
+        return None, [(RELACHEMENT, index, now)]
+
+    def service(self, now):
+        """A appeler a chaque tour de boucle, comme gestes.service()."""
+        if self.etat != _CANDIDAT:
+            return None, []
+        if ticks_diff(now, self.echeance) < 0:
+            return None, []
+        # La fenetre se ferme : on tranche.
+        combinaison = self._resoudre(True)
+        if combinaison is not None:
+            return combinaison, []
+        return None, self._liberer()
+
+    # ------------------------------------------------------------------
+    def _resoudre(self, forcer):
+        """Declenche si l'ensemble retenu correspond a une combinaison.
+
+        forcer=False : on attend encore si une combinaison PLUS GRANDE
+        peut se former (B3+B4 alors que B3+B4+B5 existe). C'est ce qui
+        permettra d'ajouter des combinaisons a trois touches sans rien
+        reecrire, tout en declenchant les paires sans attendre quand
+        aucune ambiguite n'existe.
+        """
+        cle = self._cle()
+        entree = self.table.get(cle)
+        if entree is None:
+            return None
+        if not forcer and self._peut_grandir(cle):
+            return None
+        for index, _instant in self.retenus:
+            self.occupees[index] = True
+        self.retenus = []
+        self.etat = _CONSOMME
+        return (cle, entree[0], entree[1])
+
+    def _peut_grandir(self, cle):
+        for autre in self.table:
+            if len(autre) <= len(cle):
+                continue
+            complet = True
+            for index in cle:
+                if index not in autre:
+                    complet = False
+                    break
+            if complet:
+                return True
+        return False
+
+    def _liberer(self):
+        """Transmet les appuis retenus, AVEC LEUR HORODATAGE D'ORIGINE."""
+        differes = [(APPUI, index, instant) for index, instant in self.retenus]
+        self.retenus = []
+        self.etat = _LIBRE
+        return differes
+
+    def _cle(self):
+        indices = [index for index, _instant in self.retenus]
+        indices.sort()
+        return tuple(indices)
+
+    def _est_retenue(self, index):
+        for retenu, _instant in self.retenus:
+            if retenu == index:
+                return True
+        return False
+
+    def _reste_occupee(self):
+        for occupee in self.occupees:
+            if occupee:
+                return True
+        return False
+```
+
+---
+
 ## device/layouts.py
 
 `355 lignes - sha256 f49425de3d954ee7`
@@ -1917,7 +2335,7 @@ def compile_actions(actions, layout, caps_lock=False):
 
 ## device/store.py
 
-`414 lignes - sha256 ba99a3898d71f075`
+`551 lignes - sha256 97501490d27f2da4`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1971,6 +2389,10 @@ FORME DU FICHIER
                         {"type": "pause",      "valeur": "500"},
                         {"type": "combo",      "valeur": "CTRL+S"}]},
             ...
+          ],
+          "combos": [
+            {"touches": [3, 4], "label": "VUE PREC.",
+             "actions": [{"type": "text_enter", "valeur": "MPVIEWPREV"}]}
           ]
         }
       },
@@ -1990,6 +2412,15 @@ Pour un "combo", la valeur s'ecrit avec des plus : "CTRL+SHIFT+ESC".
 Un "maintien" s'ecrit pareil, mais la touche reste ENFONCEE tant que tu
 gardes le doigt dessus : c'est ainsi qu'une touche du macropad devient une
 vraie touche Ctrl ou Maj.
+
+Chaque profil peut aussi porter des COMBINAISONS : deux touches appuyees
+en meme temps declenchent une macro a elles. Dans le fichier, elles
+s'ecrivent avec les numeros qu'on lit sur le pad - [3, 4] c'est B3 et B4 -
+et non avec les indices internes qui commencent a zero.
+
+Un profil ecrit AVANT cette version n'a pas de bloc "combos" : il recupere
+alors celles d'usine. Une liste "combos" presente mais vide veut dire "je
+n'en veux aucune", et elle est respectee.
 """
 
 import json
@@ -2068,6 +2499,67 @@ def action_depuis_json(genre, valeur):
 
 
 # =====================================================================
+# Les combinaisons de touches
+# =====================================================================
+def nom_combo(indices):
+    """(2, 3) -> "B3+B4" : le nom qu'on lit sur le pad.
+
+    combos.py a la meme fonction, volontairement : store.py doit rester
+    lisible sans le module de saisie, qui lui parle a l'horloge de la carte.
+    """
+    return "+".join("B%d" % (int(index) + 1) for index in indices)
+
+
+def combos_vers_json(combos):
+    """Forme interne -> liste JSON, avec des numeros de touches lisibles.
+
+    En interne les touches sont numerotees a partir de zero, comme partout
+    ailleurs en informatique. Dans le fichier et dans les pages web elles
+    portent le numero grave sur le pad. La conversion se fait ici, une
+    bonne fois pour toutes.
+    """
+    liste = []
+    for indices, label, actions in (combos or []):
+        liste.append({"touches": [int(index) + 1 for index in indices],
+                      "label": str(label),
+                      "actions": actions_vers_json(actions)})
+    return liste
+
+
+def combos_depuis_json(champ):
+    """Liste JSON -> forme interne. Leve une exception si c'est illisible.
+
+    On ne corrige rien ici : les doublons et les numeros farfelus sont
+    conserves tels quels pour que verifier() puisse les nommer dans un
+    message clair, plutot que de les faire disparaitre en silence.
+    """
+    combos = []
+    for entree in (champ or []):
+        if not isinstance(entree, dict):
+            raise ValueError("combinaison illisible : " + repr(entree))
+        touches = entree.get("touches") or []
+        if not isinstance(touches, (list, tuple)):
+            raise ValueError("combinaison : 'touches' n'est pas une liste")
+        indices = tuple(sorted(int(numero) - 1 for numero in touches))
+        combos.append((indices,
+                       str(entree.get("label", ""))[:P.COMBO_LABEL_MAX],
+                       actions_depuis_json(entree.get("actions"))))
+    return combos
+
+
+def combos_usine():
+    """Copie des combinaisons d'usine, profil par profil."""
+    table = {}
+    # getattr : un profiles.py televerse depuis une version anterieure n'a
+    # pas de table COMBOS. Le firmware demarre quand meme, sans
+    # combinaisons, plutot que de refuser de booter.
+    for nom, liste in getattr(P, "COMBOS", {}).items():
+        table[nom] = [(tuple(indices), label, list(actions))
+                      for indices, label, actions in liste]
+    return table
+
+
+# =====================================================================
 # Les couleurs des LED RGB
 # =====================================================================
 # Dans le fichier et dans les pages web, une couleur s'ecrit comme en
@@ -2105,7 +2597,56 @@ def couleur_usine(nom):
 # =====================================================================
 # Verification
 # =====================================================================
-def verifier(profils, ordre, nb_touches):
+def verifier_combos(combos, profils, nb_touches):
+    """Verifie les combinaisons d'un profil. Retourne la liste des problemes."""
+    problemes = []
+    for nom, liste in (combos or {}).items():
+        if nom not in profils:
+            problemes.append("combinaisons : le profil '%s' n'existe pas" % nom)
+        deja = {}
+        for indices, label, actions in (liste or []):
+            touches = nom_combo(indices)
+            if len(set(indices)) != len(indices):
+                problemes.append("%s %s : la meme touche est citee deux fois"
+                                 % (nom, touches))
+                continue
+            if len(indices) < 2:
+                # Une "combinaison" d'une seule touche rendrait cette touche
+                # inutilisable seule : ce n'en est pas une.
+                problemes.append("%s %s : il faut au moins deux touches"
+                                 % (nom, touches))
+                continue
+            hors = [index for index in indices if not 0 <= index < nb_touches]
+            if hors:
+                problemes.append("%s %s : la touche B%d n'existe pas"
+                                 % (nom, touches, hors[0] + 1))
+                continue
+            cle = tuple(sorted(indices))
+            if cle in deja:
+                problemes.append("%s %s : deja prise par '%s'"
+                                 % (nom, touches, deja[cle]))
+                continue
+            deja[cle] = label
+            if len(label) > P.COMBO_LABEL_MAX:
+                problemes.append("%s %s : libelle '%s' depasse %d caracteres"
+                                 % (nom, touches, label, P.COMBO_LABEL_MAX))
+            for genre, _valeur in (actions or []):
+                if genre == "maintien":
+                    # Un maintien se relache quand SA touche se relache. Une
+                    # combinaison n'a pas de touche unique a surveiller : le
+                    # Ctrl resterait enfonce pour de bon. Interdit, donc.
+                    problemes.append("%s %s : un 'maintien' est impossible "
+                                     "dans une combinaison (la touche "
+                                     "resterait enfoncee)" % (nom, touches))
+                    break
+            try:
+                compile_actions(actions, C.KEYBOARD_LAYOUT)
+            except Exception as exc:
+                problemes.append("%s %s (%s) : %s" % (nom, touches, label, exc))
+    return problemes
+
+
+def verifier(profils, ordre, nb_touches, combos=None):
     """Retourne la liste des problemes. Liste vide = configuration saine."""
     problemes = []
 
@@ -2140,6 +2681,8 @@ def verifier(profils, ordre, nb_touches):
                 except Exception as exc:
                     problemes.append("%s B%d %s (%s) : %s"
                                      % (nom, index + 1, geste, label, exc))
+
+    problemes.extend(verifier_combos(combos, profils, nb_touches))
     return problemes
 
 
@@ -2154,7 +2697,7 @@ def defauts():
     apps = [tuple(a) for a in P.APPS]
     couleurs = dict((nom, couleur_usine(nom)) for nom in profils)
     return (profils, list(C.PROFILES_ORDER), dict(P.TITLES), couleurs,
-            apps, tuple(P.APPS_REPLI))
+            combos_usine(), apps, tuple(P.APPS_REPLI))
 
 
 # =====================================================================
@@ -2162,7 +2705,8 @@ def defauts():
 # =====================================================================
 def vers_json(nb_touches, stats=None):
     """Configuration complete, prete a etre envoyee a une page web."""
-    profils, ordre, titres, couleurs, apps, repli, origine = charger(nb_touches)
+    (profils, ordre, titres, couleurs, combos,
+     apps, repli, origine) = charger(nb_touches)
     blocs = {}
     for nom, touches in profils.items():
         liste = []
@@ -2178,6 +2722,7 @@ def vers_json(nb_touches, stats=None):
             "couleur": couleur_vers_texte(
                 couleurs.get(nom) or couleur_usine(nom)),
             "touches": liste,
+            "combos": combos_vers_json(combos.get(nom)),
         }
 
     return {
@@ -2197,7 +2742,8 @@ def vers_json(nb_touches, stats=None):
 def depuis_json(data, nb_touches):
     """Forme web -> forme interne. Leve une exception si c'est illisible."""
     ordre = [str(n) for n in data["ordre"]]
-    profils, titres, couleurs = {}, {}, {}
+    profils, titres, couleurs, combos = {}, {}, {}, {}
+    usine = combos_usine()
     for nom, bloc in data["profils"].items():
         touches = []
         for entree in bloc["touches"][:nb_touches]:
@@ -2221,6 +2767,13 @@ def depuis_json(data, nb_touches):
         titres[str(nom)] = str(bloc.get("titre", nom))
         couleurs[str(nom)] = couleur_depuis_texte(bloc.get("couleur"),
                                                   couleur_usine(str(nom)))
+        if "combos" in bloc:
+            combos[str(nom)] = combos_depuis_json(bloc.get("combos"))
+        else:
+            # Fichier ecrit avant les combinaisons : on remet celles d'usine
+            # plutot que de les faire disparaitre a la premiere mise a jour.
+            # Une liste presente mais VIDE, elle, est respectee.
+            combos[str(nom)] = usine.get(str(nom), [])
 
     bloc_apps = data.get("apps") or {}
     apps = []
@@ -2232,14 +2785,14 @@ def depuis_json(data, nb_touches):
     bloc_repli = bloc_apps.get("repli") or {}
     repli = (str(bloc_repli.get("profil", P.APPS_REPLI[0])).upper(),
              str(bloc_repli.get("abrege", P.APPS_REPLI[1]))[:7])
-    return profils, ordre, titres, couleurs, apps, repli
+    return profils, ordre, titres, couleurs, combos, apps, repli
 
 
 # =====================================================================
 # Lecture et ecriture du fichier
 # =====================================================================
 def charger(nb_touches):
-    """Retourne (profils, ordre, titres, couleurs, apps, repli, origine).
+    """Retourne (profils, ordre, titres, couleurs, combos, apps, repli, origine).
 
     origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire d'ou
     viennent les macros actives.
@@ -2255,26 +2808,27 @@ def charger(nb_touches):
         return defauts() + ("usine",)
 
     try:
-        profils, ordre, titres, couleurs, apps, repli = depuis_json(
-            data, nb_touches)
+        (profils, ordre, titres, couleurs, combos,
+         apps, repli) = depuis_json(data, nb_touches)
     except Exception as exc:
         print("[store] %s mal forme (%s), retour aux valeurs d'usine"
               % (C.PROFILES_FILE, exc))
         return defauts() + ("usine",)
 
-    problemes = verifier(profils, ordre, nb_touches)
+    problemes = verifier(profils, ordre, nb_touches, combos)
     if problemes:
         print("[store] %s refuse, retour aux valeurs d'usine :" % C.PROFILES_FILE)
         for probleme in problemes:
             print("   -", probleme)
         return defauts() + ("usine",)
 
-    return profils, ordre, titres, couleurs, apps, repli, "fichier"
+    return profils, ordre, titres, couleurs, combos, apps, repli, "fichier"
 
 
-def enregistrer(profils, ordre, titres, couleurs, apps, repli, nb_touches):
+def enregistrer(profils, ordre, titres, couleurs, combos, apps, repli,
+                nb_touches):
     """Verifie puis ecrit. Retourne (True, "") ou (False, raison)."""
-    problemes = verifier(profils, ordre, nb_touches)
+    problemes = verifier(profils, ordre, nb_touches, combos)
     if problemes:
         return False, " ; ".join(problemes)
 
@@ -2291,6 +2845,7 @@ def enregistrer(profils, ordre, titres, couleurs, apps, repli, nb_touches):
             "couleur": couleur_vers_texte(
                 (couleurs or {}).get(nom) or couleur_usine(nom)),
             "touches": liste,
+            "combos": combos_vers_json((combos or {}).get(nom)),
         }
 
     data = {"version": 2, "ordre": list(ordre), "profils": blocs,
@@ -2318,11 +2873,11 @@ def enregistrer(profils, ordre, titres, couleurs, apps, repli, nb_touches):
 def enregistrer_json(data, nb_touches):
     """Enregistre directement une configuration recue d'une page web."""
     try:
-        profils, ordre, titres, couleurs, apps, repli = depuis_json(
-            data, nb_touches)
+        (profils, ordre, titres, couleurs, combos,
+         apps, repli) = depuis_json(data, nb_touches)
     except Exception as exc:
         return False, "donnees illisibles : %s" % exc
-    return enregistrer(profils, ordre, titres, couleurs, apps, repli,
+    return enregistrer(profils, ordre, titres, couleurs, combos, apps, repli,
                        nb_touches)
 
 
@@ -2469,7 +3024,7 @@ class Stats:
 
 ## device/portal.py
 
-`601 lignes - sha256 d79bce47b79a9779`
+`671 lignes - sha256 78b4360a62f0bce1`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2574,6 +3129,13 @@ white-space:pre-wrap;font:13px ui-monospace,monospace}
 .ok{background:#0f2e20;border:1px solid #1d6f47;color:#8ee0b4}
 .ko{background:#33131d;border:1px solid #7d2a3c;color:#f0a6b6}
 .hint{color:#6f7788;font-size:12px;margin:0 0 14px}
+.combos{margin-top:14px;border-top:1px solid #1f2531;padding-top:12px}
+.combos h3{font:600 11px system-ui;text-transform:uppercase;
+letter-spacing:.6px;color:#6f7788;margin:0 0 8px}
+.combos .hint{margin:0 0 8px}
+td.duo{width:78px}
+td.duo input{color:#3d7bfd;font:700 13px ui-monospace,monospace;
+text-align:center}
 .vide{text-align:center;padding:26px 14px}
 .vide b{display:block;font-size:15px;margin-bottom:8px;color:#e8eaee}
 .vide p{color:#8b94a6;margin:5px 0;font-size:13px}
@@ -2785,6 +3347,69 @@ function ligne(p,i,tb,mx){
  });
 }
 
+// =====================================================================
+// LES COMBINAISONS : DEUX TOUCHES APPUYEES ENSEMBLE
+// =====================================================================
+// Elles se rangent sous le tableau du profil, et leurs actions se
+// modifient avec le MEME editeur d'etapes que les gestes : rien de neuf
+// a apprendre, et rien de neuf a maintenir non plus.
+//
+// Les numeros sont ceux qui sont graves sur le pad : on ecrit 3+4 pour
+// B3 et B4. La conversion vers les indices internes est faite par la
+// carte, pas ici.
+function litTouches(v){
+ var out=[];
+ (v||"").split(/[^0-9]+/).forEach(function(m){
+  var n=parseInt(m,10);
+  if(n>=1&&n<=N&&out.indexOf(n)<0)out.push(n);});
+ out.sort(function(a,b){return a-b;});
+ return out;}
+
+// Une fonction a part, comme ligne() : sinon la variable de boucle serait
+// partagee par toutes les lignes et chaque champ ecrirait dans la
+// derniere combinaison.
+function ligneCombo(liste,ci,tb){
+ var c=liste[ci];
+ var tr=el("tr",{},[]);
+ var ct=inp((c.touches||[]).join("+"),11,
+  function(v){c.touches=litTouches(v);},true);
+ ct.title="numeros des touches appuyees ensemble, par exemple 3+4";
+ var c1=el("td",{cls:"duo"},[]);c1.appendChild(ct);tr.appendChild(c1);
+ var cl=inp(c.label,16,function(v){c.label=v;});
+ cl.title="libelle affiche a l'ecran quand la combinaison part";
+ var c2=el("td",{cls:"lab"},[]);c2.appendChild(cl);tr.appendChild(c2);
+ var pile=el("div",{cls:"pile"},[]);
+ etapes(c,"actions").forEach(function(e,rang){
+  pile.appendChild(ligneEtape(c,"actions",rang));});
+ pile.appendChild(el("button",{cls:"s add",title:"enchainer une etape",
+  onclick:function(){c.actions.push({type:"none",valeur:""});render();}},
+  ["+ etape"]));
+ var c3=el("td",{},[]);c3.appendChild(pile);tr.appendChild(c3);
+ tr.appendChild(el("td",{cls:"use"},[el("button",{cls:"d s",
+  title:"supprimer cette combinaison",
+  onclick:function(){liste.splice(ci,1);render();}},["x"])]));
+ tb.appendChild(tr);}
+
+function tableauCombos(p){
+ // On ne cree PAS p.combos quand il manque : une liste vide veut dire
+ // "aucune combinaison" et effacerait celles d'usine. Elle n'apparait
+ // donc que si tu cliques sur le bouton.
+ var liste=p.combos||[];
+ var bloc=el("div",{cls:"combos"},[
+  el("h3",{},["Combinaisons - deux touches appuyees ensemble"])]);
+ if(!p.combos)bloc.appendChild(el("p",{cls:"hint"},
+  ["Cette sauvegarde est anterieure aux combinaisons : celles d'usine "+
+   "seront reprises. Ajoutes-en une ici pour decider toi-meme."]));
+ var tb=el("table",{},[el("tr",{},[el("th",{},["Touches"]),
+  el("th",{},["Libelle"]),el("th",{},["Action"]),el("th",{},[""])])]);
+ for(var i=0;i<liste.length;i++)ligneCombo(liste,i,tb);
+ bloc.appendChild(tb);
+ bloc.appendChild(el("button",{cls:"s add",onclick:function(){
+  if(!p.combos)p.combos=[];
+  p.combos.push({touches:[],label:"",actions:[]});render();}},
+  ["+ combinaison"]));
+ return bloc;}
+
 function render(){
  var zone=document.getElementById("profs");zone.innerHTML="";
  var mx=maxUse();
@@ -2803,7 +3428,7 @@ function render(){
    el("th",{},["Libelle"]),el("th",{},["Action"]),
    el("th",{},["Usage"])])]);
   for(var i=0;i<N;i++)ligne(p,i,tb,mx);
-  zone.appendChild(el("div",{cls:"card"},[head,tb]));
+  zone.appendChild(el("div",{cls:"card"},[head,tb,tableauCombos(p)]));
  });
  renderApps();
 }
@@ -3737,7 +4362,7 @@ def create_interface():
 
 ## device/display.py
 
-`502 lignes - sha256 7f977eaa772823dd`
+`534 lignes - sha256 1b958d46239896a1`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -3976,28 +4601,39 @@ class Display:
         o.hline(0, _SEPARATEUR_Y, 128, 1)
         self._dessiner_bas()
 
-    def _texte_double(self, texte):
-        """Ecrit un texte en police doublee, centre.
+    def _ecrire_grand(self, texte, y0, echelle):
+        """Ecrit un texte centre, en police 8x8 agrandie 'echelle' fois.
 
         MicroPython ne fournit qu'une police 8x8. Pour l'agrandir on dessine
         le texte dans une petite image en memoire, puis on recopie chaque
-        pixel sous forme d'un carre de 2x2 sur l'ecran.
+        pixel sous forme d'un carre de echelle x echelle sur l'ecran.
         """
         import framebuf
         o = self.oled
-        o.fill(0)
-        echelle = 2 if len(texte) <= 8 else 1
         largeur = len(texte) * 8
         tampon = framebuf.FrameBuffer(bytearray(128), 128, 8,
                                       framebuf.MONO_HLSB)
         tampon.text(texte, 0, 0, 1)
         x0 = max(0, (128 - largeur * echelle) // 2)
-        y0 = (64 - 8 * echelle) // 2
         for x in range(min(128, largeur)):
             for y in range(8):
                 if tampon.pixel(x, y):
                     o.fill_rect(x0 + x * echelle, y0 + y * echelle,
                                 echelle, echelle, 1)
+
+    def _texte_double(self, texte):
+        """Un texte seul, aussi gros que possible, au milieu de l'ecran."""
+        self.oled.fill(0)
+        echelle = 2 if len(texte) <= 8 else 1
+        self._ecrire_grand(texte, (64 - 8 * echelle) // 2, echelle)
+
+    def _deux_lignes(self, haut, bas):
+        """Le nom de la combinaison en gros, son libelle juste dessous."""
+        o = self.oled
+        o.fill(0)
+        echelle = 2 if len(haut) <= 8 else 1
+        self._ecrire_grand(haut, 24 - 4 * echelle, echelle)
+        o.text(bas, max(0, (128 - len(bas) * 8) // 2), 44, 1)
 
     # ==================================================================
     # Rafraichissements
@@ -4116,6 +4752,27 @@ class Display:
             else:
                 self.splash_until = None
                 self._vue_principale()
+            self.pending_page = 0
+        except Exception as exc:
+            self.disable(exc)
+
+    def flash(self, ligne1, ligne2, now):
+        """Prend l'ecran un instant : "B3+B4" en gros, le libelle dessous.
+
+        Une combinaison ne correspond a aucune ligne du tableau : le
+        surlignage habituel ne peut donc pas la montrer. On reutilise le
+        mecanisme du splash de profil - tick() remet la vue normale tout
+        seul a l'echeance, sans rien bloquer dans la boucle principale.
+        """
+        self.reveiller(now)
+        if not self.oled:
+            return
+        # Sinon on retrouverait, au retour, la touche surlignee par l'appui
+        # qui a servi a former la combinaison : trompeur.
+        self.surbrillance = -1
+        try:
+            self._deux_lignes(str(ligne1)[:16], str(ligne2)[:16])
+            self.splash_until = ticks_add(now, C.COMBO_FLASH_MS)
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)

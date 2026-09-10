@@ -49,6 +49,10 @@ FORME DU FICHIER
                         {"type": "pause",      "valeur": "500"},
                         {"type": "combo",      "valeur": "CTRL+S"}]},
             ...
+          ],
+          "combos": [
+            {"touches": [3, 4], "label": "VUE PREC.",
+             "actions": [{"type": "text_enter", "valeur": "MPVIEWPREV"}]}
           ]
         }
       },
@@ -68,6 +72,15 @@ Pour un "combo", la valeur s'ecrit avec des plus : "CTRL+SHIFT+ESC".
 Un "maintien" s'ecrit pareil, mais la touche reste ENFONCEE tant que tu
 gardes le doigt dessus : c'est ainsi qu'une touche du macropad devient une
 vraie touche Ctrl ou Maj.
+
+Chaque profil peut aussi porter des COMBINAISONS : deux touches appuyees
+en meme temps declenchent une macro a elles. Dans le fichier, elles
+s'ecrivent avec les numeros qu'on lit sur le pad - [3, 4] c'est B3 et B4 -
+et non avec les indices internes qui commencent a zero.
+
+Un profil ecrit AVANT cette version n'a pas de bloc "combos" : il recupere
+alors celles d'usine. Une liste "combos" presente mais vide veut dire "je
+n'en veux aucune", et elle est respectee.
 """
 
 import json
@@ -146,6 +159,67 @@ def action_depuis_json(genre, valeur):
 
 
 # =====================================================================
+# Les combinaisons de touches
+# =====================================================================
+def nom_combo(indices):
+    """(2, 3) -> "B3+B4" : le nom qu'on lit sur le pad.
+
+    combos.py a la meme fonction, volontairement : store.py doit rester
+    lisible sans le module de saisie, qui lui parle a l'horloge de la carte.
+    """
+    return "+".join("B%d" % (int(index) + 1) for index in indices)
+
+
+def combos_vers_json(combos):
+    """Forme interne -> liste JSON, avec des numeros de touches lisibles.
+
+    En interne les touches sont numerotees a partir de zero, comme partout
+    ailleurs en informatique. Dans le fichier et dans les pages web elles
+    portent le numero grave sur le pad. La conversion se fait ici, une
+    bonne fois pour toutes.
+    """
+    liste = []
+    for indices, label, actions in (combos or []):
+        liste.append({"touches": [int(index) + 1 for index in indices],
+                      "label": str(label),
+                      "actions": actions_vers_json(actions)})
+    return liste
+
+
+def combos_depuis_json(champ):
+    """Liste JSON -> forme interne. Leve une exception si c'est illisible.
+
+    On ne corrige rien ici : les doublons et les numeros farfelus sont
+    conserves tels quels pour que verifier() puisse les nommer dans un
+    message clair, plutot que de les faire disparaitre en silence.
+    """
+    combos = []
+    for entree in (champ or []):
+        if not isinstance(entree, dict):
+            raise ValueError("combinaison illisible : " + repr(entree))
+        touches = entree.get("touches") or []
+        if not isinstance(touches, (list, tuple)):
+            raise ValueError("combinaison : 'touches' n'est pas une liste")
+        indices = tuple(sorted(int(numero) - 1 for numero in touches))
+        combos.append((indices,
+                       str(entree.get("label", ""))[:P.COMBO_LABEL_MAX],
+                       actions_depuis_json(entree.get("actions"))))
+    return combos
+
+
+def combos_usine():
+    """Copie des combinaisons d'usine, profil par profil."""
+    table = {}
+    # getattr : un profiles.py televerse depuis une version anterieure n'a
+    # pas de table COMBOS. Le firmware demarre quand meme, sans
+    # combinaisons, plutot que de refuser de booter.
+    for nom, liste in getattr(P, "COMBOS", {}).items():
+        table[nom] = [(tuple(indices), label, list(actions))
+                      for indices, label, actions in liste]
+    return table
+
+
+# =====================================================================
 # Les couleurs des LED RGB
 # =====================================================================
 # Dans le fichier et dans les pages web, une couleur s'ecrit comme en
@@ -183,7 +257,56 @@ def couleur_usine(nom):
 # =====================================================================
 # Verification
 # =====================================================================
-def verifier(profils, ordre, nb_touches):
+def verifier_combos(combos, profils, nb_touches):
+    """Verifie les combinaisons d'un profil. Retourne la liste des problemes."""
+    problemes = []
+    for nom, liste in (combos or {}).items():
+        if nom not in profils:
+            problemes.append("combinaisons : le profil '%s' n'existe pas" % nom)
+        deja = {}
+        for indices, label, actions in (liste or []):
+            touches = nom_combo(indices)
+            if len(set(indices)) != len(indices):
+                problemes.append("%s %s : la meme touche est citee deux fois"
+                                 % (nom, touches))
+                continue
+            if len(indices) < 2:
+                # Une "combinaison" d'une seule touche rendrait cette touche
+                # inutilisable seule : ce n'en est pas une.
+                problemes.append("%s %s : il faut au moins deux touches"
+                                 % (nom, touches))
+                continue
+            hors = [index for index in indices if not 0 <= index < nb_touches]
+            if hors:
+                problemes.append("%s %s : la touche B%d n'existe pas"
+                                 % (nom, touches, hors[0] + 1))
+                continue
+            cle = tuple(sorted(indices))
+            if cle in deja:
+                problemes.append("%s %s : deja prise par '%s'"
+                                 % (nom, touches, deja[cle]))
+                continue
+            deja[cle] = label
+            if len(label) > P.COMBO_LABEL_MAX:
+                problemes.append("%s %s : libelle '%s' depasse %d caracteres"
+                                 % (nom, touches, label, P.COMBO_LABEL_MAX))
+            for genre, _valeur in (actions or []):
+                if genre == "maintien":
+                    # Un maintien se relache quand SA touche se relache. Une
+                    # combinaison n'a pas de touche unique a surveiller : le
+                    # Ctrl resterait enfonce pour de bon. Interdit, donc.
+                    problemes.append("%s %s : un 'maintien' est impossible "
+                                     "dans une combinaison (la touche "
+                                     "resterait enfoncee)" % (nom, touches))
+                    break
+            try:
+                compile_actions(actions, C.KEYBOARD_LAYOUT)
+            except Exception as exc:
+                problemes.append("%s %s (%s) : %s" % (nom, touches, label, exc))
+    return problemes
+
+
+def verifier(profils, ordre, nb_touches, combos=None):
     """Retourne la liste des problemes. Liste vide = configuration saine."""
     problemes = []
 
@@ -218,6 +341,8 @@ def verifier(profils, ordre, nb_touches):
                 except Exception as exc:
                     problemes.append("%s B%d %s (%s) : %s"
                                      % (nom, index + 1, geste, label, exc))
+
+    problemes.extend(verifier_combos(combos, profils, nb_touches))
     return problemes
 
 
@@ -232,7 +357,7 @@ def defauts():
     apps = [tuple(a) for a in P.APPS]
     couleurs = dict((nom, couleur_usine(nom)) for nom in profils)
     return (profils, list(C.PROFILES_ORDER), dict(P.TITLES), couleurs,
-            apps, tuple(P.APPS_REPLI))
+            combos_usine(), apps, tuple(P.APPS_REPLI))
 
 
 # =====================================================================
@@ -240,7 +365,8 @@ def defauts():
 # =====================================================================
 def vers_json(nb_touches, stats=None):
     """Configuration complete, prete a etre envoyee a une page web."""
-    profils, ordre, titres, couleurs, apps, repli, origine = charger(nb_touches)
+    (profils, ordre, titres, couleurs, combos,
+     apps, repli, origine) = charger(nb_touches)
     blocs = {}
     for nom, touches in profils.items():
         liste = []
@@ -256,6 +382,7 @@ def vers_json(nb_touches, stats=None):
             "couleur": couleur_vers_texte(
                 couleurs.get(nom) or couleur_usine(nom)),
             "touches": liste,
+            "combos": combos_vers_json(combos.get(nom)),
         }
 
     return {
@@ -275,7 +402,8 @@ def vers_json(nb_touches, stats=None):
 def depuis_json(data, nb_touches):
     """Forme web -> forme interne. Leve une exception si c'est illisible."""
     ordre = [str(n) for n in data["ordre"]]
-    profils, titres, couleurs = {}, {}, {}
+    profils, titres, couleurs, combos = {}, {}, {}, {}
+    usine = combos_usine()
     for nom, bloc in data["profils"].items():
         touches = []
         for entree in bloc["touches"][:nb_touches]:
@@ -299,6 +427,13 @@ def depuis_json(data, nb_touches):
         titres[str(nom)] = str(bloc.get("titre", nom))
         couleurs[str(nom)] = couleur_depuis_texte(bloc.get("couleur"),
                                                   couleur_usine(str(nom)))
+        if "combos" in bloc:
+            combos[str(nom)] = combos_depuis_json(bloc.get("combos"))
+        else:
+            # Fichier ecrit avant les combinaisons : on remet celles d'usine
+            # plutot que de les faire disparaitre a la premiere mise a jour.
+            # Une liste presente mais VIDE, elle, est respectee.
+            combos[str(nom)] = usine.get(str(nom), [])
 
     bloc_apps = data.get("apps") or {}
     apps = []
@@ -310,14 +445,14 @@ def depuis_json(data, nb_touches):
     bloc_repli = bloc_apps.get("repli") or {}
     repli = (str(bloc_repli.get("profil", P.APPS_REPLI[0])).upper(),
              str(bloc_repli.get("abrege", P.APPS_REPLI[1]))[:7])
-    return profils, ordre, titres, couleurs, apps, repli
+    return profils, ordre, titres, couleurs, combos, apps, repli
 
 
 # =====================================================================
 # Lecture et ecriture du fichier
 # =====================================================================
 def charger(nb_touches):
-    """Retourne (profils, ordre, titres, couleurs, apps, repli, origine).
+    """Retourne (profils, ordre, titres, couleurs, combos, apps, repli, origine).
 
     origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire d'ou
     viennent les macros actives.
@@ -333,26 +468,27 @@ def charger(nb_touches):
         return defauts() + ("usine",)
 
     try:
-        profils, ordre, titres, couleurs, apps, repli = depuis_json(
-            data, nb_touches)
+        (profils, ordre, titres, couleurs, combos,
+         apps, repli) = depuis_json(data, nb_touches)
     except Exception as exc:
         print("[store] %s mal forme (%s), retour aux valeurs d'usine"
               % (C.PROFILES_FILE, exc))
         return defauts() + ("usine",)
 
-    problemes = verifier(profils, ordre, nb_touches)
+    problemes = verifier(profils, ordre, nb_touches, combos)
     if problemes:
         print("[store] %s refuse, retour aux valeurs d'usine :" % C.PROFILES_FILE)
         for probleme in problemes:
             print("   -", probleme)
         return defauts() + ("usine",)
 
-    return profils, ordre, titres, couleurs, apps, repli, "fichier"
+    return profils, ordre, titres, couleurs, combos, apps, repli, "fichier"
 
 
-def enregistrer(profils, ordre, titres, couleurs, apps, repli, nb_touches):
+def enregistrer(profils, ordre, titres, couleurs, combos, apps, repli,
+                nb_touches):
     """Verifie puis ecrit. Retourne (True, "") ou (False, raison)."""
-    problemes = verifier(profils, ordre, nb_touches)
+    problemes = verifier(profils, ordre, nb_touches, combos)
     if problemes:
         return False, " ; ".join(problemes)
 
@@ -369,6 +505,7 @@ def enregistrer(profils, ordre, titres, couleurs, apps, repli, nb_touches):
             "couleur": couleur_vers_texte(
                 (couleurs or {}).get(nom) or couleur_usine(nom)),
             "touches": liste,
+            "combos": combos_vers_json((combos or {}).get(nom)),
         }
 
     data = {"version": 2, "ordre": list(ordre), "profils": blocs,
@@ -396,11 +533,11 @@ def enregistrer(profils, ordre, titres, couleurs, apps, repli, nb_touches):
 def enregistrer_json(data, nb_touches):
     """Enregistre directement une configuration recue d'une page web."""
     try:
-        profils, ordre, titres, couleurs, apps, repli = depuis_json(
-            data, nb_touches)
+        (profils, ordre, titres, couleurs, combos,
+         apps, repli) = depuis_json(data, nb_touches)
     except Exception as exc:
         return False, "donnees illisibles : %s" % exc
-    return enregistrer(profils, ordre, titres, couleurs, apps, repli,
+    return enregistrer(profils, ordre, titres, couleurs, combos, apps, repli,
                        nb_touches)
 
 
