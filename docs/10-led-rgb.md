@@ -434,8 +434,33 @@ macropad de taper**.
 
 ## 10.7 Si ça ne marche pas
 
+**Regarde d'abord le REPL au démarrage.** Le firmware annonce ce qu'il
+fait des LED, en une ligne :
+
+```
+RGB : 6 LED sur GPIO16, ordre GRB, luminosite 40/255
+```
+
+ou bien :
+
+```
+RGB : desactive (RGB_ENABLED = False dans config.py)
+```
+
+Cette seconde ligne est la cause n° 1 d'un ruban qui reste noir, et elle
+n'a rien à voir avec ton câblage : **retéléverser le dossier `device/`
+écrase le `config.py` de la carte** et remet `RGB_ENABLED` — comme
+`HID_ENABLED` — à `False`. Vérification en deux secondes dans le REPL :
+
+```
+import config
+print(config.RGB_ENABLED, config.RGB_ORDRE, config.HID_ENABLED)
+```
+
 | Symptôme | Cause probable |
 |---|---|
+| `RGB : desactive` au démarrage | `RGB_ENABLED = False` : `config.py` a été écrasé par un téléversement |
+| Rien ne s'allume, et rien dans le REPL | `main.py` ne tourne pas : regarde s'il y a une erreur au démarrage |
 | Rien ne s'allume | GND pas commun ; ou ruban branché par DO au lieu de DIN |
 | `No module named 'neopixel'` | firmware MicroPython incomplet — reprends le binaire officiel |
 | Les rouges sortent verts | ordre des octets : mets `RGB_ORDRE = "RGB"` (ou `"BGR"`) dans `config.py` |

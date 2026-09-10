@@ -1304,6 +1304,31 @@ class LedsRgb(unittest.TestCase):
         objet.profil(C.RGB_COULEURS["CIVIL3D"]); objet.touche(0, 0); objet.tick(0)
         objet.close()          # rien ne doit lever
 
+    # --- ce que le REPL annonce au demarrage ----------------------------
+    def test_le_demarrage_annonce_l_etat_des_led(self):
+        """Un ruban noir sans un mot dans le REPL fait chercher la panne
+        dans le cablage alors que le firmware n'a jamais eu l'ordre de
+        l'allumer. C'est arrive."""
+        import contextlib, io as _io, rgb
+
+        with contextlib.redirect_stdout(_io.StringIO()) as sortie:
+            rgb.Rgb()
+        annonce = sortie.getvalue()
+        self.assertIn("RGB", annonce)
+        self.assertIn("6 LED", annonce)
+        self.assertIn("GPIO16", annonce)
+        self.assertIn("GRB", annonce)
+
+    def test_le_demarrage_dit_pourquoi_rien_ne_s_allume(self):
+        import contextlib, io as _io, rgb
+        self._regler(RGB_ENABLED=False)
+        with contextlib.redirect_stdout(_io.StringIO()) as sortie:
+            objet = rgb.Rgb()
+        self.assertFalse(objet.actif)
+        # Le message doit nommer le reglage a changer, pas juste dire non.
+        self.assertIn("RGB_ENABLED", sortie.getvalue())
+        self.assertIn("config.py", sortie.getvalue())
+
     # --- les couleurs --------------------------------------------------
     def test_chaque_profil_a_sa_couleur(self):
         objet = self._rgb()

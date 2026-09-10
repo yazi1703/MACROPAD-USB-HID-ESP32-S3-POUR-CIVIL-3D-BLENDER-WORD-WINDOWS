@@ -4164,7 +4164,7 @@ class Led:
 
 ## device/rgb.py
 
-`332 lignes - sha256 8f0ccc9c278280cd`
+`344 lignes - sha256 0e4d187687de6545`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -4288,10 +4288,22 @@ class Rgb:
         self._phase = 0            # ou on en est dans la respiration
         self._dernier = ticks_ms()
         if not getattr(C, "RGB_ENABLED", False):
+            # On le DIT. Un ruban qui reste noir sans un mot dans le REPL
+            # envoie chercher la panne dans le cablage alors que le
+            # firmware n'a simplement jamais eu l'ordre de l'allumer.
+            # C'est le meme piege que HID_ENABLED : reteleverser le
+            # dossier device ecrase config.py et remet les deux a False.
+            print("RGB : desactive (RGB_ENABLED = False dans config.py)")
             return
         try:
             self._demarrer()
             self.actif = True
+            print("RGB : %d LED sur GPIO%s, ordre %s, luminosite %d/255"
+                  % (self.nb,
+                     getattr(C, "RGB_PIN", "?") if self.type == "WS2812"
+                     else "%s/%s/%s" % (C.RGB_PIN_R, C.RGB_PIN_V, C.RGB_PIN_B),
+                     getattr(C, "RGB_ORDRE", "GRB"),
+                     getattr(C, "RGB_LUMINOSITE", 40)))
         except Exception as exc:
             # Une LED absente ou mal cablee ne doit JAMAIS empecher le
             # macropad de taper. Meme regle que pour l'ecran.
