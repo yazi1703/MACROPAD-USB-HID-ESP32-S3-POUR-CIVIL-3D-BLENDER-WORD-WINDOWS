@@ -145,6 +145,10 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 ```
 [ ] docs/10-led-rgb.md lu EN ENTIER avant de brancher
 [ ] type identifié : WS2812 (3 fils, DIN) ou RGB ordinaire (4 pattes)
+[ ] SIX LED coupées du ruban — le rouleau entier tirerait 18 A, jamais sur la carte
+[ ] coupé au MILIEU des pastilles, pas au ras d'une LED
+[ ] sens respecté : on entre par DIN, dans le sens des flèches
+[ ] soudures faites en moins de 5 s par pastille, fer à 300-320 °C
 [ ] alimentées en 5 V (VBUS), PAS en 3,3 V
 [ ] GND commun avec la carte
 [ ] résistance 330 à 470 Ω en série sur le fil de données, côté LED
@@ -152,7 +156,7 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 [ ] RGB_LUMINOSITE laissé à 40 (ou consommation mesurée si tu l'augmentes)
 [ ] essai 0 : la LED déjà soudée sur la carte (GPIO48) répond au REPL
 [ ] essai 1 : une LED câblée s'allume
-[ ] essai 2 : les six s'allument une par une
+[ ] essai 2 : diag.rgb() — les six s'allument une par une, et tu les as comptées
 [ ] essai 3 : RGB_ENABLED = True, chaque profil a sa couleur
 [ ] la touche pressée passe au blanc puis revient
 [ ] les couleurs sont justes (sinon : RGB_ORDRE)

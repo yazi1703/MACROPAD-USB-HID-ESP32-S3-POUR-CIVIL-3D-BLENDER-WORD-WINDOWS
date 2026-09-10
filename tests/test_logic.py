@@ -1495,6 +1495,78 @@ class LedsRgb(unittest.TestCase):
         self.assertEqual(objet.materiel.pixels[0], (0, 0, 0))
         self.assertFalse(objet.actif)
 
+    # --- le test de cablage du REPL --------------------------------------
+    def test_diag_rgb_parcourt_toutes_les_led(self):
+        """diag.rgb() sert a compter les LED qui repondent vraiment."""
+        import diag
+        vues = []
+        module = sys.modules['neopixel']
+        original = module.NeoPixel.write
+
+        def espion(self):
+            vues.append(list(self.pixels))
+            original(self)
+        module.NeoPixel.write = espion
+        try:
+            diag.rgb(nb=4, broche=16, luminosite=10)
+        finally:
+            module.NeoPixel.write = original
+
+        # Chaque LED a ete allumee seule, dans l'ordre.
+        for index in range(4):
+            attendu = [(0, 0, 0)] * 4
+            attendu[index] = (10, 10, 10)
+            self.assertIn(attendu, vues, "la LED %d n'a pas ete testee"
+                          % (index + 1))
+        # Et tout est eteint a la fin : on n'abandonne jamais les LED
+        # allumees apres un diagnostic.
+        self.assertEqual(vues[-1], [(0, 0, 0)] * 4)
+
+    def test_diag_rgb_respecte_l_ordre_des_octets(self):
+        # Quand il annonce ROUGE, c'est bien l'octet rouge qui est mis a
+        # l'endroit ou la puce l'attend - sinon le test induirait en
+        # erreur celui qui regle justement RGB_ORDRE.
+        import diag
+        self._regler(RGB_ORDRE="GRB")
+        vues = []
+        module = sys.modules['neopixel']
+        original = module.NeoPixel.write
+
+        def espion(self):
+            vues.append(self.pixels[0])
+            original(self)
+        module.NeoPixel.write = espion
+        try:
+            diag.rgb(nb=1, broche=16, luminosite=10)
+        finally:
+            module.NeoPixel.write = original
+        # GRB : le rouge est le DEUXIEME octet.
+        self.assertIn((0, 10, 0), vues)     # ROUGE annonce
+        self.assertIn((10, 0, 0), vues)     # VERT annonce
+        self.assertIn((0, 0, 10), vues)     # BLEU annonce
+
+    def test_diag_rgb_eteint_tout_meme_si_on_l_interrompt(self):
+        import diag
+        module = sys.modules['neopixel']
+        original = module.NeoPixel.write
+        compteur = [0]
+
+        def espion(self):
+            compteur[0] += 1
+            if compteur[0] == 3:
+                raise KeyboardInterrupt()
+            original(self)
+        module.NeoPixel.write = espion
+        try:
+            diag.rgb(nb=4, broche=16, luminosite=10)   # ne doit rien lever
+        finally:
+            module.NeoPixel.write = original
+
+    def test_diag_rgb_sans_neopixel_ne_plante_pas(self):
+        import diag
+        del sys.modules['neopixel']
+        diag.rgb(nb=4, broche=16)      # affiche un message, c'est tout
+
     # --- le montage a une seule LED RGB ---------------------------------
     def test_montage_pwm_anode_commune(self):
         self._regler(RGB_TYPE="PWM", RGB_PIN_R=16, RGB_PIN_V=17,

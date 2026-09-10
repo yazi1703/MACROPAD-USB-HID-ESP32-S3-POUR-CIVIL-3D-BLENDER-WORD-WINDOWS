@@ -4457,7 +4457,7 @@ def limiter(couleur):
 
 ## device/diag.py
 
-`143 lignes - sha256 d56ea161612233bc`
+`233 lignes - sha256 8a39b63df01272bb`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -4486,6 +4486,7 @@ Test par test :
 
     >>> diag.keymap()               # vérifie l'AZERTY, sans matériel
     >>> diag.keymap("_ISOLATEOBJECTS")
+    >>> diag.rgb()                  # câblage des LED RGB, une par une
 
 Pour arrêter avant la fin : Ctrl-C, ou le bouton STOP de Thonny.
 """
@@ -4515,6 +4516,95 @@ def keymap(text="_MATCHPROP"):
                                   character_keys(char, C.KEYBOARD_LAYOUT, True)))
     print("Rappel : en AZERTY le '_' doit sortir en touche 37 sans Maj.")
     return True
+
+
+def rgb(nb=None, broche=None, luminosite=12):
+    """Teste le cablage des LED RGB, une LED a la fois.
+
+    A faire APRES avoir soude et AVANT de passer RGB_ENABLED a True. Ce
+    test n'utilise pas rgb.py : il parle directement aux LED, pour que ce
+    soit bien TON cablage qui soit teste, et pas la configuration.
+
+        >>> diag.rgb()          # utilise RGB_PIN et RGB_COUNT
+        >>> diag.rgb(6, 16)     # six LED sur GPIO16
+
+    Ce que tu dois voir, dans l'ordre :
+
+      1. les LED s'allument UNE PAR UNE, de la premiere a la derniere.
+         Compte-les : si tu en as soude six et qu'il s'en allume quatre,
+         la suite du ruban ne recoit pas les donnees ;
+      2. puis ROUGE, VERT, BLEU sur toutes. Si les couleurs ne
+         correspondent pas aux noms annonces, note l'ordre reel et
+         corrige RGB_ORDRE dans config.py ;
+      3. enfin une montee en luminosite. Si la carte redemarre pendant
+         cette phase, c'est le courant : condensateur manquant, ou
+         alimentation trop faible.
+
+    La luminosite est volontairement basse (12 sur 255) : on teste un
+    cablage, pas un eclairage. Ne la monte pas pour "mieux voir".
+    """
+    from machine import Pin
+    try:
+        from neopixel import NeoPixel
+    except ImportError:
+        print("neopixel absent de ce firmware MicroPython.")
+        return
+
+    if nb is None:
+        nb = getattr(C, "RGB_COUNT", 6)
+    if broche is None:
+        broche = getattr(C, "RGB_PIN", 16)
+    print("-" * 46)
+    print("TEST RGB : %d LED sur GPIO%d" % (nb, broche))
+    print("Luminosite de test :", luminosite, "sur 255")
+    print("-" * 46)
+
+    bande = NeoPixel(Pin(broche, Pin.OUT), nb)
+
+    def tout(couleur):
+        for index in range(nb):
+            bande[index] = couleur
+        bande.write()
+
+    try:
+        # 1. Une par une : on compte, et on verifie que la chaine passe.
+        print("1. Chenillard : compte les LED qui s'allument")
+        for index in range(nb):
+            tout((0, 0, 0))
+            bande[index] = (luminosite, luminosite, luminosite)
+            bande.write()
+            print("   LED %d" % (index + 1))
+            sleep_ms(500)
+
+        # 2. Les trois couleurs, pour verifier l'ordre des octets.
+        print("2. Couleurs : annonce -> ce que tu dois voir")
+        ordre = getattr(C, "RGB_ORDRE", "GRB")
+        for nom, valeurs in (("ROUGE", {"R": luminosite}),
+                             ("VERT", {"G": luminosite}),
+                             ("BLEU", {"B": luminosite})):
+            couleur = tuple(valeurs.get(lettre, 0) for lettre in ordre)
+            print("   %s   (RGB_ORDRE = %s)" % (nom, ordre))
+            tout(couleur)
+            sleep_ms(1200)
+
+        # 3. Montee en luminosite : c'est ici que le courant se voit.
+        print("3. Montee en luminosite - la carte doit rester stable")
+        for niveau in range(0, 41, 4):
+            tout((niveau, niveau, niveau))
+            sleep_ms(200)
+        print("   (on redescend)")
+        tout((0, 0, 0))
+        print("-" * 46)
+        print("Si tout est bon : RGB_ENABLED = True dans config.py.")
+        print("Si les couleurs sont permutees : change RGB_ORDRE.")
+    except KeyboardInterrupt:
+        print("\nArret demande.")
+    finally:
+        # On n'abandonne JAMAIS les LED allumees.
+        try:
+            tout((0, 0, 0))
+        except Exception:
+            pass
 
 
 def run(seconds=20, led_test=False):

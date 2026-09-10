@@ -57,6 +57,81 @@ série sur le 5 V, en blanc sur toutes les touches.
 
 ---
 
+## 10.2 bis Ton ruban : WS2812B 5050, 5 m, 60 LED/m
+
+C'est exactement ce qu'il faut — mais **il y a 300 LED sur ce rouleau**, et
+c'est la seule chose à ne pas oublier :
+
+```
+300 LED × 60 mA = 18 AMPÈRES en blanc plein
+```
+
+Dix-huit ampères. Un port USB en fournit un demi. **Ne branche jamais le
+rouleau entier sur la carte** : au mieux la carte redémarre aussitôt, au
+pire tu chauffes les pistes du ruban. Ce rouleau est prévu pour une
+alimentation dédiée de plusieurs ampères, pas pour un macropad.
+
+**Tu vas en couper six.** Six LED, à la luminosité livrée, tirent environ
+56 mA : c'est le bon ordre de grandeur pour l'USB.
+
+### Où couper
+
+Entre chaque LED, le ruban porte une **ligne de coupe** : deux paires de
+pastilles cuivrées et souvent un petit ciseau imprimé.
+
+```
+   ┌───────┬───────┬───────┬───────┐
+   │  LED  ┃  LED  ┃  LED  ┃  LED  │      ┃ = ligne de coupe
+   └───────┴───────┴───────┴───────┘          (coupe au MILIEU des
+        ──────────►  sens des flèches          pastilles)
+```
+
+**Coupe au milieu des pastilles**, pas au ras d'une LED : les deux
+morceaux gardent ainsi de quoi souder. Et **respecte le sens des
+flèches** — on entre toujours par **DIN**, jamais par DO. Une chaîne
+branchée à l'envers ne s'allume pas du tout, sans autre symptôme.
+
+### Le petit décalage à connaître
+
+À 60 LED/m, il y a une LED **tous les 16,7 mm**. Des switches mécaniques
+sont espacés de **19,05 mm**. Sur six touches, l'écart s'accumule :
+
+```
+6 LED en ruban continu : 5 × 16,7 = 83,5 mm
+6 touches               : 5 × 19,05 = 95,3 mm
+                          ──────────────────
+                          près de 12 mm d'écart
+```
+
+Deux façons de faire, et le choix t'appartient :
+
+* **ruban continu, tel quel** — environ 2 mm de décalage par touche. Sous
+  un diffuseur, ça ne se voit pas ; c'est de loin le plus simple ;
+* **une LED par touche, séparées** — tu coupes les six LED une par une et
+  tu les relies par trois fils courts (5V, DIN→DO, GND), à l'espacement
+  exact de tes touches. Plus long, mais chaque LED est pile sous sa
+  touche. C'est ce que font les claviers du commerce.
+
+### Souder du 5050 sans le tuer
+
+* **étame d'abord les pastilles**, ruban posé à plat, puis pose le fil
+  déjà étamé dessus : le contact dure une seconde au lieu de cinq ;
+* **5 secondes maximum** par pastille. La puce est dans le boîtier de la
+  LED, à deux millimètres : c'est elle qui meurt en premier, et ça ne se
+  voit qu'à l'allumage ;
+* fer à **300-320 °C**, pas plus. Un fer trop froid oblige à insister,
+  c'est pire ;
+* **retire le film adhésif au dos avant de souder** l'endroit concerné :
+  il fond et colle au fer.
+
+### Le reste du rouleau
+
+Garde-le. Mais retiens qu'il ne se branche **jamais** sur la carte :
+il lui faut une alimentation 5 V de plusieurs ampères. C'est un autre
+projet.
+
+---
+
 ## 10.3 Câblage WS2812
 
 ```
@@ -170,13 +245,29 @@ Si elle s'allume, tu sais que `neopixel` fonctionne sur ta carte.
 Si rien ne s'allume : vérifie le GND commun, puis le sens du ruban (les
 flèches vont **du DIN vers la suite**, on entre toujours par DIN).
 
-**Essai 2 — les six.**
+**Essai 2 — les six, avec le test intégré.** Le firmware a un
+diagnostic dédié, à lancer dans le REPL de Thonny :
 
 ```python
-np = NeoPixel(Pin(16), 6)
-for i in range(6):
-    np[i] = (0, 10, 0); np.write()     # une par une, en rouge faible
+>>> import diag
+>>> diag.rgb()
 ```
+
+Il fait trois choses, dans cet ordre :
+
+1. **un chenillard** — les LED s'allument une par une, et il annonce
+   chaque numéro. **Compte-les.** Si tu en as soudé six et qu'il s'en
+   allume quatre, la donnée ne passe plus après la quatrième : reprends
+   cette soudure ;
+2. **rouge, puis vert, puis bleu** sur toutes. S'il annonce ROUGE et que
+   tu vois du vert, note l'ordre réel et corrige `RGB_ORDRE` ;
+3. **une montée en luminosité.** C'est ici que le courant se voit : si la
+   carte redémarre pendant cette phase, c'est le condensateur qui manque
+   ou l'alimentation qui ne suit pas.
+
+Il éteint tout en partant, même si tu l'interromps par Ctrl-C, et il
+n'initialise jamais le clavier USB : impossible qu'il tape quoi que ce
+soit dans Thonny pendant que tu as les mains dans le montage.
 
 **Essai 3 — le firmware.** Dans `config.py`, sur la carte :
 
@@ -187,8 +278,12 @@ RGB_PIN = 16
 RGB_COUNT = 6
 ```
 
-RESET. Chaque profil doit prendre sa couleur, et la touche que tu presses
-passer au blanc un instant.
+RESET. Chaque profil doit prendre sa couleur, respirer doucement, et la
+touche que tu presses passer au blanc un instant.
+
+> **`RGB_ORDRE = "GRB"` est le bon réglage pour du WS2812B** : c'est
+> l'ordre que ces puces attendent. Ne le change que si `diag.rgb()` te
+> montre autre chose.
 
 ---
 
