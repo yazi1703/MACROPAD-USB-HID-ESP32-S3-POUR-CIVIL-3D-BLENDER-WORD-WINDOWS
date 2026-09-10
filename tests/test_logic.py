@@ -1235,6 +1235,7 @@ class LedsRgb(unittest.TestCase):
                 self.pin, self.n = pin, n
                 self.pixels = [(0, 0, 0)] * n
                 self.ecritures = 0
+                self.vues = []
 
             def __setitem__(self, index, valeur):
                 self.pixels[index] = valeur
@@ -1244,7 +1245,10 @@ class LedsRgb(unittest.TestCase):
 
             def write(self):
                 self.ecritures += 1
+                self.vues.append(tuple(self.pixels))
+                NeoPixel.derniere = self
 
+        NeoPixel.derniere = None
         module.NeoPixel = NeoPixel
         sys.modules['neopixel'] = module
 
@@ -1494,6 +1498,47 @@ class LedsRgb(unittest.TestCase):
         objet.close()
         self.assertEqual(objet.materiel.pixels[0], (0, 0, 0))
         self.assertFalse(objet.actif)
+
+    # --- la boucle complete, LED allumees --------------------------------
+    def test_la_boucle_principale_tourne_avec_les_led_actives(self):
+        """Tout le firmware, RGB_ENABLED = True, comme sur la carte.
+
+        C'est le seul test qui fait tourner main.run() avec les LED
+        reellement pilotees : rien ne sert de savoir que rgb.py fonctionne
+        seul si l'activer fait tomber la boucle principale.
+        """
+        import main, runtime, profiles as P
+        self._regler(RGB_RESPIRATION=True)
+        Pin.levels = {}
+        clock[0] = 0
+        transport = Transport()
+
+        def sommeil_simule(ms):
+            clock[0] += ms
+            # Un appui sur B3, puis un changement de profil, puis ESC.
+            Pin.levels[6] = 0 if 2600 <= clock[0] < 2660 else 1
+            Pin.levels[11] = 1 if 2700 <= clock[0] < 2780 else 0
+            Pin.levels[14] = 0 if 2900 <= clock[0] < 2960 else 1
+            if clock[0] >= 3400:
+                raise KeyboardInterrupt()
+
+        with patch.object(runtime, 'interface', transport), \
+             patch.object(runtime, 'safe_mode', False), \
+             patch.object(main, 'sleep_ms', sommeil_simule):
+            with self.assertRaises(KeyboardInterrupt):
+                main.run()
+
+        # Le ruban a bien ete pilote pendant toute la boucle.
+        bande = sys.modules['neopixel'].NeoPixel.derniere
+        self.assertIsNotNone(bande, "aucune LED n'a ete initialisee")
+        self.assertGreater(bande.ecritures, 10,
+                           "le ruban n'a pas ete rafraichi")
+        # Il a pris la couleur du profil de depart, puis celle du suivant.
+        self.assertGreater(len(set(bande.vues)), 1,
+                           "la couleur n'a jamais change")
+        # Et il est ETEINT a l'arret : main.run() passe par rgb.close().
+        self.assertEqual(bande.pixels[0], (0, 0, 0),
+                         "les LED sont restees allumees apres l'arret")
 
     # --- le test de cablage du REPL --------------------------------------
     def test_diag_rgb_parcourt_toutes_les_led(self):
