@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 170 tests PC réussis ; 22 fichiers Python compilés avec succès.**
+**Résultat : 178 tests PC réussis ; 22 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 170 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  145 pour le firmware, 25 pour le compagnon Windows.
+- 178 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  153 pour le firmware, 25 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -27,6 +27,8 @@
 **La page de configuration** (`PageDeConfigurationIntacte`, 10 tests). La page servie par `device/portal.py` et celle servie par `pc/macropad_auto.py` sont comparees a leur source unique `tools/page_config.html` ; le JavaScript est verifie syntaxiquement par `node --check` ; enfin il est **execute hors navigateur** avec un DOM minimal (`tests/page_smoke.js`), une fois avec les valeurs d'usine — on compte alors les cartes de profil, les listes deroulantes et les lignes de logiciels produites — une fois avec une configuration vide, pour verifier que la page explique pourquoi elle n'a rien a montrer, et une fois en TAPANT dans les champs pour verifier que chaque saisie arrive bien sur la touche voulue - et nulle part ailleurs - dans ce qui part vers le macropad. La capture de raccourci et la restauration d'une sauvegarde sont exercees de la meme facon : on fabrique de faux evenements clavier et on verifie les noms produits - dont AltGr, qui se presente comme Ctrl+Alt sous Windows et ne doit pas ressortir en CTRL+ALT -, puis on passe CHAQUE nom du tableau de la page dans layouts.key_code du firmware. Une page qui ecrirait DELETE la ou le firmware attend SUPPR fabriquerait des macros refusees a l'enregistrement sans que rien n'explique pourquoi ; ce test l'interdit. La restauration est verifiee sur une sauvegarde valable, sur un fichier illisible et sur un JSON etranger.
 
 Ces tests sont nes du bug de la correction 11 : un antislash mal interprete cassait tout le script, et la page restait vide sans le moindre message.
+
+**Les suites d'etapes et les pauses** (`SuitesDEtapesEtPauses`, 8 tests). La compilation d'une pause en marqueur, le refus d'une duree aberrante AVANT la premiere frappe, et surtout le deroulement : la suite d'une macro attend bien, rien n'est envoye pendant ce temps, le garde-fou ne se declenche pas sur une pause de trois secondes - une attente voulue est un progres, pas un blocage - et ESC interrompt une macro en pleine pause. Puis l'aller-retour par la page web, le refus d'une pause au-dela du plafond, et la relecture d'un ancien profils.json qui ne rangeait qu'une action par geste.
 
 **La touche modificatrice** (`ToucheModificatrice`, 14 tests). La machine a etats (appui maintenu, appui bref puis maintenu, second appui hors delai, touche a un seul maintien) ; le modificateur reste present dans TOUS les rapports envoyes, y compris pendant qu'une macro se deroule par-dessus ; le relachement le libere ; et surtout les quatre filets contre un modificateur coince cote PC : ESC, changement de profil, deconnexion USB, macro intapable refusee sans rien envoyer.
 
@@ -240,6 +242,16 @@ test_enregistrement_valide ... ok
 test_page_html_servie ... ok
 test_retour_usine ... ok
 
+--- SuitesDEtapesEtPauses
+test_esc_interrompt_une_macro_en_pleine_pause ... ok
+test_l_ancienne_forme_a_une_seule_action_se_relit ... ok
+test_la_pause_retarde_la_suite_sans_bloquer ... ok
+test_la_pause_se_compile_en_marqueur ... ok
+test_une_longue_pause_ne_declenche_pas_le_garde_fou ... ok
+test_une_pause_aberrante_est_refusee_avant_la_premiere_frappe ... ok
+test_une_pause_trop_longue_est_refusee_a_l_enregistrement ... ok
+test_une_suite_survit_a_l_enregistrement ... ok
+
 --- ToucheModificatrice
 test_aller_retour_par_la_page_web ... ok
 test_appui_maintenu_donne_le_premier_modificateur ... ok
@@ -271,7 +283,7 @@ test_toutes_les_macros_usine_sont_tapables ... ok
 
 --- ValeursUsineSansPiege
 test_aller_retour_complet_sans_perte ... ok
-test_aucune_sequence_dans_les_valeurs_usine ... ok
+test_les_suites_d_actions_traversent_la_page_web ... ok
 
 --- DemarrageAutomatiqueWindows
 test_apostrophes_doublees_pas_les_antislash ... ok
@@ -309,7 +321,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 170 tests
+Ran 178 tests
 
 OK
 ```

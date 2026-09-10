@@ -39,7 +39,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`312 lignes - sha256 11be7f8df615035d`
+`318 lignes - sha256 008661eb6dfbcc1b`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -321,6 +321,12 @@ KEY_GAP_MS = 12
 
 # Si plus rien n'avance pendant ce délai alors qu'une macro est en cours,
 # on considère l'USB bloqué : tout est relâché et les macros s'arrêtent.
+# Duree maximale d'une pause dans une macro. Une macro qui attendrait
+# trente secondes donnerait l'impression que le macropad est fige, alors
+# qu'il tourne parfaitement : on plafonne, et l'enregistrement refuse
+# au-dela.
+PAUSE_MAX_MS = 5000
+
 HID_TIMEOUT_MS = 1000
 
 # Nombre maximal de macros en attente. Au-delà, les appuis sont ignorés
@@ -1547,7 +1553,7 @@ def _est_maintien(actions):
 
 ## device/layouts.py
 
-`335 lignes - sha256 9aa1e8c9e849a622`
+`355 lignes - sha256 f49425de3d954ee7`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1631,6 +1637,11 @@ K_NON_US = 100      # la "102e touche" : le < > à gauche du W sur les claviers 
 
 # Touches qui sont au même endroit sur TOUS les claviers du monde.
 # Elles n'ont donc pas besoin d'être traduites.
+# Marqueur d'une temporisation dans une macro. Ce n'est pas une frappe :
+# hid_keyboard.py le reconnait et attend, sans rien envoyer et SANS RIEN
+# BLOQUER - la boucle principale continue de tourner pendant ce temps.
+PAUSE = "pause"
+
 SPECIAL = {
     "CTRL": MOD_CTRL, "CONTROL": MOD_CTRL,
     "SHIFT": MOD_SHIFT, "MAJ": MOD_SHIFT,
@@ -1877,6 +1888,21 @@ def compile_actions(actions, layout, caps_lock=False):
             if sum(1 for code in codes if code >= 0) > 6:
                 raise ValueError("Plus de six touches dans une combinaison")
             result.append(codes)
+        elif kind == "pause":
+            # Une pause dans une macro : le temps que le logiciel ouvre sa
+            # boite de dialogue, par exemple. On la verifie ICI, comme les
+            # touches : une valeur aberrante est refusee avant la premiere
+            # frappe, pas au milieu de la macro.
+            try:
+                millisecondes = int(value)
+            except (TypeError, ValueError):
+                raise ValueError("Pause illisible : " + repr(value))
+            if millisecondes < 0:
+                raise ValueError("Pause negative : " + repr(value))
+            if millisecondes > C.PAUSE_MAX_MS:
+                raise ValueError("Pause de %d ms : le maximum est %d"
+                                 % (millisecondes, C.PAUSE_MAX_MS))
+            result.append((PAUSE, millisecondes))
         elif kind in ("text", "text_enter"):
             result.extend(character_keys(char, layout, caps_lock)
                           for char in value)
@@ -1891,7 +1917,7 @@ def compile_actions(actions, layout, caps_lock=False):
 
 ## device/store.py
 
-`374 lignes - sha256 e4c0a8b55ab817ea`
+`414 lignes - sha256 ba99a3898d71f075`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1939,9 +1965,11 @@ FORME DU FICHIER
           "couleur": "#00a0ff",
           "touches": [
             {"label": "MATCH",
-             "court":  {"type": "text_enter", "valeur": "_MATCHPROP"},
-             "long":   {"type": "none", "valeur": ""},
-             "double": {"type": "none", "valeur": ""}},
+             "court":  [{"type": "text_enter", "valeur": "_MATCHPROP"}],
+             "long":   [],
+             "double": [{"type": "text_enter", "valeur": "_PURGE"},
+                        {"type": "pause",      "valeur": "500"},
+                        {"type": "combo",      "valeur": "CTRL+S"}]},
             ...
           ]
         }
@@ -1952,7 +1980,12 @@ FORME DU FICHIER
       }
     }
 
-Le "type" vaut "key", "combo", "maintien", "text", "text_enter" ou "none".
+Chaque geste est une LISTE d'etapes : un appui peut taper une commande,
+attendre, puis valider. Une seule etape reste le cas courant.
+
+Le "type" vaut "key", "combo", "maintien", "pause", "text", "text_enter"
+ou "none". Une "pause" attend le nombre de millisecondes indique, sans
+rien bloquer.
 Pour un "combo", la valeur s'ecrit avec des plus : "CTRL+SHIFT+ESC".
 Un "maintien" s'ecrit pareil, mais la touche reste ENFONCEE tant que tu
 gardes le doigt dessus : c'est ainsi qu'une touche du macropad devient une
@@ -1964,7 +1997,7 @@ import config as C
 import profiles as P
 from layouts import compile_actions
 
-TYPES = ("key", "combo", "maintien", "text", "text_enter", "none")
+TYPES = ("key", "combo", "maintien", "pause", "text", "text_enter", "none")
 
 
 # =====================================================================
@@ -1981,6 +2014,39 @@ def action_vers_json(actions):
     return genre, str(valeur)
 
 
+def actions_vers_json(actions):
+    """Forme interne -> LISTE de {"type", "valeur"} pour les formulaires.
+
+    Un geste peut enchainer plusieurs frappes : taper une commande,
+    attendre que la boite de dialogue s'ouvre, puis valider. Chaque etape
+    est une entree de cette liste.
+    """
+    liste = []
+    for action in (actions or []):
+        genre, valeur = action_vers_json([action])
+        liste.append({"type": genre, "valeur": valeur})
+    return liste
+
+
+def actions_depuis_json(champ):
+    """Forme web -> forme interne. Accepte une liste OU une seule action.
+
+    L'ancienne forme - un seul dictionnaire par geste - reste acceptee :
+    un profils.json ecrit avant les sequences se relit sans rien perdre.
+    """
+    if not champ:
+        return []
+    if isinstance(champ, dict):
+        champ = [champ]
+    actions = []
+    for etape in champ:
+        if not isinstance(etape, dict):
+            raise ValueError("etape illisible : " + repr(etape))
+        actions.extend(action_depuis_json(etape.get("type", "none"),
+                                          etape.get("valeur", "")))
+    return actions
+
+
 def action_depuis_json(genre, valeur):
     """(type, valeur texte) -> forme interne."""
     if genre == "none" or (genre in ("text", "text_enter") and not valeur):
@@ -1990,6 +2056,10 @@ def action_depuis_json(genre, valeur):
         if not touches:
             raise ValueError("combinaison vide")
         return [(genre, touches)]
+    if genre == "pause":
+        if not str(valeur).strip():
+            return []
+        return [("pause", str(valeur).strip())]
     if genre in ("key", "text", "text_enter"):
         if not str(valeur).strip():
             return []
@@ -2099,8 +2169,7 @@ def vers_json(nb_touches, stats=None):
         for index, (label, gestes) in enumerate(touches):
             entree = {"label": label}
             for geste in P.GESTES:
-                genre, valeur = action_vers_json((gestes or {}).get(geste))
-                entree[geste] = {"type": genre, "valeur": valeur}
+                entree[geste] = actions_vers_json((gestes or {}).get(geste))
             if stats is not None:
                 entree["usages"] = stats.pour(nom)[index]
             liste.append(entree)
@@ -2142,9 +2211,7 @@ def depuis_json(data, nb_touches):
                 entree[P.COURT] = {"type": entree.get("type", "none"),
                                    "valeur": entree.get("valeur", "")}
             for geste in P.GESTES:
-                champ = entree.get(geste) or {}
-                actions = action_depuis_json(champ.get("type", "none"),
-                                             champ.get("valeur", ""))
+                actions = actions_depuis_json(entree.get(geste))
                 if actions:
                     gestes[geste] = actions
             touches.append((str(entree.get("label", ""))[:P.LABEL_MAX], gestes))
@@ -2217,8 +2284,7 @@ def enregistrer(profils, ordre, titres, couleurs, apps, repli, nb_touches):
         for label, gestes in touches:
             entree = {"label": label}
             for geste in P.GESTES:
-                genre, valeur = action_vers_json((gestes or {}).get(geste))
-                entree[geste] = {"type": genre, "valeur": valeur}
+                entree[geste] = actions_vers_json((gestes or {}).get(geste))
             liste.append(entree)
         blocs[nom] = {
             "titre": titres.get(nom, nom),
@@ -2403,7 +2469,7 @@ class Stats:
 
 ## device/portal.py
 
-`565 lignes - sha256 076db9ea1e9f33af`
+`601 lignes - sha256 d79bce47b79a9779`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2481,6 +2547,9 @@ width:100%}
 input[type=color]{width:42px;flex:0 0 42px;padding:2px;height:33px;
 cursor:pointer}
 .val{display:flex;gap:5px;align-items:center}
+.pile{display:flex;flex-direction:column;gap:5px}
+.pile select{flex:0 0 138px}
+.pile .add{align-self:flex-start;padding:4px 9px;font-size:11px}
 .cap{flex:0 0 30px;padding:6px 0;font-size:14px;line-height:1}
 .cap.on{background:#3d7bfd;color:#fff}
 input:focus,select:focus{outline:0;border-color:#3d7bfd}
@@ -2522,6 +2591,10 @@ appui long et double appui.</p>
 LED RGB de ce profil. Comme le PC change de profil selon le logiciel au
 premier plan, <b>le macropad prend la couleur du logiciel</b> ou tu
 travailles, en respiration douce.</p>
+<p class=hint>Un geste peut <b>enchainer plusieurs etapes</b> :
+« + etape » ajoute une ligne. Utile quand un logiciel a besoin de
+respirer entre deux frappes — tape la commande, mets une
+<b>pause</b> de 500 ms, puis valide.</p>
 <p class=hint><b>maintenir</b> transforme la touche en vraie touche
 modificatrice : mets <b>CTRL</b> sur l'appui court et <b>MAJ</b> sur le
 double appui, et tu obtiens <i>appui maintenu = Ctrl</i>,
@@ -2553,7 +2626,8 @@ var N=6,GESTES=["court","long","double"];
 var LIB={court:"court",long:"long",double:"double"};
 var TYPES=[["none","inactive"],["key","touche"],["combo","combinaison"],
 ["maintien","maintenir (Ctrl, Maj...)"],
-["text","texte"],["text_enter","texte + Entree"]];
+["text","texte"],["text_enter","texte + Entree"],
+["pause","pause (millisecondes)"]];
 
 function el(tag,attrs,kids){var e=document.createElement(tag);
  for(var k in attrs||{}){if(k=="cls")e.className=attrs[k];
@@ -2658,11 +2732,32 @@ function vide(){
 // la variable k etait la MEME pour les six touches, si bien que tous les
 // champs finissaient par ecrire dans la derniere. Ici chaque appel a sa
 // propre variable k : chaque champ modifie bien sa touche.
+// Un geste est une SUITE d'etapes : taper une commande, attendre que la
+// boite de dialogue s'ouvre, valider. Une seule etape reste le cas
+// courant, et c'est ce qu'on affiche par defaut.
+function etapes(k,g){
+ if(!k[g]||!k[g].length)k[g]=[{type:"none",valeur:""}];
+ else if(!k[g].length&&k[g].type)k[g]=[k[g]];   // ancienne forme
+ return k[g];}
+
+function ligneEtape(k,g,i){
+ var e=k[g][i];
+ var l=el("div",{cls:"val"},[]);
+ l.appendChild(sel(e.type,function(v){e.type=v;}));
+ var champ=inp(e.valeur,60,function(v){e.valeur=v;});
+ if(e.type=="pause")champ.title="duree en millisecondes, 500 par exemple";
+ l.appendChild(champ);
+ if(e.type=="key"||e.type=="combo"||e.type=="maintien")
+  l.appendChild(capture(champ,function(v){e.valeur=v;}));
+ if(k[g].length>1)
+  l.appendChild(el("button",{cls:"d s cap",title:"retirer cette etape",
+   onclick:function(){k[g].splice(i,1);render();}},["\u00d7"]));
+ return l;}
+
 function ligne(p,i,tb,mx){
  if(!p.touches[i])p.touches[i]={label:"",usages:0};
  var k=p.touches[i];
  GESTES.forEach(function(g,gi){
-  if(!k[g])k[g]={type:"none",valeur:""};
   var tr=el("tr",{cls:gi==0?"sep":""},[]);
   if(gi==0)tr.appendChild(el("td",{cls:"k",rowspan:3},["B"+(i+1)]));
   tr.appendChild(el("td",{cls:"g"},[LIB[g]]));
@@ -2671,18 +2766,15 @@ function ligne(p,i,tb,mx){
    cl.appendChild(inp(k.label,6,function(v){k.label=v;}));
    tr.appendChild(cl);
   }
-  var ct=el("td",{cls:"ty"},[]);
-  ct.appendChild(sel(k[g].type,function(v){k[g].type=v;}));
-  tr.appendChild(ct);
-  var cv=el("td",{},[]);
-  var champ=inp(k[g].valeur,60,function(v){k[g].valeur=v;});
-  var boite=el("div",{cls:"val"},[champ]);
-  // Le bouton de capture n'a de sens que pour une touche, une
-  // combinaison ou un maintien - pas pour du texte.
-  if(k[g].type=="key"||k[g].type=="combo"||k[g].type=="maintien")
-   boite.appendChild(capture(champ,function(v){k[g].valeur=v;}));
-  cv.appendChild(boite);
-  tr.appendChild(cv);
+  var ca=el("td",{},[]);
+  var pile=el("div",{cls:"pile"},[]);
+  etapes(k,g).forEach(function(e,rang){
+   pile.appendChild(ligneEtape(k,g,rang));});
+  pile.appendChild(el("button",{cls:"s add",title:"enchainer une etape",
+   onclick:function(){k[g].push({type:"none",valeur:""});render();}},
+   ["+ etape"]));
+  ca.appendChild(pile);
+  tr.appendChild(ca);
   if(gi==0){
    var u=k.usages||0;
    var box=el("td",{cls:"use",rowspan:3},[String(u)]);
@@ -2708,7 +2800,7 @@ function render(){
   head.appendChild(el("button",{cls:"d s",onclick:function(){del(nom);}},
    ["Supprimer"]));
   var tb=el("table",{},[el("tr",{},[el("th",{},["#"]),el("th",{},["Geste"]),
-   el("th",{},["Libelle"]),el("th",{},["Type"]),el("th",{},["Valeur"]),
+   el("th",{},["Libelle"]),el("th",{},["Action"]),
    el("th",{},["Usage"])])]);
   for(var i=0;i<N;i++)ligne(p,i,tb,mx);
   zone.appendChild(el("div",{cls:"card"},[head,tb]));
@@ -2773,7 +2865,7 @@ function charger_sauvegarde(texte){
  catch(e){say("Fichier illisible : "+e,0);return false;}
  if(!d||!d.ordre||!d.ordre.length||!d.profils){
   say("Ce fichier n'est pas une sauvegarde du macropad.",0);return false;}
- D=d;N=d.touches||N;
+ D=normaliser(d);N=d.touches||N;
  if(!D.apps)D.apps={repli:{profil:"WINDOWS",abrege:"Win"},liste:[]};
  render();
  say("Sauvegarde chargee : "+D.ordre.length+" profils. Verifie, puis "+
@@ -2796,11 +2888,21 @@ function save(){fetch("/api/profils",{method:"POST",
  .then(function(r){say(r.ok?"Enregistre et applique.":"Refuse :\n"+r.raison,
   r.ok);if(r.ok)charger();})
  .catch(function(e){say("Erreur : "+e,0);});}
+// Une sauvegarde ou un fichier ecrit avant les suites d'etapes range un
+// SEUL objet par geste. On le remet en liste des la lecture : le reste de
+// la page n'a ainsi qu'une seule forme a connaitre.
+function normaliser(d){
+ for(var nom in (d.profils||{})){
+  ((d.profils[nom]||{}).touches||[]).forEach(function(k){
+   GESTES.forEach(function(g){
+    if(k[g]&&!(k[g] instanceof Array))k[g]=[k[g]];});});}
+ return d;}
+
 function charger(){fetch("/api/profils").then(function(r){return r.json();})
  .then(function(d){
   if(d.erreur)return say("Lecture impossible : "+d.erreur,0);
-  D=d;N=d.touches||6;if(!D.apps)D.apps={repli:{profil:"WINDOWS",abrege:"Win"},
-   liste:[]};
+  D=normaliser(d);N=d.touches||6;
+  if(!D.apps)D.apps={repli:{profil:"WINDOWS",abrege:"Win"},liste:[]};
   document.getElementById("src").textContent="source : "+(d.origine||"?");
   var tot=0;for(var n in D.profils)(D.profils[n].touches||[]).forEach(
    function(t){tot+=t.usages||0;});
@@ -3216,7 +3318,7 @@ class Link:
 
 ## device/hid_keyboard.py
 
-`393 lignes - sha256 10aa759f9f53fa01`
+`410 lignes - sha256 13031ed1b417628f`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -3278,7 +3380,7 @@ VOCABULAIRE DES VARIABLES
 
 from time import ticks_ms, ticks_diff, ticks_add, sleep_ms
 import config as C
-from layouts import compile_actions
+from layouts import compile_actions, PAUSE
 
 
 class HIDKeyboard:
@@ -3498,7 +3600,14 @@ class HIDKeyboard:
                     self.progress = now
                 return
 
-            if self.fault or ticks_diff(now, self.due) < 0:
+            if self.fault:
+                return
+            if ticks_diff(now, self.due) < 0:
+                # On attend VOLONTAIREMENT : espacement des frappes, ou
+                # pause demandee dans la macro. C'est du progres, pas un
+                # blocage - sans cette ligne, le garde-fou couperait toute
+                # macro contenant une pause de plus d'une seconde.
+                self.progress = now
                 return
 
             # Priorité n° 2 : démarrer la macro suivante.
@@ -3519,7 +3628,17 @@ class HIDKeyboard:
                 if self.position >= len(self.current):
                     self.phase = "idle"      # macro terminée
                     return
-                if self._send(self.current[self.position]):
+                frappe = self.current[self.position]
+                if frappe and frappe[0] == PAUSE:
+                    # Rien a envoyer : on note juste quand reprendre. La
+                    # boucle principale continue de lire les touches,
+                    # d'animer les LED et de rafraichir l'ecran pendant
+                    # toute la duree de la pause.
+                    self.position += 1
+                    self.due = ticks_add(now, frappe[1])
+                    self.progress = now
+                    return
+                if self._send(frappe):
                     self.phase = "release"
                     self.due = ticks_add(now, C.KEY_HOLD_MS)
                     self.progress = now

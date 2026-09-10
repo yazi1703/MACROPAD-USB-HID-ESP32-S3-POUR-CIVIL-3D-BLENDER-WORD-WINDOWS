@@ -79,6 +79,11 @@ K_NON_US = 100      # la "102e touche" : le < > à gauche du W sur les claviers 
 
 # Touches qui sont au même endroit sur TOUS les claviers du monde.
 # Elles n'ont donc pas besoin d'être traduites.
+# Marqueur d'une temporisation dans une macro. Ce n'est pas une frappe :
+# hid_keyboard.py le reconnait et attend, sans rien envoyer et SANS RIEN
+# BLOQUER - la boucle principale continue de tourner pendant ce temps.
+PAUSE = "pause"
+
 SPECIAL = {
     "CTRL": MOD_CTRL, "CONTROL": MOD_CTRL,
     "SHIFT": MOD_SHIFT, "MAJ": MOD_SHIFT,
@@ -325,6 +330,21 @@ def compile_actions(actions, layout, caps_lock=False):
             if sum(1 for code in codes if code >= 0) > 6:
                 raise ValueError("Plus de six touches dans une combinaison")
             result.append(codes)
+        elif kind == "pause":
+            # Une pause dans une macro : le temps que le logiciel ouvre sa
+            # boite de dialogue, par exemple. On la verifie ICI, comme les
+            # touches : une valeur aberrante est refusee avant la premiere
+            # frappe, pas au milieu de la macro.
+            try:
+                millisecondes = int(value)
+            except (TypeError, ValueError):
+                raise ValueError("Pause illisible : " + repr(value))
+            if millisecondes < 0:
+                raise ValueError("Pause negative : " + repr(value))
+            if millisecondes > C.PAUSE_MAX_MS:
+                raise ValueError("Pause de %d ms : le maximum est %d"
+                                 % (millisecondes, C.PAUSE_MAX_MS))
+            result.append((PAUSE, millisecondes))
         elif kind in ("text", "text_enter"):
             result.extend(character_keys(char, layout, caps_lock)
                           for char in value)

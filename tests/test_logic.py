@@ -663,14 +663,15 @@ class PageWebDeConfiguration(unittest.TestCase):
         self.assertEqual(data["ordre"], list(C.PROFILES_ORDER))
         civil = data["profils"]["CIVIL3D"]["touches"]
         self.assertEqual(len(civil), 6)
-        self.assertEqual(civil[2]["court"]["valeur"], "_MATCHPROP")
-        self.assertEqual(civil[2]["court"]["type"], "text_enter")
+        # Chaque geste est une SUITE d'etapes, meme quand il n'y en a qu'une.
+        self.assertEqual(civil[2]["court"][0]["valeur"], "_MATCHPROP")
+        self.assertEqual(civil[2]["court"][0]["type"], "text_enter")
         # Les combinaisons sont lisibles dans le formulaire.
-        self.assertEqual(civil[0]["court"]["valeur"], "CTRL+C")
-        self.assertEqual(civil[0]["double"]["valeur"], "CTRL+V")
-        self.assertEqual(civil[0]["long"]["valeur"], "CTRL+Z")
+        self.assertEqual(civil[0]["court"][0]["valeur"], "CTRL+C")
+        self.assertEqual(civil[0]["double"][0]["valeur"], "CTRL+V")
+        self.assertEqual(civil[0]["long"][0]["valeur"], "CTRL+Z")
         # L'appui long de B3 retablit (Ctrl+Y).
-        self.assertEqual(civil[2]["long"]["valeur"], "CTRL+Y")
+        self.assertEqual(civil[2]["long"][0]["valeur"], "CTRL+Y")
         # La table des logiciels voyage avec la configuration.
         self.assertTrue(any(a["exe"] == "acad.exe"
                             for a in data["apps"]["liste"]))
@@ -825,7 +826,7 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         self.assertEqual(data["touches"], 6)
         self.assertEqual(data["ordre"], list(C.PROFILES_ORDER))
         self.assertEqual(
-            data["profils"]["CIVIL3D"]["touches"][2]["court"]["valeur"],
+            data["profils"]["CIVIL3D"]["touches"][2]["court"][0]["valeur"],
             "_MATCHPROP")
 
     # --- ecriture de la configuration par le PC -------------------------
@@ -997,6 +998,126 @@ class GestesCourtLongDouble(unittest.TestCase):
         self.assertTrue(self.G.a_maintien[1])
         self.assertTrue(self.G.a_maintien2[1])
         self.assertFalse(self.G.a_maintien[0])
+
+
+class SuitesDEtapesEtPauses(unittest.TestCase):
+    """Un geste peut enchainer plusieurs frappes, avec des pauses.
+
+    Le cas qui a motive tout ca : taper _PURGE, attendre que la boite de
+    dialogue s'ouvre, puis Ctrl+S. Sans pause, le Ctrl+S part dans le
+    vide. Avec une pause BLOQUANTE, le macropad se figerait - c'est
+    justement ce que l'architecture interdit.
+    """
+
+    def setUp(self):
+        clock[0] = 0
+        try:
+            import os
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    # --- la traduction --------------------------------------------------
+    def test_la_pause_se_compile_en_marqueur(self):
+        from layouts import compile_actions, PAUSE
+        suite = compile_actions([("text", "a"), ("pause", "300"),
+                                 ("key", "F5")], "FR_AZERTY")
+        self.assertEqual(len(suite), 3)
+        self.assertEqual(suite[1], (PAUSE, 300))
+        self.assertEqual(suite[2], (62,))          # F5
+
+    def test_une_pause_aberrante_est_refusee_avant_la_premiere_frappe(self):
+        from layouts import compile_actions
+        for mauvaise in ("abc", "-10", str(C.PAUSE_MAX_MS + 1)):
+            with self.assertRaises(ValueError, msg=mauvaise):
+                compile_actions([("pause", mauvaise)], "FR_AZERTY")
+
+    # --- le deroulement ---------------------------------------------------
+    def test_la_pause_retarde_la_suite_sans_bloquer(self):
+        t = Transport(); k = HIDKeyboard(t); k.tick(0)
+        k.submit([("key", "TAB"), ("pause", "300"), ("key", "F5")])
+
+        # Avant la pause : la premiere touche est partie.
+        pump(k, 0, 100)
+        self.assertIn((43,), t.sent)               # TAB
+        self.assertNotIn((62,), t.sent)            # F5 pas encore
+
+        # Pendant la pause, la machine tourne : tick() rend la main a
+        # chaque fois, ce qui laisse la boucle lire les touches et animer
+        # l'ecran. Rien n'est envoye pour autant.
+        avant = len(t.sent)
+        pump(k, 100, 150)
+        self.assertEqual(len(t.sent), avant, "des frappes pendant la pause")
+        self.assertFalse(k.fault, "le garde-fou s'est declenche")
+
+        # Apres la pause : la suite part.
+        pump(k, 250, 200)
+        self.assertIn((62,), t.sent)               # F5
+
+    def test_une_longue_pause_ne_declenche_pas_le_garde_fou(self):
+        # Le garde-fou coupe au bout de HID_TIMEOUT_MS sans progres. Une
+        # pause EST un progres : sans cette distinction, toute macro
+        # contenant une pause d'une seconde serait coupee.
+        self.assertGreater(C.PAUSE_MAX_MS, C.HID_TIMEOUT_MS)
+        t = Transport(); k = HIDKeyboard(t); k.tick(0)
+        k.submit([("key", "TAB"), ("pause", "3000"), ("key", "F5")])
+        pump(k, 0, 3400)
+        self.assertFalse(k.fault, "le garde-fou a coupe pendant la pause")
+        self.assertIn((62,), t.sent)
+
+    def test_esc_interrompt_une_macro_en_pleine_pause(self):
+        t = Transport(); k = HIDKeyboard(t); k.tick(0)
+        k.submit([("key", "TAB"), ("pause", "3000"), ("key", "F5")])
+        pump(k, 0, 100)
+        k.escape(100)
+        pump(k, 102, 300)
+        self.assertIn((41,), t.sent)               # Echap est parti
+        self.assertNotIn((62,), t.sent)            # la suite est abandonnee
+        self.assertEqual(t.sent[-1], ())
+
+    # --- l'aller-retour par la page web -----------------------------------
+    def test_une_suite_survit_a_l_enregistrement(self):
+        import store
+        data = store.vers_json(6)
+        data["profils"]["CIVIL3D"]["touches"][5]["double"] = [
+            {"type": "text_enter", "valeur": "_PURGE"},
+            {"type": "pause", "valeur": "500"},
+            {"type": "combo", "valeur": "CTRL+S"},
+        ]
+        ok, raison = store.enregistrer_json(data, 6)
+        self.assertTrue(ok, raison)
+
+        profils = store.charger(6)[0]
+        self.assertEqual(profils["CIVIL3D"][5][1]["double"],
+                         [("text_enter", "_PURGE"), ("pause", "500"),
+                          ("combo", ("CTRL", "S"))])
+        # Et la page la relit telle quelle.
+        relu = store.vers_json(6)["profils"]["CIVIL3D"]["touches"][5]["double"]
+        self.assertEqual(len(relu), 3)
+        self.assertEqual(relu[1], {"type": "pause", "valeur": "500"})
+
+    def test_une_pause_trop_longue_est_refusee_a_l_enregistrement(self):
+        import store
+        data = store.vers_json(6)
+        data["profils"]["WORD"]["touches"][0]["court"] = [
+            {"type": "pause", "valeur": str(C.PAUSE_MAX_MS + 1000)}]
+        ok, raison = store.enregistrer_json(data, 6)
+        self.assertFalse(ok)
+        self.assertIn("WORD", raison)
+
+    def test_l_ancienne_forme_a_une_seule_action_se_relit(self):
+        # Un profils.json ecrit avant les suites range UN objet par geste.
+        import store
+        profils, ordre, titres, couleurs, apps, repli = store.depuis_json({
+            "version": 2, "ordre": ["X"],
+            "profils": {"X": {"titre": "X", "touches": [
+                {"label": "A", "court": {"type": "combo", "valeur": "CTRL+S"}},
+            ]}},
+        }, 6)
+        self.assertEqual(profils["X"][0][1]["court"],
+                         [("combo", ("CTRL", "S"))])
 
 
 class ToucheModificatrice(unittest.TestCase):
@@ -1785,18 +1906,30 @@ class ValeursUsineSansPiege(unittest.TestCase):
 
     tearDown = setUp
 
-    def test_aucune_sequence_dans_les_valeurs_usine(self):
-        # Les pages web ne gardent qu'UNE action par geste. Si une valeur
-        # d'usine en contenait deux, un simple "Enregistrer" la tronquerait
-        # sans prevenir. On interdit donc le piege a la source.
+    def test_les_suites_d_actions_traversent_la_page_web(self):
+        """Les pages web gardaient autrefois UNE seule action par geste :
+        une valeur d'usine qui en contenait deux etait tronquee en silence
+        au premier "Enregistrer". Ce n'est plus le cas, mais l'invariant
+        merite d'etre garde : ce qui entre doit ressortir a l'identique,
+        quelle que soit la longueur de la suite."""
         import profiles as P
+        import store
         for nom, touches in P.PROFILES.items():
             for index, (label, gestes) in enumerate(touches):
                 for geste, actions in gestes.items():
+                    aller = store.actions_vers_json(actions)
+                    self.assertEqual(len(aller), len(actions))
+                    retour = store.actions_depuis_json(aller)
                     self.assertEqual(
-                        len(actions), 1,
-                        "%s B%d %s : %d actions, la page web n'en garderait "
-                        "qu'une" % (nom, index + 1, geste, len(actions)))
+                        retour, actions,
+                        "%s B%d %s : la suite ne survit pas a l'aller-retour"
+                        % (nom, index + 1, geste))
+
+        # Et une suite de trois etapes, avec une pause, passe aussi.
+        suite = [("text_enter", "_PURGE"), ("pause", "500"),
+                 ("combo", ("CTRL", "S"))]
+        self.assertEqual(
+            store.actions_depuis_json(store.actions_vers_json(suite)), suite)
 
     def test_aller_retour_complet_sans_perte(self):
         import store
@@ -1932,6 +2065,13 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         self.assertTrue(vu["envoye"], "l'enregistrement n'a rien envoye")
         self.assertEqual(vu["touche1_label"], "ZZZ")
         self.assertEqual(vu["touche1_valeur"], "TESTVAL")
+
+        # Un bouton "+ etape" par geste : 6 touches x 3 gestes.
+        self.assertEqual(vu["boutons_etape"], 18)
+        # L'etape ajoutee est bien partie, a la suite de la premiere.
+        self.assertEqual(vu["touche1_etapes"], 2)
+        self.assertEqual(vu["touche1_etape2"],
+                         {"type": "pause", "valeur": "500"})
         # La touche 6 ne doit surtout pas avoir bouge.
         self.assertEqual(vu["derniere_touche_label"], "MOVE")
         # Meme verification sur la table des logiciels.

@@ -43,9 +43,11 @@ FORME DU FICHIER
           "couleur": "#00a0ff",
           "touches": [
             {"label": "MATCH",
-             "court":  {"type": "text_enter", "valeur": "_MATCHPROP"},
-             "long":   {"type": "none", "valeur": ""},
-             "double": {"type": "none", "valeur": ""}},
+             "court":  [{"type": "text_enter", "valeur": "_MATCHPROP"}],
+             "long":   [],
+             "double": [{"type": "text_enter", "valeur": "_PURGE"},
+                        {"type": "pause",      "valeur": "500"},
+                        {"type": "combo",      "valeur": "CTRL+S"}]},
             ...
           ]
         }
@@ -56,7 +58,12 @@ FORME DU FICHIER
       }
     }
 
-Le "type" vaut "key", "combo", "maintien", "text", "text_enter" ou "none".
+Chaque geste est une LISTE d'etapes : un appui peut taper une commande,
+attendre, puis valider. Une seule etape reste le cas courant.
+
+Le "type" vaut "key", "combo", "maintien", "pause", "text", "text_enter"
+ou "none". Une "pause" attend le nombre de millisecondes indique, sans
+rien bloquer.
 Pour un "combo", la valeur s'ecrit avec des plus : "CTRL+SHIFT+ESC".
 Un "maintien" s'ecrit pareil, mais la touche reste ENFONCEE tant que tu
 gardes le doigt dessus : c'est ainsi qu'une touche du macropad devient une
@@ -68,7 +75,7 @@ import config as C
 import profiles as P
 from layouts import compile_actions
 
-TYPES = ("key", "combo", "maintien", "text", "text_enter", "none")
+TYPES = ("key", "combo", "maintien", "pause", "text", "text_enter", "none")
 
 
 # =====================================================================
@@ -85,6 +92,39 @@ def action_vers_json(actions):
     return genre, str(valeur)
 
 
+def actions_vers_json(actions):
+    """Forme interne -> LISTE de {"type", "valeur"} pour les formulaires.
+
+    Un geste peut enchainer plusieurs frappes : taper une commande,
+    attendre que la boite de dialogue s'ouvre, puis valider. Chaque etape
+    est une entree de cette liste.
+    """
+    liste = []
+    for action in (actions or []):
+        genre, valeur = action_vers_json([action])
+        liste.append({"type": genre, "valeur": valeur})
+    return liste
+
+
+def actions_depuis_json(champ):
+    """Forme web -> forme interne. Accepte une liste OU une seule action.
+
+    L'ancienne forme - un seul dictionnaire par geste - reste acceptee :
+    un profils.json ecrit avant les sequences se relit sans rien perdre.
+    """
+    if not champ:
+        return []
+    if isinstance(champ, dict):
+        champ = [champ]
+    actions = []
+    for etape in champ:
+        if not isinstance(etape, dict):
+            raise ValueError("etape illisible : " + repr(etape))
+        actions.extend(action_depuis_json(etape.get("type", "none"),
+                                          etape.get("valeur", "")))
+    return actions
+
+
 def action_depuis_json(genre, valeur):
     """(type, valeur texte) -> forme interne."""
     if genre == "none" or (genre in ("text", "text_enter") and not valeur):
@@ -94,6 +134,10 @@ def action_depuis_json(genre, valeur):
         if not touches:
             raise ValueError("combinaison vide")
         return [(genre, touches)]
+    if genre == "pause":
+        if not str(valeur).strip():
+            return []
+        return [("pause", str(valeur).strip())]
     if genre in ("key", "text", "text_enter"):
         if not str(valeur).strip():
             return []
@@ -203,8 +247,7 @@ def vers_json(nb_touches, stats=None):
         for index, (label, gestes) in enumerate(touches):
             entree = {"label": label}
             for geste in P.GESTES:
-                genre, valeur = action_vers_json((gestes or {}).get(geste))
-                entree[geste] = {"type": genre, "valeur": valeur}
+                entree[geste] = actions_vers_json((gestes or {}).get(geste))
             if stats is not None:
                 entree["usages"] = stats.pour(nom)[index]
             liste.append(entree)
@@ -246,9 +289,7 @@ def depuis_json(data, nb_touches):
                 entree[P.COURT] = {"type": entree.get("type", "none"),
                                    "valeur": entree.get("valeur", "")}
             for geste in P.GESTES:
-                champ = entree.get(geste) or {}
-                actions = action_depuis_json(champ.get("type", "none"),
-                                             champ.get("valeur", ""))
+                actions = actions_depuis_json(entree.get(geste))
                 if actions:
                     gestes[geste] = actions
             touches.append((str(entree.get("label", ""))[:P.LABEL_MAX], gestes))
@@ -321,8 +362,7 @@ def enregistrer(profils, ordre, titres, couleurs, apps, repli, nb_touches):
         for label, gestes in touches:
             entree = {"label": label}
             for geste in P.GESTES:
-                genre, valeur = action_vers_json((gestes or {}).get(geste))
-                entree[geste] = {"type": genre, "valeur": valeur}
+                entree[geste] = actions_vers_json((gestes or {}).get(geste))
             liste.append(entree)
         blocs[nom] = {
             "titre": titres.get(nom, nom),

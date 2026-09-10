@@ -57,7 +57,7 @@ VOCABULAIRE DES VARIABLES
 
 from time import ticks_ms, ticks_diff, ticks_add, sleep_ms
 import config as C
-from layouts import compile_actions
+from layouts import compile_actions, PAUSE
 
 
 class HIDKeyboard:
@@ -277,7 +277,14 @@ class HIDKeyboard:
                     self.progress = now
                 return
 
-            if self.fault or ticks_diff(now, self.due) < 0:
+            if self.fault:
+                return
+            if ticks_diff(now, self.due) < 0:
+                # On attend VOLONTAIREMENT : espacement des frappes, ou
+                # pause demandee dans la macro. C'est du progres, pas un
+                # blocage - sans cette ligne, le garde-fou couperait toute
+                # macro contenant une pause de plus d'une seconde.
+                self.progress = now
                 return
 
             # Priorité n° 2 : démarrer la macro suivante.
@@ -298,7 +305,17 @@ class HIDKeyboard:
                 if self.position >= len(self.current):
                     self.phase = "idle"      # macro terminée
                     return
-                if self._send(self.current[self.position]):
+                frappe = self.current[self.position]
+                if frappe and frappe[0] == PAUSE:
+                    # Rien a envoyer : on note juste quand reprendre. La
+                    # boucle principale continue de lire les touches,
+                    # d'animer les LED et de rafraichir l'ecran pendant
+                    # toute la duree de la pause.
+                    self.position += 1
+                    self.due = ticks_add(now, frappe[1])
+                    self.progress = now
+                    return
+                if self._send(frappe):
                     self.phase = "release"
                     self.due = ticks_add(now, C.KEY_HOLD_MS)
                     self.progress = now

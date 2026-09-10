@@ -109,6 +109,20 @@ function couleurs(noeud, sortie) {
   noeud.children.forEach(function (e) { couleurs(e, sortie); });
   return sortie;
 }
+function boutons(noeud, libelle, sortie) {
+  sortie = sortie || [];
+  if (noeud.tag === 'button' && texte(noeud).indexOf(libelle) >= 0) {
+    sortie.push(noeud);
+  }
+  noeud.children.forEach(function (e) { boutons(e, libelle, sortie); });
+  return sortie;
+}
+function listes(noeud, sortie) {
+  sortie = sortie || [];
+  if (noeud.tag === 'select') { sortie.push(noeud); }
+  noeud.children.forEach(function (e) { listes(e, sortie); });
+  return sortie;
+}
 function saisir(champ, valeur) {
   champ.value = valeur;
   if (champ.oninput) { champ.oninput(); }
@@ -146,6 +160,20 @@ setTimeout(function () {
     const ca = champs(registre.apps);
     if (ca.length >= 6) { saisir(ca[5], 'AbRg'); }   // abrege du 2e
 
+    // ---- on enchaine une etape : commande, pause, validation --------
+    // Chaque clic redessine la page : il faut recollecter les elements
+    // apres chaque action, comme le ferait un vrai navigateur.
+    const plus = boutons(profs.children[0], '+ etape');
+    vu.boutons_etape = plus.length;
+    if (plus.length) {
+      plus[0].onclick();                       // B1, appui court
+      const sel2 = listes(registre.profs.children[0])[1];
+      sel2.value = 'pause';
+      if (sel2.onchange) { sel2.onchange(); }
+      const champs2 = champs(registre.profs.children[0]);
+      saisir(champs2[4], '500');               // duree de la pause
+    }
+
     // ---- puis on enregistre, et on regarde ce qui part --------------
     globalThis.__page.save();
 
@@ -154,7 +182,11 @@ setTimeout(function () {
       const p = envoye ? envoye.profils[envoye.ordre[0]] : null;
       vu.envoye = !!envoye;
       vu.touche1_label = p ? p.touches[0].label : null;
-      vu.touche1_valeur = p ? p.touches[0].court.valeur : null;
+      // Un geste est maintenant une SUITE d'etapes.
+      const suite = p ? p.touches[0].court : null;
+      vu.touche1_etapes = suite ? suite.length : 0;
+      vu.touche1_valeur = suite && suite[0] ? suite[0].valeur : null;
+      vu.touche1_etape2 = suite && suite[1] ? suite[1] : null;
       vu.derniere_touche_label = p ? p.touches[nbTouches - 1].label : null;
       vu.app2_abrege = (envoye && envoye.apps.liste[1])
         ? envoye.apps.liste[1].abrege : null;

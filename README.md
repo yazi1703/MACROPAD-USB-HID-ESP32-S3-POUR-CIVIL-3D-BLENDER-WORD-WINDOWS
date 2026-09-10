@@ -216,7 +216,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   └── generer_code_complet.py   régénère CODE_COMPLET.md
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             145 tests du firmware, exécutables sur PC
+│   ├── test_logic.py             153 tests du firmware, exécutables sur PC
 │   ├── test_pc.py                25 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
@@ -242,7 +242,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 170 tests ... OK
+→ Ran 178 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport

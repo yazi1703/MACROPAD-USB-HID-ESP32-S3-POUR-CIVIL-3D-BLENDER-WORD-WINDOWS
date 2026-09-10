@@ -73,6 +73,9 @@ width:100%}
 input[type=color]{width:42px;flex:0 0 42px;padding:2px;height:33px;
 cursor:pointer}
 .val{display:flex;gap:5px;align-items:center}
+.pile{display:flex;flex-direction:column;gap:5px}
+.pile select{flex:0 0 138px}
+.pile .add{align-self:flex-start;padding:4px 9px;font-size:11px}
 .cap{flex:0 0 30px;padding:6px 0;font-size:14px;line-height:1}
 .cap.on{background:#3d7bfd;color:#fff}
 input:focus,select:focus{outline:0;border-color:#3d7bfd}
@@ -114,6 +117,10 @@ appui long et double appui.</p>
 LED RGB de ce profil. Comme le PC change de profil selon le logiciel au
 premier plan, <b>le macropad prend la couleur du logiciel</b> ou tu
 travailles, en respiration douce.</p>
+<p class=hint>Un geste peut <b>enchainer plusieurs etapes</b> :
+« + etape » ajoute une ligne. Utile quand un logiciel a besoin de
+respirer entre deux frappes — tape la commande, mets une
+<b>pause</b> de 500 ms, puis valide.</p>
 <p class=hint><b>maintenir</b> transforme la touche en vraie touche
 modificatrice : mets <b>CTRL</b> sur l'appui court et <b>MAJ</b> sur le
 double appui, et tu obtiens <i>appui maintenu = Ctrl</i>,
@@ -145,7 +152,8 @@ var N=6,GESTES=["court","long","double"];
 var LIB={court:"court",long:"long",double:"double"};
 var TYPES=[["none","inactive"],["key","touche"],["combo","combinaison"],
 ["maintien","maintenir (Ctrl, Maj...)"],
-["text","texte"],["text_enter","texte + Entree"]];
+["text","texte"],["text_enter","texte + Entree"],
+["pause","pause (millisecondes)"]];
 
 function el(tag,attrs,kids){var e=document.createElement(tag);
  for(var k in attrs||{}){if(k=="cls")e.className=attrs[k];
@@ -250,11 +258,32 @@ function vide(){
 // la variable k etait la MEME pour les six touches, si bien que tous les
 // champs finissaient par ecrire dans la derniere. Ici chaque appel a sa
 // propre variable k : chaque champ modifie bien sa touche.
+// Un geste est une SUITE d'etapes : taper une commande, attendre que la
+// boite de dialogue s'ouvre, valider. Une seule etape reste le cas
+// courant, et c'est ce qu'on affiche par defaut.
+function etapes(k,g){
+ if(!k[g]||!k[g].length)k[g]=[{type:"none",valeur:""}];
+ else if(!k[g].length&&k[g].type)k[g]=[k[g]];   // ancienne forme
+ return k[g];}
+
+function ligneEtape(k,g,i){
+ var e=k[g][i];
+ var l=el("div",{cls:"val"},[]);
+ l.appendChild(sel(e.type,function(v){e.type=v;}));
+ var champ=inp(e.valeur,60,function(v){e.valeur=v;});
+ if(e.type=="pause")champ.title="duree en millisecondes, 500 par exemple";
+ l.appendChild(champ);
+ if(e.type=="key"||e.type=="combo"||e.type=="maintien")
+  l.appendChild(capture(champ,function(v){e.valeur=v;}));
+ if(k[g].length>1)
+  l.appendChild(el("button",{cls:"d s cap",title:"retirer cette etape",
+   onclick:function(){k[g].splice(i,1);render();}},["\u00d7"]));
+ return l;}
+
 function ligne(p,i,tb,mx){
  if(!p.touches[i])p.touches[i]={label:"",usages:0};
  var k=p.touches[i];
  GESTES.forEach(function(g,gi){
-  if(!k[g])k[g]={type:"none",valeur:""};
   var tr=el("tr",{cls:gi==0?"sep":""},[]);
   if(gi==0)tr.appendChild(el("td",{cls:"k",rowspan:3},["B"+(i+1)]));
   tr.appendChild(el("td",{cls:"g"},[LIB[g]]));
@@ -263,18 +292,15 @@ function ligne(p,i,tb,mx){
    cl.appendChild(inp(k.label,6,function(v){k.label=v;}));
    tr.appendChild(cl);
   }
-  var ct=el("td",{cls:"ty"},[]);
-  ct.appendChild(sel(k[g].type,function(v){k[g].type=v;}));
-  tr.appendChild(ct);
-  var cv=el("td",{},[]);
-  var champ=inp(k[g].valeur,60,function(v){k[g].valeur=v;});
-  var boite=el("div",{cls:"val"},[champ]);
-  // Le bouton de capture n'a de sens que pour une touche, une
-  // combinaison ou un maintien - pas pour du texte.
-  if(k[g].type=="key"||k[g].type=="combo"||k[g].type=="maintien")
-   boite.appendChild(capture(champ,function(v){k[g].valeur=v;}));
-  cv.appendChild(boite);
-  tr.appendChild(cv);
+  var ca=el("td",{},[]);
+  var pile=el("div",{cls:"pile"},[]);
+  etapes(k,g).forEach(function(e,rang){
+   pile.appendChild(ligneEtape(k,g,rang));});
+  pile.appendChild(el("button",{cls:"s add",title:"enchainer une etape",
+   onclick:function(){k[g].push({type:"none",valeur:""});render();}},
+   ["+ etape"]));
+  ca.appendChild(pile);
+  tr.appendChild(ca);
   if(gi==0){
    var u=k.usages||0;
    var box=el("td",{cls:"use",rowspan:3},[String(u)]);
@@ -300,7 +326,7 @@ function render(){
   head.appendChild(el("button",{cls:"d s",onclick:function(){del(nom);}},
    ["Supprimer"]));
   var tb=el("table",{},[el("tr",{},[el("th",{},["#"]),el("th",{},["Geste"]),
-   el("th",{},["Libelle"]),el("th",{},["Type"]),el("th",{},["Valeur"]),
+   el("th",{},["Libelle"]),el("th",{},["Action"]),
    el("th",{},["Usage"])])]);
   for(var i=0;i<N;i++)ligne(p,i,tb,mx);
   zone.appendChild(el("div",{cls:"card"},[head,tb]));
@@ -365,7 +391,7 @@ function charger_sauvegarde(texte){
  catch(e){say("Fichier illisible : "+e,0);return false;}
  if(!d||!d.ordre||!d.ordre.length||!d.profils){
   say("Ce fichier n'est pas une sauvegarde du macropad.",0);return false;}
- D=d;N=d.touches||N;
+ D=normaliser(d);N=d.touches||N;
  if(!D.apps)D.apps={repli:{profil:"WINDOWS",abrege:"Win"},liste:[]};
  render();
  say("Sauvegarde chargee : "+D.ordre.length+" profils. Verifie, puis "+
@@ -388,11 +414,21 @@ function save(){fetch("/api/profils",{method:"POST",
  .then(function(r){say(r.ok?"Enregistre et applique.":"Refuse :\n"+r.raison,
   r.ok);if(r.ok)charger();})
  .catch(function(e){say("Erreur : "+e,0);});}
+// Une sauvegarde ou un fichier ecrit avant les suites d'etapes range un
+// SEUL objet par geste. On le remet en liste des la lecture : le reste de
+// la page n'a ainsi qu'une seule forme a connaitre.
+function normaliser(d){
+ for(var nom in (d.profils||{})){
+  ((d.profils[nom]||{}).touches||[]).forEach(function(k){
+   GESTES.forEach(function(g){
+    if(k[g]&&!(k[g] instanceof Array))k[g]=[k[g]];});});}
+ return d;}
+
 function charger(){fetch("/api/profils").then(function(r){return r.json();})
  .then(function(d){
   if(d.erreur)return say("Lecture impossible : "+d.erreur,0);
-  D=d;N=d.touches||6;if(!D.apps)D.apps={repli:{profil:"WINDOWS",abrege:"Win"},
-   liste:[]};
+  D=normaliser(d);N=d.touches||6;
+  if(!D.apps)D.apps={repli:{profil:"WINDOWS",abrege:"Win"},liste:[]};
   document.getElementById("src").textContent="source : "+(d.origine||"?");
   var tot=0;for(var n in D.profils)(D.profils[n].touches||[]).forEach(
    function(t){tot+=t.usages||0;});

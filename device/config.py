@@ -277,6 +277,12 @@ KEY_GAP_MS = 12
 
 # Si plus rien n'avance pendant ce délai alors qu'une macro est en cours,
 # on considère l'USB bloqué : tout est relâché et les macros s'arrêtent.
+# Duree maximale d'une pause dans une macro. Une macro qui attendrait
+# trente secondes donnerait l'impression que le macropad est fige, alors
+# qu'il tourne parfaitement : on plafonne, et l'enregistrement refuse
+# au-dela.
+PAUSE_MAX_MS = 5000
+
 HID_TIMEOUT_MS = 1000
 
 # Nombre maximal de macros en attente. Au-delà, les appuis sont ignorés

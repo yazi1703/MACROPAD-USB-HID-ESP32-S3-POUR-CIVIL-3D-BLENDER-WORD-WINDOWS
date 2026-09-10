@@ -83,7 +83,7 @@ les 224 Ko de RAM de la carte.
 | Télécharger une sauvegarde | ✅ fichier JSON |
 | **Restaurer une sauvegarde** | ✅ elle est chargée dans le formulaire, tu vérifies, tu enregistres |
 | Revenir aux valeurs d'usine | ✅ bouton dédié |
-| Séquences à plusieurs actions | ❌ réservées à `profiles.py` |
+| **Enchaîner plusieurs étapes** | ✅ bouton « + étape », avec des pauses |
 
 ### Les trois gestes
 
@@ -107,6 +107,7 @@ Voir le [chapitre 9](09-ecran-et-gestes.md) pour le détail.
 | touche | `TAB`, `F5`, `G` | une seule touche |
 | combinaison | `CTRL+Z`, `CTRL+SHIFT+ESC` | plusieurs touches ensemble |
 | **maintenir** | `CTRL`, `SHIFT`, `CTRL+ALT` | **garde la touche enfoncée** tant que ton doigt reste dessus |
+| **pause** | `500` | attend ce nombre de millisecondes avant l'étape suivante |
 | texte | `_HATCH` | écrit la chaîne |
 | texte + Entrée | `_MATCHPROP` | écrit la chaîne puis valide |
 | inactive | — | ce geste ne fait rien |
@@ -153,6 +154,32 @@ refusé avec un message, sans rien casser.
 
 > Garde une sauvegarde dès que ta configuration te convient. C'est ta
 > seule copie en dehors de la carte.
+
+### Enchaîner plusieurs étapes sur un seul appui
+
+Un geste n'est pas limité à une frappe. Le bouton **« + étape »** ajoute
+une ligne, et les étapes partent dans l'ordre :
+
+```
+B6 · appui court   [texte + Entrée ▾]  [_PURGE]      [×]
+                   [pause          ▾]  [500]         [×]
+                   [combinaison    ▾]  [CTRL+S]      [×]
+                   + étape
+```
+
+La **pause** est là pour les logiciels qui ont besoin de respirer : une
+commande ouvre une boîte de dialogue, et le `Ctrl+S` envoyé trop tôt
+partirait dans le vide.
+
+> **Une pause ne fige rien.** Pendant qu'elle s'écoule, le macropad
+> continue de lire tes touches, d'animer les LED et de rafraîchir
+> l'écran — et **ESC interrompt la macro en pleine pause**. C'est la
+> règle de tout le firmware : rien n'attend jamais.
+
+Le maximum est de **5 secondes** par pause (`PAUSE_MAX_MS`) : au-delà,
+l'enregistrement est refusé. Une macro qui attendrait trente secondes
+donnerait l'impression que le macropad est bloqué, alors qu'il tourne
+parfaitement.
 
 ### Les logiciels détectés
 
