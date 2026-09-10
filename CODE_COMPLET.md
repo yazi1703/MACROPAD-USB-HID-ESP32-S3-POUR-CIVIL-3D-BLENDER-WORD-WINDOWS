@@ -39,7 +39,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`292 lignes - sha256 17b4dd0dc77d48e4`
+`301 lignes - sha256 818285d786bfc8f9`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -257,6 +257,15 @@ RGB_COULEURS = {
 }
 RGB_COULEUR_DEFAUT = (120, 120, 120)   # profil sans couleur declaree
 RGB_COULEUR_ERREUR = (255, 0, 0)       # panne HID : visible sans lire
+
+# --- respiration ------------------------------------------------------
+# La couleur monte et redescend doucement, comme la LED du bouton ESC.
+# Meme courbe, meme douceur (voir rgb.py). Mets False pour une couleur
+# fixe. Le plancher evite que le pad s'eteigne completement en bas de
+# cycle : a 0.35, il reste toujours un tiers de luminosite.
+RGB_RESPIRATION = True
+RGB_RESPIRATION_MS = 4000   # duree d'un cycle complet
+RGB_RESPIRATION_MIN = 0.35  # luminosite au creux de la respiration
 
 RGB_MS = 25                 # au plus un envoi toutes les 25 ms
 RGB_VEILLE_MS = 300000      # 5 minutes sans appui -> extinction
@@ -699,7 +708,7 @@ else:
 
 ## device/main.py
 
-`381 lignes - sha256 e5d897577dca3528`
+`385 lignes - sha256 f686b6d18141f1d6`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -831,7 +840,8 @@ def run():
         return
 
     # --- Chargement de la configuration --------------------------------
-    profils, ordre, titres, apps, repli, origine = store.charger(NB_TOUCHES)
+    profils, ordre, titres, couleurs, apps, repli, origine = \
+        store.charger(NB_TOUCHES)
     print("Macros chargees depuis :", origine)
 
     manager = ProfileManager(ordre, C.DEFAULT_PROFILE, profils, NB_TOUCHES)
@@ -872,7 +882,9 @@ def run():
                         manager.macros, ticks_ms(),
                         manager.index, len(ordre), splash)
         gestes.configurer(manager.macros)
-        rgb.profil(manager.name)          # chaque profil a sa couleur
+        # La couleur suit le logiciel : c'est le profil actif qui la donne,
+        # et le PC change de profil tout seul selon la fenetre active.
+        rgb.profil(couleurs.get(manager.name))
 
     def recharger_profils():
         """Relit profils.json et applique la nouvelle configuration.
@@ -880,15 +892,16 @@ def run():
         Appele quand une page web vient d'enregistrer : les changements
         prennent effet immediatement, sans RESET.
         """
-        nonlocal manager, titres, ordre
+        nonlocal manager, titres, ordre, couleurs
         try:
-            neufs, ordre_neuf, titres_neufs, _apps, _repli, origine_neuve = \
-                store.charger(NB_TOUCHES)
+            (neufs, ordre_neuf, titres_neufs, couleurs_neuves,
+             _apps, _repli, origine_neuve) = store.charger(NB_TOUCHES)
             nouveau = ProfileManager(ordre_neuf, manager.name, neufs, NB_TOUCHES)
         except Exception as exc:
             print("[main] configuration refusee, on garde l'ancienne :", exc)
             return
         manager, titres, ordre = nouveau, titres_neufs, ordre_neuf
+        couleurs = couleurs_neuves
         afficher(False)
         print("Macros rechargees depuis :", origine_neuve)
 
@@ -1860,7 +1873,7 @@ def compile_actions(actions, layout, caps_lock=False):
 
 ## device/store.py
 
-`321 lignes - sha256 626a037549f71696`
+`374 lignes - sha256 e4c0a8b55ab817ea`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1905,6 +1918,7 @@ FORME DU FICHIER
       "profils": {
         "CIVIL3D": {
           "titre": "CIVIL 3D",
+          "couleur": "#00a0ff",
           "touches": [
             {"label": "MATCH",
              "court":  {"type": "text_enter", "valeur": "_MATCHPROP"},
@@ -1966,6 +1980,41 @@ def action_depuis_json(genre, valeur):
 
 
 # =====================================================================
+# Les couleurs des LED RGB
+# =====================================================================
+# Dans le fichier et dans les pages web, une couleur s'ecrit comme en
+# HTML : "#00a0ff". C'est ce que comprend le selecteur de couleur du
+# navigateur, et c'est lisible a l'oeil nu dans profils.json.
+def couleur_vers_texte(couleur):
+    r, v, b = (int(c) & 255 for c in couleur)
+    return "#%02x%02x%02x" % (r, v, b)
+
+
+def couleur_depuis_texte(texte, defaut=None):
+    """Accepte "#00a0ff" ou "00a0ff". Retombe sur defaut si c'est illisible.
+
+    On ne leve PAS d'exception ici : une couleur fausse ne doit pas
+    empecher d'enregistrer des macros parfaitement valables. Au pire, le
+    pad s'allume dans la couleur par defaut.
+    """
+    if defaut is None:
+        defaut = tuple(C.RGB_COULEUR_DEFAUT)
+    texte = str(texte or "").strip().lstrip("#")
+    if len(texte) != 6:
+        return tuple(defaut)
+    try:
+        return tuple(int(texte[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return tuple(defaut)
+
+
+def couleur_usine(nom):
+    """Couleur d'usine d'un profil, ou la couleur par defaut."""
+    return tuple(getattr(C, "RGB_COULEURS", {}).get(
+        nom, C.RGB_COULEUR_DEFAUT))
+
+
+# =====================================================================
 # Verification
 # =====================================================================
 def verifier(profils, ordre, nb_touches):
@@ -2015,7 +2064,9 @@ def defauts():
     for nom, touches in P.PROFILES.items():
         profils[nom] = [(label, dict(gestes)) for label, gestes in touches]
     apps = [tuple(a) for a in P.APPS]
-    return profils, list(C.PROFILES_ORDER), dict(P.TITLES), apps, tuple(P.APPS_REPLI)
+    couleurs = dict((nom, couleur_usine(nom)) for nom in profils)
+    return (profils, list(C.PROFILES_ORDER), dict(P.TITLES), couleurs,
+            apps, tuple(P.APPS_REPLI))
 
 
 # =====================================================================
@@ -2023,7 +2074,7 @@ def defauts():
 # =====================================================================
 def vers_json(nb_touches, stats=None):
     """Configuration complete, prete a etre envoyee a une page web."""
-    profils, ordre, titres, apps, repli, origine = charger(nb_touches)
+    profils, ordre, titres, couleurs, apps, repli, origine = charger(nb_touches)
     blocs = {}
     for nom, touches in profils.items():
         liste = []
@@ -2035,7 +2086,12 @@ def vers_json(nb_touches, stats=None):
             if stats is not None:
                 entree["usages"] = stats.pour(nom)[index]
             liste.append(entree)
-        blocs[nom] = {"titre": titres.get(nom, nom), "touches": liste}
+        blocs[nom] = {
+            "titre": titres.get(nom, nom),
+            "couleur": couleur_vers_texte(
+                couleurs.get(nom) or couleur_usine(nom)),
+            "touches": liste,
+        }
 
     return {
         "version": 2,
@@ -2054,7 +2110,7 @@ def vers_json(nb_touches, stats=None):
 def depuis_json(data, nb_touches):
     """Forme web -> forme interne. Leve une exception si c'est illisible."""
     ordre = [str(n) for n in data["ordre"]]
-    profils, titres = {}, {}
+    profils, titres, couleurs = {}, {}, {}
     for nom, bloc in data["profils"].items():
         touches = []
         for entree in bloc["touches"][:nb_touches]:
@@ -2078,6 +2134,8 @@ def depuis_json(data, nb_touches):
             touches.append(("", {}))
         profils[str(nom)] = touches
         titres[str(nom)] = str(bloc.get("titre", nom))
+        couleurs[str(nom)] = couleur_depuis_texte(bloc.get("couleur"),
+                                                  couleur_usine(str(nom)))
 
     bloc_apps = data.get("apps") or {}
     apps = []
@@ -2089,14 +2147,14 @@ def depuis_json(data, nb_touches):
     bloc_repli = bloc_apps.get("repli") or {}
     repli = (str(bloc_repli.get("profil", P.APPS_REPLI[0])).upper(),
              str(bloc_repli.get("abrege", P.APPS_REPLI[1]))[:7])
-    return profils, ordre, titres, apps, repli
+    return profils, ordre, titres, couleurs, apps, repli
 
 
 # =====================================================================
 # Lecture et ecriture du fichier
 # =====================================================================
 def charger(nb_touches):
-    """Retourne (profils, ordre, titres, apps, repli, origine).
+    """Retourne (profils, ordre, titres, couleurs, apps, repli, origine).
 
     origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire d'ou
     viennent les macros actives.
@@ -2112,7 +2170,8 @@ def charger(nb_touches):
         return defauts() + ("usine",)
 
     try:
-        profils, ordre, titres, apps, repli = depuis_json(data, nb_touches)
+        profils, ordre, titres, couleurs, apps, repli = depuis_json(
+            data, nb_touches)
     except Exception as exc:
         print("[store] %s mal forme (%s), retour aux valeurs d'usine"
               % (C.PROFILES_FILE, exc))
@@ -2125,10 +2184,10 @@ def charger(nb_touches):
             print("   -", probleme)
         return defauts() + ("usine",)
 
-    return profils, ordre, titres, apps, repli, "fichier"
+    return profils, ordre, titres, couleurs, apps, repli, "fichier"
 
 
-def enregistrer(profils, ordre, titres, apps, repli, nb_touches):
+def enregistrer(profils, ordre, titres, couleurs, apps, repli, nb_touches):
     """Verifie puis ecrit. Retourne (True, "") ou (False, raison)."""
     problemes = verifier(profils, ordre, nb_touches)
     if problemes:
@@ -2143,7 +2202,12 @@ def enregistrer(profils, ordre, titres, apps, repli, nb_touches):
                 genre, valeur = action_vers_json((gestes or {}).get(geste))
                 entree[geste] = {"type": genre, "valeur": valeur}
             liste.append(entree)
-        blocs[nom] = {"titre": titres.get(nom, nom), "touches": liste}
+        blocs[nom] = {
+            "titre": titres.get(nom, nom),
+            "couleur": couleur_vers_texte(
+                (couleurs or {}).get(nom) or couleur_usine(nom)),
+            "touches": liste,
+        }
 
     data = {"version": 2, "ordre": list(ordre), "profils": blocs,
             "apps": {"repli": {"profil": repli[0], "abrege": repli[1]},
@@ -2170,10 +2234,12 @@ def enregistrer(profils, ordre, titres, apps, repli, nb_touches):
 def enregistrer_json(data, nb_touches):
     """Enregistre directement une configuration recue d'une page web."""
     try:
-        profils, ordre, titres, apps, repli = depuis_json(data, nb_touches)
+        profils, ordre, titres, couleurs, apps, repli = depuis_json(
+            data, nb_touches)
     except Exception as exc:
         return False, "donnees illisibles : %s" % exc
-    return enregistrer(profils, ordre, titres, apps, repli, nb_touches)
+    return enregistrer(profils, ordre, titres, couleurs, apps, repli,
+                       nb_touches)
 
 
 def effacer():
@@ -2319,7 +2385,7 @@ class Stats:
 
 ## device/portal.py
 
-`458 lignes - sha256 bf033ed3b46fd5a5`
+`472 lignes - sha256 84f7a9d5d17496fd`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2394,6 +2460,8 @@ padding:14px;margin-bottom:12px}
 input,select{background:#0b0d12;color:#e8eaee;border:1px solid #2b3242;
 border-radius:7px;padding:7px 9px;font:13px/1.2 ui-monospace,monospace;
 width:100%}
+input[type=color]{width:42px;flex:0 0 42px;padding:2px;height:33px;
+cursor:pointer}
 input:focus,select:focus{outline:0;border-color:#3d7bfd}
 table{width:100%;border-collapse:collapse}
 td,th{padding:3px 5px 3px 0;vertical-align:middle}
@@ -2429,6 +2497,10 @@ white-space:pre-wrap;font:13px ui-monospace,monospace}
 <p class=hint>Libelles : 6 caracteres maximum. Combinaison :
 <b>CTRL+MAJ+ESC</b>. Chaque touche accepte trois gestes : appui court,
 appui long et double appui.</p>
+<p class=hint>Le carre de couleur a cote du titre donne la couleur des
+LED RGB de ce profil. Comme le PC change de profil selon le logiciel au
+premier plan, <b>le macropad prend la couleur du logiciel</b> ou tu
+travailles, en respiration douce.</p>
 <p class=hint><b>maintenir</b> transforme la touche en vraie touche
 modificatrice : mets <b>CTRL</b> sur l'appui court et <b>MAJ</b> sur le
 double appui, et tu obtiens <i>appui maintenu = Ctrl</i>,
@@ -2469,6 +2541,12 @@ function el(tag,attrs,kids){var e=document.createElement(tag);
  return e;}
 // fin=true : on previent quand tu QUITTES le champ, pas a chaque
 // frappe. Indispensable pour le nom d'un profil, qui redessine la page.
+// Le selecteur de couleur du navigateur : c'est lui qui pilote la
+// couleur des LED RGB du profil. Il rend une valeur du genre "#00a0ff".
+function col(val,cb){var i=el("input",{type:"color"});
+ i.value=val||"#808080";i.title="couleur des LED de ce profil";
+ i.oninput=function(){cb(i.value);};return i;}
+
 function inp(val,max,cb,fin){var i=el("input");i.value=val||"";
  if(max)i.maxLength=max;
  if(fin)i.onchange=function(){cb(i.value);};
@@ -2544,6 +2622,7 @@ function render(){
   head.firstChild.className="grow";head.firstChild.title="nom interne";
   var t=inp(p.titre,16,function(v){p.titre=v;});t.className="grow";
   t.title="titre affiche sur l'ecran";head.appendChild(t);
+  head.appendChild(col(p.couleur,function(v){p.couleur=v;}));
   head.appendChild(el("button",{cls:"d s",onclick:function(){del(nom);}},
    ["Supprimer"]));
   var tb=el("table",{},[el("tr",{},[el("th",{},["#"]),el("th",{},["Geste"]),
@@ -2590,7 +2669,8 @@ function del(n){if(D.ordre.length<2)return say("Il faut au moins un profil",0);
  delete D.profils[n];D.ordre=D.ordre.filter(function(x){return x!=n});render();}
 function addProfil(){var n="PROFIL",i=1;while(D.profils[n])n="PROFIL"+(++i);
  var t=[];for(var k=0;k<N;k++)t.push({label:"",usages:0});
- D.profils[n]={titre:n,touches:t};D.ordre.push(n);render();}
+ D.profils[n]={titre:n,couleur:"#808080",touches:t};
+ D.ordre.push(n);render();}
 function say(t,ok){var m=document.getElementById("msg");
  m.textContent=t;m.className=ok?"ok":"ko";m.style.display="block";
  window.scrollTo(0,document.body.scrollHeight);}
@@ -4066,7 +4146,7 @@ class Led:
 
 ## device/rgb.py
 
-`253 lignes - sha256 0b42f568ed1b27f0`
+`302 lignes - sha256 3dda6ad44329af4d`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -4077,7 +4157,13 @@ rgb.py - Les LED RGB sous les touches.
 CE QUE CA FAIT
 =====================================================================
 * chaque profil a sa couleur : d'un coup d'oeil, tu sais si le macropad
-  est en CIVIL 3D ou en BLENDER, sans lire l'ecran ;
+  est en CIVIL 3D ou en BLENDER, sans lire l'ecran. Comme le PC dit au
+  macropad quel logiciel est au premier plan, la couleur suit le logiciel
+  tout seul : tu cliques dans Civil 3D, le pad devient bleu ;
+* la couleur RESPIRE doucement, comme la LED du bouton ESC : elle monte
+  et redescend sur RGB_RESPIRATION_MS. Une couleur fixe se remarque une
+  fois puis s'oublie ; une couleur qui respire reste vivante sans jamais
+  clignoter ni attirer l'oeil au mauvais moment ;
 * la touche que tu viens d'utiliser s'allume en blanc un instant, comme
   la surbrillance de l'ecran ;
 * apres RGB_VEILLE_MS sans rien toucher, tout s'eteint - pour les yeux,
@@ -4135,10 +4221,29 @@ CE QUI RISQUE DE CRAMER, OU DE FAIRE REDEMARRER LA CARTE
    protection du GPIO. Alimente les deux ensemble.
 """
 
+from math import cos, pi
 from time import ticks_ms, ticks_diff, ticks_add
 import config as C
 
 _BLANC = (255, 255, 255)
+
+
+def respiration(phase_ms):
+    """Facteur de luminosite (0.0 a 1.0) a un instant du cycle.
+
+    C'est exactement la courbe de la LED du bouton ESC (voir led.py) :
+    (1 - cos) / 2 part de zero, monte en douceur, redescend en douceur.
+    L'exposant 1.6 fait s'attarder la couleur dans les valeurs basses et
+    ne fait que passer par le maximum - c'est ce qui donne une
+    respiration plutot qu'un clignotement.
+
+    Fonction pure : elle ne depend que de son argument, donc elle se teste
+    sans la moindre LED.
+    """
+    periode = getattr(C, "RGB_RESPIRATION_MS", 4000)
+    plancher = getattr(C, "RGB_RESPIRATION_MIN", 0.35)
+    onde = (1 - cos(2 * pi * (phase_ms % periode) / periode)) / 2
+    return plancher + (1.0 - plancher) * onde ** 1.6
 
 
 class Rgb:
@@ -4157,6 +4262,8 @@ class Rgb:
         self._eteint = False
         self._a_redessiner = True
         self._prochain = 0
+        self._phase = 0            # ou on en est dans la respiration
+        self._dernier = ticks_ms()
         if not getattr(C, "RGB_ENABLED", False):
             return
         try:
@@ -4191,10 +4298,13 @@ class Rgb:
     # ------------------------------------------------------------------
     # Ce que main.py appelle
     # ------------------------------------------------------------------
-    def profil(self, nom):
-        """Nouvelle couleur de fond : celle du profil qui vient d'etre pris."""
-        couleurs = getattr(C, "RGB_COULEURS", {})
-        self.base = tuple(couleurs.get(nom, C.RGB_COULEUR_DEFAUT))
+    def profil(self, couleur):
+        """Nouvelle couleur de fond : celle du logiciel qui vient d'etre pris.
+
+        C'est main.py qui choisit la couleur, a partir de la configuration :
+        rgb.py ne connait pas les noms de profils, seulement des couleurs.
+        """
+        self.base = tuple(couleur or C.RGB_COULEUR_DEFAUT)
         self.surbrillance = -1
         self._a_redessiner = True
         self.reveiller(ticks_ms())
@@ -4240,6 +4350,16 @@ class Rgb:
             self._eteint = True
             self._a_redessiner = True
 
+        # La respiration avance avec le TEMPS ECOULE, pas avec le nombre de
+        # tours de boucle : le rythme reste le meme quoi que fasse le
+        # macropad par ailleurs.
+        ecoule = ticks_diff(now, self._dernier)
+        self._dernier = now
+        if getattr(C, "RGB_RESPIRATION", True) and not self._eteint:
+            if 0 < ecoule < 1000:      # un saut d'horloge ne fait pas sauter
+                self._phase += ecoule  # la couleur
+            self._a_redessiner = True
+
         if not self._a_redessiner or ticks_diff(now, self._prochain) < 0:
             return
         self._prochain = ticks_add(now, C.RGB_MS)
@@ -4254,12 +4374,16 @@ class Rgb:
             self._peindre_tout((0, 0, 0))
             return
         fond = tuple(C.RGB_COULEUR_ERREUR) if self._erreur else self.base
+        if getattr(C, "RGB_RESPIRATION", True):
+            fond = _attenuer(fond, respiration(self._phase))
         if self.type == "PWM":
             # Une seule LED : la surbrillance n'a pas de sens, on montre
             # simplement la couleur du profil.
             self._peindre_tout(fond)
             return
         for index in range(self.nb):
+            # La touche que tu viens d'utiliser ne respire pas : elle est
+            # en blanc franc, sinon le retour visuel serait mou.
             couleur = _BLANC if index == self.surbrillance else fond
             self._pixel(index, couleur)
         self.materiel.write()
@@ -4303,6 +4427,11 @@ class Rgb:
         except Exception:
             pass
         self.actif = False
+
+
+def _attenuer(couleur, facteur):
+    """Multiplie une couleur par un facteur de 0.0 a 1.0."""
+    return tuple(int(valeur * facteur) for valeur in couleur)
 
 
 def limiter(couleur):

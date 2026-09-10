@@ -92,8 +92,20 @@ function texte(noeud) {
 }
 function champs(noeud, sortie) {
   sortie = sortie || [];
-  if (noeud.tag === 'input') { sortie.push(noeud); }
+  // Le selecteur de couleur est mis a part : il n'a pas de position fixe
+  // dans la liste, et le compter decalerait tous les indices.
+  if (noeud.tag === 'input' && noeud.attrs.type !== 'color') {
+    sortie.push(noeud);
+  }
   noeud.children.forEach(function (e) { champs(e, sortie); });
+  return sortie;
+}
+function couleurs(noeud, sortie) {
+  sortie = sortie || [];
+  if (noeud.tag === 'input' && noeud.attrs.type === 'color') {
+    sortie.push(noeud);
+  }
+  noeud.children.forEach(function (e) { couleurs(e, sortie); });
   return sortie;
 }
 function saisir(champ, valeur) {
@@ -125,6 +137,10 @@ setTimeout(function () {
     saisir(c[2], 'ZZZ');            // libelle de la touche 1
     saisir(c[3], 'TESTVAL');        // valeur de son appui court
 
+    // ---- on change aussi la couleur des LED du profil ---------------
+    const cc = couleurs(profs.children[0]);
+    if (cc.length) { saisir(cc[0], '#123456'); }
+
     // ---- et dans le deuxieme logiciel de la table -------------------
     const ca = champs(registre.apps);
     if (ca.length >= 6) { saisir(ca[5], 'AbRg'); }   // abrege du 2e
@@ -143,6 +159,11 @@ setTimeout(function () {
         ? envoye.apps.liste[1].abrege : null;
       vu.app1_abrege = (envoye && envoye.apps.liste[0])
         ? envoye.apps.liste[0].abrege : null;
+      vu.couleurs = cc.length;
+      vu.couleur1 = p ? p.couleur : null;
+      const second = (envoye && envoye.ordre[1])
+        ? envoye.profils[envoye.ordre[1]] : null;
+      vu.couleur2 = second ? second.couleur : null;
       vu.message = registre.msg.textContent;
       console.log(JSON.stringify(vu));
     }, 0);

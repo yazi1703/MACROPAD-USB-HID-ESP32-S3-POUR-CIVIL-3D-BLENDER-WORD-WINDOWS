@@ -128,8 +128,11 @@ ton doigt reste dessus, pour que tu cliques à la souris pendant ce temps.
 Le modificateur descend **dès l'appui**, sans aucun délai. Détail et
 limites dans [`docs/09`](docs/09-ecran-et-gestes.md).
 
-**Et si tu as des LED RGB** (`docs/10`) : chaque profil a sa couleur, la
-touche utilisée passe au blanc, une panne HID met tout en rouge.
+**Et si tu as des LED RGB** (`docs/10`) : **le pad prend la couleur du
+logiciel où tu travailles**, en respiration douce — bleu dans Civil 3D,
+orange dans Blender. La touche utilisée passe au blanc franc, une panne
+HID met tout en rouge. Les couleurs se choisissent dans la page de
+configuration, une par profil.
 L'écran affiche les trois colonnes en permanence, et **saute sur la touche
 que tu viens d'utiliser en la surlignant** :
 
@@ -212,7 +215,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   └── generer_code_complet.py   régénère CODE_COMPLET.md
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             118 tests du firmware, exécutables sur PC
+│   ├── test_logic.py             130 tests du firmware, exécutables sur PC
 │   ├── test_pc.py                25 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
@@ -238,7 +241,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 143 tests ... OK
+→ Ran 155 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport

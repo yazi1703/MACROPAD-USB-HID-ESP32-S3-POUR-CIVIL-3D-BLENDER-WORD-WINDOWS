@@ -70,6 +70,8 @@ padding:14px;margin-bottom:12px}
 input,select{background:#0b0d12;color:#e8eaee;border:1px solid #2b3242;
 border-radius:7px;padding:7px 9px;font:13px/1.2 ui-monospace,monospace;
 width:100%}
+input[type=color]{width:42px;flex:0 0 42px;padding:2px;height:33px;
+cursor:pointer}
 input:focus,select:focus{outline:0;border-color:#3d7bfd}
 table{width:100%;border-collapse:collapse}
 td,th{padding:3px 5px 3px 0;vertical-align:middle}
@@ -105,6 +107,10 @@ white-space:pre-wrap;font:13px ui-monospace,monospace}
 <p class=hint>Libelles : 6 caracteres maximum. Combinaison :
 <b>CTRL+MAJ+ESC</b>. Chaque touche accepte trois gestes : appui court,
 appui long et double appui.</p>
+<p class=hint>Le carre de couleur a cote du titre donne la couleur des
+LED RGB de ce profil. Comme le PC change de profil selon le logiciel au
+premier plan, <b>le macropad prend la couleur du logiciel</b> ou tu
+travailles, en respiration douce.</p>
 <p class=hint><b>maintenir</b> transforme la touche en vraie touche
 modificatrice : mets <b>CTRL</b> sur l'appui court et <b>MAJ</b> sur le
 double appui, et tu obtiens <i>appui maintenu = Ctrl</i>,
@@ -145,6 +151,12 @@ function el(tag,attrs,kids){var e=document.createElement(tag);
  return e;}
 // fin=true : on previent quand tu QUITTES le champ, pas a chaque
 // frappe. Indispensable pour le nom d'un profil, qui redessine la page.
+// Le selecteur de couleur du navigateur : c'est lui qui pilote la
+// couleur des LED RGB du profil. Il rend une valeur du genre "#00a0ff".
+function col(val,cb){var i=el("input",{type:"color"});
+ i.value=val||"#808080";i.title="couleur des LED de ce profil";
+ i.oninput=function(){cb(i.value);};return i;}
+
 function inp(val,max,cb,fin){var i=el("input");i.value=val||"";
  if(max)i.maxLength=max;
  if(fin)i.onchange=function(){cb(i.value);};
@@ -220,6 +232,7 @@ function render(){
   head.firstChild.className="grow";head.firstChild.title="nom interne";
   var t=inp(p.titre,16,function(v){p.titre=v;});t.className="grow";
   t.title="titre affiche sur l'ecran";head.appendChild(t);
+  head.appendChild(col(p.couleur,function(v){p.couleur=v;}));
   head.appendChild(el("button",{cls:"d s",onclick:function(){del(nom);}},
    ["Supprimer"]));
   var tb=el("table",{},[el("tr",{},[el("th",{},["#"]),el("th",{},["Geste"]),
@@ -266,7 +279,8 @@ function del(n){if(D.ordre.length<2)return say("Il faut au moins un profil",0);
  delete D.profils[n];D.ordre=D.ordre.filter(function(x){return x!=n});render();}
 function addProfil(){var n="PROFIL",i=1;while(D.profils[n])n="PROFIL"+(++i);
  var t=[];for(var k=0;k<N;k++)t.push({label:"",usages:0});
- D.profils[n]={titre:n,touches:t};D.ordre.push(n);render();}
+ D.profils[n]={titre:n,couleur:"#808080",touches:t};
+ D.ordre.push(n);render();}
 function say(t,ok){var m=document.getElementById("msg");
  m.textContent=t;m.className=ok?"ok":"ko";m.style.display="block";
  window.scrollTo(0,document.body.scrollHeight);}

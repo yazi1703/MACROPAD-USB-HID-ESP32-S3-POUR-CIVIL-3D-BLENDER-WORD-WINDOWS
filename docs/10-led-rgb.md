@@ -196,12 +196,39 @@ passer au blanc un instant.
 
 | | |
 |---|---|
-| **Une couleur par profil** | tu sais où tu es sans lire l'écran : Civil 3D en bleu, Blender en orange, Word en bleu foncé, Windows en vert |
-| **La touche utilisée passe au blanc** | le même retour visuel que la surbrillance de l'écran, pendant `HIGHLIGHT_MS` |
+| **Le pad prend la couleur du logiciel actif** | tu cliques dans Civil 3D, le pad devient bleu ; dans Blender, orange. C'est le compagnon PC qui dit quel logiciel est au premier plan, et la couleur suit toute seule |
+| **La couleur respire** | elle monte et redescend en douceur sur 4 secondes, comme la LED du bouton ESC. Vivant, mais jamais clignotant |
+| **La touche utilisée passe au blanc** | franc, sans respiration : c'est un retour visuel, il doit être net |
 | **Panne HID : tout passe au rouge** | tu le vois du coin de l'œil, sans lire le bandeau |
 | **Extinction après 5 minutes** | `RGB_VEILLE_MS` — pour les yeux, pour les LED, et surtout pour le courant. Le premier appui rallume |
 
-Les couleurs se changent dans `RGB_COULEURS`, dans `config.py`.
+### Choisir les couleurs
+
+**Depuis la page de configuration**, un carré de couleur à côté du titre de
+chaque profil. Tu cliques, tu choisis, tu enregistres : c'est appliqué
+tout de suite et rangé dans `profils.json` avec le reste. **C'est aussi
+comme ça qu'un logiciel que tu ajoutes toi-même reçoit sa couleur.**
+
+Les couleurs d'usine, elles, sont dans `RGB_COULEURS` (`config.py`) — ce
+sont celles qu'on retrouve après un retour aux valeurs d'usine.
+
+### Régler la respiration
+
+```python
+RGB_RESPIRATION = True       # False = couleur fixe
+RGB_RESPIRATION_MS = 4000    # durée d'un cycle complet
+RGB_RESPIRATION_MIN = 0.35   # luminosité au creux (jamais éteint)
+```
+
+C'est **la même courbe que la LED du bouton ESC** : `(1 - cos) / 2`,
+élevée à la puissance 1,6. Elle s'attarde dans les valeurs basses et ne
+fait que passer par le maximum — c'est ce qui donne une respiration
+plutôt qu'un clignotement. Le plancher évite que le pad s'éteigne
+complètement en bas de cycle.
+
+Bonus qui ne se voit pas : **la respiration baisse le courant moyen**.
+Une couleur qui passe son temps entre 35 % et 100 % consomme moins qu'une
+couleur fixe à 100 %.
 
 Et comme partout dans ce projet : **rien n'attend**. Les LED sont
 rafraîchies au plus une fois toutes les 25 ms (`RGB_MS`), et seulement

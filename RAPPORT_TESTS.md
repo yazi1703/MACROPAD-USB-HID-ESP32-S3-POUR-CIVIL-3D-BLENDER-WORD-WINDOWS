@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 143 tests PC réussis ; 22 fichiers Python compilés avec succès.**
+**Résultat : 155 tests PC réussis ; 22 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 143 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  118 pour le firmware, 25 pour le compagnon Windows.
+- 155 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  130 pour le firmware, 25 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -28,7 +28,9 @@
 
 **La touche modificatrice** (`ToucheModificatrice`, 14 tests). La machine a etats (appui maintenu, appui bref puis maintenu, second appui hors delai, touche a un seul maintien) ; le modificateur reste present dans TOUS les rapports envoyes, y compris pendant qu'une macro se deroule par-dessus ; le relachement le libere ; et surtout les quatre filets contre un modificateur coince cote PC : ESC, changement de profil, deconnexion USB, macro intapable refusee sans rien envoyer.
 
-**Les LED RGB** (`LedsRgb`, 15 tests). Le plafond de luminosite, qui est une securite electrique et non un reglage esthetique : le test calcule le courant que tireraient six LED et refuse qu'il approche des 500 mA du port USB. Puis la couleur par profil, l'ordre des octets configurable, la surbrillance de la touche utilisee et son retour, le rouge en cas de panne HID, l'extinction apres inactivite et le reveil, la cadence d'envoi bornee, l'absence totale d'acces materiel quand RGB_ENABLED vaut False, une LED absente ou arrachee en cours de route qui desactive l'affichage sans jamais remonter d'exception, et les deux variantes du montage a une seule LED RGB (anode ou cathode commune).
+**Les LED RGB** (`LedsRgb` et `CouleursDesProfils`, 27 tests). Le plafond de luminosite, qui est une securite electrique et non un reglage esthetique : le test calcule le courant que tireraient six LED et refuse qu'il approche des 500 mA du port USB. Puis la couleur par profil, l'ordre des octets configurable, la surbrillance de la touche utilisee et son retour, le rouge en cas de panne HID, l'extinction apres inactivite et le reveil, la cadence d'envoi bornee, l'absence totale d'acces materiel quand RGB_ENABLED vaut False, une LED absente ou arrachee en cours de route qui desactive l'affichage sans jamais remonter d'exception, et les deux variantes du montage a une seule LED RGB (anode ou cathode commune).
+
+La respiration est verifiee comme une fonction pure - douce aux deux extremites, jamais sous son plancher, periodique - puis sur le rendu : la couleur varie bien dans le temps, la TEINTE ne bouge pas (c'est la luminosite qui respire), la touche surlignee ne respire pas, et un tour de boucle anormalement long ne fait pas sauter la couleur a l'autre bout du cycle. Les couleurs elles-memes voyagent avec la configuration : conversion dans les deux sens, couleur illisible qui retombe sur celle d'usine sans faire perdre les macros, aller-retour par la page web, et ancien profils.json sans couleur qui reprend les valeurs d'usine.
 
 **Ajouts V1.** Les six touches et leurs libellés ; la machine à états des trois gestes (appui court immédiat quand aucun double appui n'est défini, appui court retardé quand il y en a un, double appui, deux appuis trop espacés, appui long déclenché au seuil sans deuxième envoi au relâchement, touches indépendantes) ; l'aller-retour complet de la configuration par page web sans perte ; le refus d'une macro intapable et d'un libellé trop long ; le repli sur les valeurs d'usine pour un fichier corrompu ou incohérent ; **la relecture d'un `profils.json` de version 1**, dont la macro devient l'appui court ; le protocole série ligne par ligne, y compris une ligne coupée en deux envois, la lecture bornée par tour de boucle et une configuration trop volumineuse ; l'absence de séquence à deux actions dans les valeurs d'usine (que la page web tronquerait) ; **l'écran, qui ne doit jamais écrire hors des 128×64 pixels** — quatre profils, splash, surlignage de chaque touche, nom de fichier de 48 caractères en défilement, page WiFi.
 
@@ -117,6 +119,14 @@ test_shortcut_uses_physical_key_not_character ... ok
 test_submit_accepted_right_after_cancel ... ok
 test_submit_accepted_right_after_escape ... ok
 
+--- CouleursDesProfils
+test_conversion_dans_les_deux_sens ... ok
+test_la_page_web_recoit_les_couleurs ... ok
+test_les_couleurs_usine_viennent_de_config ... ok
+test_un_ancien_fichier_sans_couleur_prend_celles_d_usine ... ok
+test_une_couleur_choisie_survit_a_l_enregistrement ... ok
+test_une_couleur_illisible_ne_bloque_pas_l_enregistrement ... ok
+
 --- GestesCourtLongDouble
 test_appui_court_instantane_sans_double ... ok
 test_appui_court_retarde_si_double_possible ... ok
@@ -131,7 +141,11 @@ test_touches_independantes ... ok
 test_aucun_acces_materiel_quand_c_est_desactive ... ok
 test_chaque_profil_a_sa_couleur ... ok
 test_extinction_apres_la_veille_puis_reveil ... ok
+test_l_horloge_qui_saute_ne_fait_pas_sauter_la_couleur ... ok
+test_la_couleur_respire_vraiment ... ok
+test_la_courbe_de_respiration ... ok
 test_la_luminosite_plafonne_vraiment_le_courant ... ok
+test_la_touche_utilisee_ne_respire_pas ... ok
 test_la_touche_utilisee_passe_en_blanc ... ok
 test_materiel_absent_ne_plante_pas ... ok
 test_montage_pwm_anode_commune ... ok
@@ -141,6 +155,7 @@ test_panne_en_cours_de_route_desactive_sans_remonter ... ok
 test_panne_hid_passe_au_rouge_et_revient ... ok
 test_pas_plus_d_un_envoi_par_periode ... ok
 test_profil_inconnu_prend_la_couleur_par_defaut ... ok
+test_respiration_eteinte_laisse_la_couleur_fixe ... ok
 test_rien_a_envoyer_rien_n_est_envoye ... ok
 test_tout_s_eteint_a_l_arret ... ok
 
@@ -186,6 +201,7 @@ test_vendor_report_bytes ... ok
 
 --- PageDeConfigurationIntacte
 test_compagnon_pc_sert_la_meme_page ... ok
+test_la_couleur_des_led_se_choisit_par_profil ... ok
 test_la_page_previent_quand_elle_n_a_rien_recu ... ok
 test_la_page_se_construit_avec_de_vraies_donnees ... ok
 test_le_javascript_de_la_page_est_valide ... ok
@@ -270,7 +286,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 143 tests
+Ran 155 tests
 
 OK
 ```

@@ -411,7 +411,7 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
     def test_rotation_sur_six_touches(self):
         from profiles import ProfileManager
         import store
-        profils, ordre, titres, apps, repli, origine = store.charger(6)
+        profils, ordre, titres, couleurs, apps, repli, origine = store.charger(6)
         self.assertEqual(origine, 'usine')
         p = ProfileManager(ordre, C.DEFAULT_PROFILE, profils, 6)
         self.assertEqual(len(p.macros), 6)
@@ -421,10 +421,10 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
     # --- enregistrement JSON --------------------------------------------
     def test_aller_retour_json(self):
         import store
-        profils, ordre, titres, apps, repli = store.defauts()
-        ok, raison = store.enregistrer(profils, ordre, titres, apps, repli, 6)
+        profils, ordre, titres, couleurs, apps, repli = store.defauts()
+        ok, raison = store.enregistrer(profils, ordre, titres, couleurs, apps, repli, 6)
         self.assertTrue(ok, raison)
-        relus, ordre2, titres2, apps2, repli2, origine = store.charger(6)
+        relus, ordre2, titres2, couleurs2, apps2, repli2, origine = store.charger(6)
         self.assertEqual(origine, 'fichier')
         self.assertEqual(ordre2, ordre)
         self.assertEqual(apps2, apps)          # la table des logiciels survit
@@ -441,24 +441,24 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
 
     def test_macro_intapable_refusee(self):
         import store
-        profils, ordre, titres, apps, repli = store.defauts()
+        profils, ordre, titres, couleurs, apps, repli = store.defauts()
         profils['CIVIL3D'][0] = ('KO', {'court': [('key', 'TOUCHE_BIDON')]})
-        ok, raison = store.enregistrer(profils, ordre, titres, apps, repli, 6)
+        ok, raison = store.enregistrer(profils, ordre, titres, couleurs, apps, repli, 6)
         self.assertFalse(ok)
         self.assertIn('CIVIL3D', raison)
 
     def test_libelle_trop_long_refuse(self):
         import store
-        profils, ordre, titres, apps, repli = store.defauts()
+        profils, ordre, titres, couleurs, apps, repli = store.defauts()
         profils['WORD'][0] = ('BEAUCOUPTROPLONG', {'court': [('key', 'A')]})
-        ok, raison = store.enregistrer(profils, ordre, titres, apps, repli, 6)
+        ok, raison = store.enregistrer(profils, ordre, titres, couleurs, apps, repli, 6)
         self.assertFalse(ok)
 
     def test_fichier_corrompu_repli_sur_usine(self):
         import store
         with open(C.PROFILES_FILE, 'w') as f:
             f.write('{ ceci n est pas du JSON')
-        profils, ordre, titres, apps, repli, origine = store.charger(6)
+        profils, ordre, titres, couleurs, apps, repli, origine = store.charger(6)
         self.assertEqual(origine, 'usine')      # ne doit PAS planter
         self.assertEqual(len(profils['CIVIL3D']), 6)
 
@@ -470,7 +470,7 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
                 'profils': {'X': {'titre': 'X', 'touches': [touche] * 6}}}
         with open(C.PROFILES_FILE, 'w') as f:
             J.dump(data, f)
-        profils, ordre, titres, apps, repli, origine = store.charger(6)
+        profils, ordre, titres, couleurs, apps, repli, origine = store.charger(6)
         self.assertEqual(origine, 'usine')
 
     def test_conversion_combo(self):
@@ -691,7 +691,7 @@ class PageWebDeConfiguration(unittest.TestCase):
 
         # La modification doit etre relue telle quelle par le firmware.
         import store
-        profils, ordre, titres, apps, repli, origine = store.charger(6)
+        profils, ordre, titres, couleurs, apps, repli, origine = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(profils["CIVIL3D"][0][0], "TALUS")
         # L'appui long enregistre est bien relu.
@@ -713,7 +713,7 @@ class PageWebDeConfiguration(unittest.TestCase):
         self.assertIn("WORD", resultat["raison"])
         # Rien ne doit avoir ete ecrit : on reste sur les profils d'usine.
         import store
-        self.assertEqual(store.charger(6)[5], "usine")
+        self.assertEqual(store.charger(6)[6], "usine")
 
     def test_enregistrement_refuse_un_json_casse(self):
         import json as J
@@ -724,9 +724,9 @@ class PageWebDeConfiguration(unittest.TestCase):
     def test_retour_usine(self):
         import store
         store.enregistrer(*store.defauts(), nb_touches=6)
-        self.assertEqual(store.charger(6)[5], "fichier")
+        self.assertEqual(store.charger(6)[6], "fichier")
         self._requete("POST", "/api/usine")
-        self.assertEqual(store.charger(6)[5], "usine")
+        self.assertEqual(store.charger(6)[6], "usine")
 
     def test_chemin_inconnu(self):
         self.assertIn(b"404", self._requete("GET", "/nimportequoi"))
@@ -858,7 +858,7 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         self.assertIn((link.EVT_RECHARGER, None), evenements)
         self.assertTrue(any(s.startswith("#OK:") for s in sorties), sorties)
 
-        profils, ordre, titres, apps, repli, origine = store.charger(6)
+        profils, ordre, titres, couleurs, apps, repli, origine = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(profils["CIVIL3D"][0][0], "TALUS")
         # L'appui long enregistre est bien relu.
@@ -879,7 +879,7 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         self.assertNotIn((link.EVT_RECHARGER, None), evenements)
         self.assertTrue(any(s.startswith("#KO:") for s in sorties), sorties)
         # Rien n'a ete ecrit : on reste sur les profils d'usine.
-        self.assertEqual(store.charger(6)[5], "usine")
+        self.assertEqual(store.charger(6)[6], "usine")
 
     def test_json_casse_refuse(self):
         lien, source, sorties = self._lien()
@@ -1144,6 +1144,78 @@ class ToucheModificatrice(unittest.TestCase):
                                         ["CIVIL3D"], 6), [])
 
 
+class CouleursDesProfils(unittest.TestCase):
+    """La couleur des LED voyage avec la configuration.
+
+    Elle est rangee dans profils.json et modifiable depuis les deux pages
+    web : ajouter un logiciel, c'est aussi lui donner sa couleur, sans
+    toucher a config.py.
+    """
+
+    def setUp(self):
+        try:
+            import os
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    def test_conversion_dans_les_deux_sens(self):
+        import store
+        self.assertEqual(store.couleur_vers_texte((0, 160, 255)), "#00a0ff")
+        self.assertEqual(store.couleur_depuis_texte("#00A0FF"), (0, 160, 255))
+        self.assertEqual(store.couleur_depuis_texte("00a0ff"), (0, 160, 255))
+
+    def test_une_couleur_illisible_ne_bloque_pas_l_enregistrement(self):
+        # Une couleur fausse ne doit pas faire perdre des macros valables :
+        # on retombe sur la couleur d'usine, et c'est tout.
+        import store
+        usine = store.couleur_usine("CIVIL3D")
+        for mauvaise in ("", None, "bleu", "#12", "#zzzzzz", 42):
+            self.assertEqual(store.couleur_depuis_texte(mauvaise, usine),
+                             usine, repr(mauvaise))
+
+    def test_les_couleurs_usine_viennent_de_config(self):
+        import store
+        _, _, _, couleurs, _, _ = store.defauts()
+        self.assertEqual(couleurs["CIVIL3D"], tuple(C.RGB_COULEURS["CIVIL3D"]))
+        self.assertEqual(couleurs["BLENDER"], tuple(C.RGB_COULEURS["BLENDER"]))
+
+    def test_la_page_web_recoit_les_couleurs(self):
+        import store
+        data = store.vers_json(6)
+        self.assertEqual(data["profils"]["CIVIL3D"]["couleur"],
+                         store.couleur_vers_texte(C.RGB_COULEURS["CIVIL3D"]))
+
+    def test_une_couleur_choisie_survit_a_l_enregistrement(self):
+        import store
+        data = store.vers_json(6)
+        data["profils"]["WORD"]["couleur"] = "#123456"
+        ok, raison = store.enregistrer_json(data, 6)
+        self.assertTrue(ok, raison)
+
+        _, _, _, couleurs, _, _, origine = store.charger(6)
+        self.assertEqual(origine, "fichier")
+        self.assertEqual(couleurs["WORD"], (0x12, 0x34, 0x56))
+        # Les autres n'ont pas bouge.
+        self.assertEqual(couleurs["CIVIL3D"], tuple(C.RGB_COULEURS["CIVIL3D"]))
+        # Et la page web la relit telle quelle.
+        self.assertEqual(store.vers_json(6)["profils"]["WORD"]["couleur"],
+                         "#123456")
+
+    def test_un_ancien_fichier_sans_couleur_prend_celles_d_usine(self):
+        # profils.json ecrit avant les LED RGB : aucune couleur dedans.
+        import store
+        data = store.vers_json(6)
+        for bloc in data["profils"].values():
+            del bloc["couleur"]
+        ok, raison = store.enregistrer_json(data, 6)
+        self.assertTrue(ok, raison)
+        _, _, _, couleurs, _, _, _ = store.charger(6)
+        self.assertEqual(couleurs["CIVIL3D"], tuple(C.RGB_COULEURS["CIVIL3D"]))
+
+
 class LedsRgb(unittest.TestCase):
     """Les LED RGB des touches, sans LED.
 
@@ -1177,9 +1249,13 @@ class LedsRgb(unittest.TestCase):
         sys.modules['neopixel'] = module
 
         self.sauvegarde = {}
+        # Respiration eteinte par defaut dans ces tests : elle fait
+        # varier la luminosite en permanence, ce qui empeche de comparer
+        # une couleur a une valeur exacte. Elle a ses propres tests.
         self._regler(RGB_ENABLED=True, RGB_TYPE="WS2812", RGB_PIN=16,
                      RGB_COUNT=6, RGB_ORDRE="GRB", RGB_LUMINOSITE=40,
-                     RGB_VEILLE_MS=300000, RGB_MS=25)
+                     RGB_VEILLE_MS=300000, RGB_MS=25,
+                     RGB_RESPIRATION=False)
 
     def tearDown(self):
         for nom, valeur in self.sauvegarde.items():
@@ -1219,13 +1295,13 @@ class LedsRgb(unittest.TestCase):
         objet = rgb.Rgb()
         self.assertFalse(objet.actif)
         self.assertIsNone(objet.materiel)
-        objet.profil("CIVIL3D"); objet.touche(0, 0); objet.tick(0)
+        objet.profil(C.RGB_COULEURS["CIVIL3D"]); objet.touche(0, 0); objet.tick(0)
         objet.close()          # rien ne doit lever
 
     # --- les couleurs --------------------------------------------------
     def test_chaque_profil_a_sa_couleur(self):
         objet = self._rgb()
-        objet.profil("CIVIL3D")
+        objet.profil(C.RGB_COULEURS["CIVIL3D"])
         objet.tick(100)
         attendu = tuple(C.RGB_COULEURS["CIVIL3D"])
         import rgb
@@ -1237,7 +1313,7 @@ class LedsRgb(unittest.TestCase):
     def test_ordre_des_couleurs_configurable(self):
         self._regler(RGB_ORDRE="RGB")
         objet = self._rgb()
-        objet.profil("CIVIL3D")
+        objet.profil(C.RGB_COULEURS["CIVIL3D"])
         objet.tick(100)
         import rgb
         r, v, b = rgb.limiter(C.RGB_COULEURS["CIVIL3D"])
@@ -1245,7 +1321,7 @@ class LedsRgb(unittest.TestCase):
 
     def test_profil_inconnu_prend_la_couleur_par_defaut(self):
         objet = self._rgb()
-        objet.profil("UN_PROFIL_A_MOI")
+        objet.profil(None)
         objet.tick(100)
         import rgb
         r, v, b = rgb.limiter(C.RGB_COULEUR_DEFAUT)
@@ -1253,7 +1329,7 @@ class LedsRgb(unittest.TestCase):
 
     def test_la_touche_utilisee_passe_en_blanc(self):
         objet = self._rgb()
-        objet.profil("WORD")
+        objet.profil(C.RGB_COULEURS["WORD"])
         objet.tick(100)
         objet.touche(3, 200)
         objet.tick(300)
@@ -1271,7 +1347,7 @@ class LedsRgb(unittest.TestCase):
 
     def test_panne_hid_passe_au_rouge_et_revient(self):
         objet = self._rgb()
-        objet.profil("BLENDER")
+        objet.profil(C.RGB_COULEURS["BLENDER"])
         objet.tick(100)
         objet.etat("ERR")
         objet.tick(200)
@@ -1286,7 +1362,7 @@ class LedsRgb(unittest.TestCase):
     # --- veille et cadence ---------------------------------------------
     def test_extinction_apres_la_veille_puis_reveil(self):
         objet = self._rgb()
-        objet.profil("WORD")
+        objet.profil(C.RGB_COULEURS["WORD"])
         objet.tick(100)
         objet.tick(100 + C.RGB_VEILLE_MS + 10)
         self.assertEqual(objet.materiel.pixels[0], (0, 0, 0))
@@ -1297,7 +1373,7 @@ class LedsRgb(unittest.TestCase):
 
     def test_pas_plus_d_un_envoi_par_periode(self):
         objet = self._rgb()
-        objet.profil("WORD")
+        objet.profil(C.RGB_COULEURS["WORD"])
         objet.tick(0)
         depart = objet.materiel.ecritures
         # Cent tours de boucle, soit 100 ms de temps simule : a la
@@ -1314,12 +1390,84 @@ class LedsRgb(unittest.TestCase):
 
     def test_rien_a_envoyer_rien_n_est_envoye(self):
         objet = self._rgb()
-        objet.profil("WORD")
+        objet.profil(C.RGB_COULEURS["WORD"])
         objet.tick(0)
         depart = objet.materiel.ecritures
         for n in range(1000, 3000, 2):
             objet.tick(n)
         self.assertEqual(objet.materiel.ecritures, depart)
+
+    # --- la respiration --------------------------------------------------
+    def test_la_courbe_de_respiration(self):
+        """Meme courbe que la LED du bouton ESC : douce aux extremites."""
+        import rgb
+        self._regler(RGB_RESPIRATION_MS=4000, RGB_RESPIRATION_MIN=0.35)
+        creux = rgb.respiration(0)
+        milieu = rgb.respiration(2000)
+        self.assertAlmostEqual(creux, 0.35, places=3)
+        self.assertAlmostEqual(milieu, 1.0, places=3)
+        # Elle monte sans a-coup, et repart au creux au cycle suivant.
+        precedent = creux
+        for phase in range(0, 2001, 100):
+            valeur = rgb.respiration(phase)
+            self.assertGreaterEqual(valeur + 1e-9, precedent)
+            precedent = valeur
+        self.assertAlmostEqual(rgb.respiration(4000), creux, places=3)
+        # Et elle ne descend jamais sous le plancher : le pad ne s'eteint
+        # pas au creux, il faiblit seulement.
+        for phase in range(0, 4000, 37):
+            self.assertGreaterEqual(rgb.respiration(phase), 0.35 - 1e-9)
+
+    def test_la_couleur_respire_vraiment(self):
+        self._regler(RGB_RESPIRATION=True, RGB_RESPIRATION_MS=4000)
+        objet = self._rgb()
+        objet.profil(C.RGB_COULEURS["CIVIL3D"])
+        vues = []
+        for instant in range(0, 4000, 100):
+            objet.tick(instant)
+            vues.append(objet.materiel.pixels[0])
+        # La luminosite doit varier, et repasser par un creux et un sommet.
+        sommes = [sum(v) for v in vues]
+        self.assertGreater(max(sommes), min(sommes),
+                           "la couleur ne respire pas")
+        # Toujours la meme teinte : c'est la LUMINOSITE qui varie, pas la
+        # couleur. Le vert reste devant le rouge, qui reste devant le bleu.
+        for vert, rouge, bleu in vues:
+            if rouge or vert or bleu:
+                self.assertLessEqual(rouge, vert + 1)
+
+    def test_respiration_eteinte_laisse_la_couleur_fixe(self):
+        objet = self._rgb()          # setUp a mis RGB_RESPIRATION=False
+        objet.profil(C.RGB_COULEURS["CIVIL3D"])
+        objet.tick(0)
+        premiere = objet.materiel.pixels[0]
+        for instant in range(100, 4000, 100):
+            objet.tick(instant)
+        self.assertEqual(objet.materiel.pixels[0], premiere)
+
+    def test_la_touche_utilisee_ne_respire_pas(self):
+        # Le retour visuel doit etre franc : la touche pressee est en
+        # blanc plein, pas en blanc qui palpite.
+        self._regler(RGB_RESPIRATION=True)
+        objet = self._rgb()
+        objet.profil(C.RGB_COULEURS["WORD"])
+        import rgb
+        blanc = rgb.limiter((255, 255, 255))
+        for instant in range(0, 800, 100):
+            objet.touche(2, instant)
+            objet.tick(instant)
+            self.assertEqual(objet.materiel.pixels[2], blanc)
+
+    def test_l_horloge_qui_saute_ne_fait_pas_sauter_la_couleur(self):
+        # Un tour de boucle tres long (garbage collector, ecriture flash)
+        # ne doit pas propulser la respiration a l'autre bout du cycle.
+        self._regler(RGB_RESPIRATION=True, RGB_RESPIRATION_MS=4000)
+        objet = self._rgb()
+        objet.profil(C.RGB_COULEURS["WORD"])
+        objet.tick(0)
+        phase = objet._phase
+        objet.tick(60000)            # une minute d'un coup
+        self.assertEqual(objet._phase, phase)
 
     # --- robustesse ------------------------------------------------------
     def test_materiel_absent_ne_plante_pas(self):
@@ -1327,11 +1475,11 @@ class LedsRgb(unittest.TestCase):
         import rgb
         objet = rgb.Rgb()
         self.assertFalse(objet.actif)
-        objet.profil("WORD"); objet.touche(0, 0); objet.tick(0); objet.close()
+        objet.profil(C.RGB_COULEURS["WORD"]); objet.touche(0, 0); objet.tick(0); objet.close()
 
     def test_panne_en_cours_de_route_desactive_sans_remonter(self):
         objet = self._rgb()
-        objet.profil("WORD")
+        objet.profil(C.RGB_COULEURS["WORD"])
 
         def casse():
             raise OSError("fil arrache")
@@ -1341,7 +1489,7 @@ class LedsRgb(unittest.TestCase):
 
     def test_tout_s_eteint_a_l_arret(self):
         objet = self._rgb()
-        objet.profil("WORD")
+        objet.profil(C.RGB_COULEURS["WORD"])
         objet.tick(100)
         objet.close()
         self.assertEqual(objet.materiel.pixels[0], (0, 0, 0))
@@ -1352,7 +1500,7 @@ class LedsRgb(unittest.TestCase):
         self._regler(RGB_TYPE="PWM", RGB_PIN_R=16, RGB_PIN_V=17,
                      RGB_PIN_B=18, RGB_ANODE_COMMUNE=True)
         objet = self._rgb()
-        objet.profil("CIVIL3D")
+        objet.profil(C.RGB_COULEURS["CIVIL3D"])
         objet.tick(100)
         import rgb
         r, v, b = rgb.limiter(C.RGB_COULEURS["CIVIL3D"])
@@ -1365,7 +1513,7 @@ class LedsRgb(unittest.TestCase):
         self._regler(RGB_TYPE="PWM", RGB_PIN_R=16, RGB_PIN_V=17,
                      RGB_PIN_B=18, RGB_ANODE_COMMUNE=False)
         objet = self._rgb()
-        objet.profil("CIVIL3D")
+        objet.profil(C.RGB_COULEURS["CIVIL3D"])
         objet.tick(100)
         import rgb
         r, v, b = rgb.limiter(C.RGB_COULEURS["CIVIL3D"])
@@ -1538,6 +1686,21 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         self.assertEqual(vu["app1_abrege"], "C3D")
         self.assertIn("Enregistre", vu["message"])
 
+    def test_la_couleur_des_led_se_choisit_par_profil(self):
+        """Un selecteur de couleur par profil, et il vise le bon profil."""
+        import store
+        configuration = store.vers_json(6)
+        vu = self._construire(configuration)
+
+        # Un carre de couleur par profil, dans l'en-tete de sa carte.
+        self.assertEqual(vu["couleurs"], 1)
+        # La couleur choisie part bien avec le premier profil...
+        self.assertEqual(vu["couleur1"], "#123456")
+        # ...et le profil suivant garde la sienne.
+        deuxieme = configuration["ordre"][1]
+        self.assertEqual(vu["couleur2"],
+                         configuration["profils"][deuxieme]["couleur"])
+
     def test_la_page_previent_quand_elle_n_a_rien_recu(self):
         """Macropad absent ou mode --simuler : il faut le DIRE.
 
@@ -1568,7 +1731,7 @@ class AncienFichierDeConfiguration(unittest.TestCase):
                 {"label": "", "type": "none", "valeur": ""},
             ]}},
         }
-        profils, ordre, titres, apps, repli = store.depuis_json(ancien, 6)
+        profils, ordre, titres, couleurs, apps, repli = store.depuis_json(ancien, 6)
         touches = profils["CIVIL3D"]
 
         self.assertEqual(len(touches), 6)          # complete a six touches
@@ -1597,7 +1760,7 @@ class AncienFichierDeConfiguration(unittest.TestCase):
                  "court": {"type": "combo", "valeur": "CTRL+B"}},
             ]}},
         }
-        profils, _, _, _, _ = store.depuis_json(recent, 6)
+        profils, _, _, _, _, _ = store.depuis_json(recent, 6)
         self.assertEqual(profils["WORD"][0][1]["court"],
                          [("combo", ("CTRL", "B"))])
 

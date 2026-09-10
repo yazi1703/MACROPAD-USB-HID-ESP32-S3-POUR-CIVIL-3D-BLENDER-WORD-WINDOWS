@@ -76,6 +76,7 @@ les 224 Ko de RAM de la carte.
 | Ajouter / supprimer un profil | ✅ |
 | Changer les macros des 6 touches | ✅ libellé, type, valeur |
 | **Trois gestes par touche** | ✅ appui court, appui long, double appui |
+| **Couleur des LED du profil** | ✅ carré de couleur à côté du titre |
 | **Table des logiciels détectés** | ✅ programme, profil, abrégé écran |
 | **Compteur d'usage** | ✅ affiché en bout de ligne, avec sa barre |
 | Revenir aux valeurs d'usine | ✅ bouton dédié |

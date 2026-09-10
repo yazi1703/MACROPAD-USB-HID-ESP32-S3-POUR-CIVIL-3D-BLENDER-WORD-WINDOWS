@@ -214,6 +214,15 @@ RGB_COULEURS = {
 RGB_COULEUR_DEFAUT = (120, 120, 120)   # profil sans couleur declaree
 RGB_COULEUR_ERREUR = (255, 0, 0)       # panne HID : visible sans lire
 
+# --- respiration ------------------------------------------------------
+# La couleur monte et redescend doucement, comme la LED du bouton ESC.
+# Meme courbe, meme douceur (voir rgb.py). Mets False pour une couleur
+# fixe. Le plancher evite que le pad s'eteigne completement en bas de
+# cycle : a 0.35, il reste toujours un tiers de luminosite.
+RGB_RESPIRATION = True
+RGB_RESPIRATION_MS = 4000   # duree d'un cycle complet
+RGB_RESPIRATION_MIN = 0.35  # luminosite au creux de la respiration
+
 RGB_MS = 25                 # au plus un envoi toutes les 25 ms
 RGB_VEILLE_MS = 300000      # 5 minutes sans appui -> extinction
 

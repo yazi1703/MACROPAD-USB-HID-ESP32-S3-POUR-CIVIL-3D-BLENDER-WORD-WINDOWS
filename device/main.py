@@ -127,7 +127,8 @@ def run():
         return
 
     # --- Chargement de la configuration --------------------------------
-    profils, ordre, titres, apps, repli, origine = store.charger(NB_TOUCHES)
+    profils, ordre, titres, couleurs, apps, repli, origine = \
+        store.charger(NB_TOUCHES)
     print("Macros chargees depuis :", origine)
 
     manager = ProfileManager(ordre, C.DEFAULT_PROFILE, profils, NB_TOUCHES)
@@ -168,7 +169,9 @@ def run():
                         manager.macros, ticks_ms(),
                         manager.index, len(ordre), splash)
         gestes.configurer(manager.macros)
-        rgb.profil(manager.name)          # chaque profil a sa couleur
+        # La couleur suit le logiciel : c'est le profil actif qui la donne,
+        # et le PC change de profil tout seul selon la fenetre active.
+        rgb.profil(couleurs.get(manager.name))
 
     def recharger_profils():
         """Relit profils.json et applique la nouvelle configuration.
@@ -176,15 +179,16 @@ def run():
         Appele quand une page web vient d'enregistrer : les changements
         prennent effet immediatement, sans RESET.
         """
-        nonlocal manager, titres, ordre
+        nonlocal manager, titres, ordre, couleurs
         try:
-            neufs, ordre_neuf, titres_neufs, _apps, _repli, origine_neuve = \
-                store.charger(NB_TOUCHES)
+            (neufs, ordre_neuf, titres_neufs, couleurs_neuves,
+             _apps, _repli, origine_neuve) = store.charger(NB_TOUCHES)
             nouveau = ProfileManager(ordre_neuf, manager.name, neufs, NB_TOUCHES)
         except Exception as exc:
             print("[main] configuration refusee, on garde l'ancienne :", exc)
             return
         manager, titres, ordre = nouveau, titres_neufs, ordre_neuf
+        couleurs = couleurs_neuves
         afficher(False)
         print("Macros rechargees depuis :", origine_neuve)
 

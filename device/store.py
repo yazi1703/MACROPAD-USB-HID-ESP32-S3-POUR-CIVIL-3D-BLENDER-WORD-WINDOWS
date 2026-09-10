@@ -40,6 +40,7 @@ FORME DU FICHIER
       "profils": {
         "CIVIL3D": {
           "titre": "CIVIL 3D",
+          "couleur": "#00a0ff",
           "touches": [
             {"label": "MATCH",
              "court":  {"type": "text_enter", "valeur": "_MATCHPROP"},
@@ -101,6 +102,41 @@ def action_depuis_json(genre, valeur):
 
 
 # =====================================================================
+# Les couleurs des LED RGB
+# =====================================================================
+# Dans le fichier et dans les pages web, une couleur s'ecrit comme en
+# HTML : "#00a0ff". C'est ce que comprend le selecteur de couleur du
+# navigateur, et c'est lisible a l'oeil nu dans profils.json.
+def couleur_vers_texte(couleur):
+    r, v, b = (int(c) & 255 for c in couleur)
+    return "#%02x%02x%02x" % (r, v, b)
+
+
+def couleur_depuis_texte(texte, defaut=None):
+    """Accepte "#00a0ff" ou "00a0ff". Retombe sur defaut si c'est illisible.
+
+    On ne leve PAS d'exception ici : une couleur fausse ne doit pas
+    empecher d'enregistrer des macros parfaitement valables. Au pire, le
+    pad s'allume dans la couleur par defaut.
+    """
+    if defaut is None:
+        defaut = tuple(C.RGB_COULEUR_DEFAUT)
+    texte = str(texte or "").strip().lstrip("#")
+    if len(texte) != 6:
+        return tuple(defaut)
+    try:
+        return tuple(int(texte[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return tuple(defaut)
+
+
+def couleur_usine(nom):
+    """Couleur d'usine d'un profil, ou la couleur par defaut."""
+    return tuple(getattr(C, "RGB_COULEURS", {}).get(
+        nom, C.RGB_COULEUR_DEFAUT))
+
+
+# =====================================================================
 # Verification
 # =====================================================================
 def verifier(profils, ordre, nb_touches):
@@ -150,7 +186,9 @@ def defauts():
     for nom, touches in P.PROFILES.items():
         profils[nom] = [(label, dict(gestes)) for label, gestes in touches]
     apps = [tuple(a) for a in P.APPS]
-    return profils, list(C.PROFILES_ORDER), dict(P.TITLES), apps, tuple(P.APPS_REPLI)
+    couleurs = dict((nom, couleur_usine(nom)) for nom in profils)
+    return (profils, list(C.PROFILES_ORDER), dict(P.TITLES), couleurs,
+            apps, tuple(P.APPS_REPLI))
 
 
 # =====================================================================
@@ -158,7 +196,7 @@ def defauts():
 # =====================================================================
 def vers_json(nb_touches, stats=None):
     """Configuration complete, prete a etre envoyee a une page web."""
-    profils, ordre, titres, apps, repli, origine = charger(nb_touches)
+    profils, ordre, titres, couleurs, apps, repli, origine = charger(nb_touches)
     blocs = {}
     for nom, touches in profils.items():
         liste = []
@@ -170,7 +208,12 @@ def vers_json(nb_touches, stats=None):
             if stats is not None:
                 entree["usages"] = stats.pour(nom)[index]
             liste.append(entree)
-        blocs[nom] = {"titre": titres.get(nom, nom), "touches": liste}
+        blocs[nom] = {
+            "titre": titres.get(nom, nom),
+            "couleur": couleur_vers_texte(
+                couleurs.get(nom) or couleur_usine(nom)),
+            "touches": liste,
+        }
 
     return {
         "version": 2,
@@ -189,7 +232,7 @@ def vers_json(nb_touches, stats=None):
 def depuis_json(data, nb_touches):
     """Forme web -> forme interne. Leve une exception si c'est illisible."""
     ordre = [str(n) for n in data["ordre"]]
-    profils, titres = {}, {}
+    profils, titres, couleurs = {}, {}, {}
     for nom, bloc in data["profils"].items():
         touches = []
         for entree in bloc["touches"][:nb_touches]:
@@ -213,6 +256,8 @@ def depuis_json(data, nb_touches):
             touches.append(("", {}))
         profils[str(nom)] = touches
         titres[str(nom)] = str(bloc.get("titre", nom))
+        couleurs[str(nom)] = couleur_depuis_texte(bloc.get("couleur"),
+                                                  couleur_usine(str(nom)))
 
     bloc_apps = data.get("apps") or {}
     apps = []
@@ -224,14 +269,14 @@ def depuis_json(data, nb_touches):
     bloc_repli = bloc_apps.get("repli") or {}
     repli = (str(bloc_repli.get("profil", P.APPS_REPLI[0])).upper(),
              str(bloc_repli.get("abrege", P.APPS_REPLI[1]))[:7])
-    return profils, ordre, titres, apps, repli
+    return profils, ordre, titres, couleurs, apps, repli
 
 
 # =====================================================================
 # Lecture et ecriture du fichier
 # =====================================================================
 def charger(nb_touches):
-    """Retourne (profils, ordre, titres, apps, repli, origine).
+    """Retourne (profils, ordre, titres, couleurs, apps, repli, origine).
 
     origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire d'ou
     viennent les macros actives.
@@ -247,7 +292,8 @@ def charger(nb_touches):
         return defauts() + ("usine",)
 
     try:
-        profils, ordre, titres, apps, repli = depuis_json(data, nb_touches)
+        profils, ordre, titres, couleurs, apps, repli = depuis_json(
+            data, nb_touches)
     except Exception as exc:
         print("[store] %s mal forme (%s), retour aux valeurs d'usine"
               % (C.PROFILES_FILE, exc))
@@ -260,10 +306,10 @@ def charger(nb_touches):
             print("   -", probleme)
         return defauts() + ("usine",)
 
-    return profils, ordre, titres, apps, repli, "fichier"
+    return profils, ordre, titres, couleurs, apps, repli, "fichier"
 
 
-def enregistrer(profils, ordre, titres, apps, repli, nb_touches):
+def enregistrer(profils, ordre, titres, couleurs, apps, repli, nb_touches):
     """Verifie puis ecrit. Retourne (True, "") ou (False, raison)."""
     problemes = verifier(profils, ordre, nb_touches)
     if problemes:
@@ -278,7 +324,12 @@ def enregistrer(profils, ordre, titres, apps, repli, nb_touches):
                 genre, valeur = action_vers_json((gestes or {}).get(geste))
                 entree[geste] = {"type": genre, "valeur": valeur}
             liste.append(entree)
-        blocs[nom] = {"titre": titres.get(nom, nom), "touches": liste}
+        blocs[nom] = {
+            "titre": titres.get(nom, nom),
+            "couleur": couleur_vers_texte(
+                (couleurs or {}).get(nom) or couleur_usine(nom)),
+            "touches": liste,
+        }
 
     data = {"version": 2, "ordre": list(ordre), "profils": blocs,
             "apps": {"repli": {"profil": repli[0], "abrege": repli[1]},
@@ -305,10 +356,12 @@ def enregistrer(profils, ordre, titres, apps, repli, nb_touches):
 def enregistrer_json(data, nb_touches):
     """Enregistre directement une configuration recue d'une page web."""
     try:
-        profils, ordre, titres, apps, repli = depuis_json(data, nb_touches)
+        profils, ordre, titres, couleurs, apps, repli = depuis_json(
+            data, nb_touches)
     except Exception as exc:
         return False, "donnees illisibles : %s" % exc
-    return enregistrer(profils, ordre, titres, apps, repli, nb_touches)
+    return enregistrer(profils, ordre, titres, couleurs, apps, repli,
+                       nb_touches)
 
 
 def effacer():

@@ -6,7 +6,13 @@ rgb.py - Les LED RGB sous les touches.
 CE QUE CA FAIT
 =====================================================================
 * chaque profil a sa couleur : d'un coup d'oeil, tu sais si le macropad
-  est en CIVIL 3D ou en BLENDER, sans lire l'ecran ;
+  est en CIVIL 3D ou en BLENDER, sans lire l'ecran. Comme le PC dit au
+  macropad quel logiciel est au premier plan, la couleur suit le logiciel
+  tout seul : tu cliques dans Civil 3D, le pad devient bleu ;
+* la couleur RESPIRE doucement, comme la LED du bouton ESC : elle monte
+  et redescend sur RGB_RESPIRATION_MS. Une couleur fixe se remarque une
+  fois puis s'oublie ; une couleur qui respire reste vivante sans jamais
+  clignoter ni attirer l'oeil au mauvais moment ;
 * la touche que tu viens d'utiliser s'allume en blanc un instant, comme
   la surbrillance de l'ecran ;
 * apres RGB_VEILLE_MS sans rien toucher, tout s'eteint - pour les yeux,
@@ -64,10 +70,29 @@ CE QUI RISQUE DE CRAMER, OU DE FAIRE REDEMARRER LA CARTE
    protection du GPIO. Alimente les deux ensemble.
 """
 
+from math import cos, pi
 from time import ticks_ms, ticks_diff, ticks_add
 import config as C
 
 _BLANC = (255, 255, 255)
+
+
+def respiration(phase_ms):
+    """Facteur de luminosite (0.0 a 1.0) a un instant du cycle.
+
+    C'est exactement la courbe de la LED du bouton ESC (voir led.py) :
+    (1 - cos) / 2 part de zero, monte en douceur, redescend en douceur.
+    L'exposant 1.6 fait s'attarder la couleur dans les valeurs basses et
+    ne fait que passer par le maximum - c'est ce qui donne une
+    respiration plutot qu'un clignotement.
+
+    Fonction pure : elle ne depend que de son argument, donc elle se teste
+    sans la moindre LED.
+    """
+    periode = getattr(C, "RGB_RESPIRATION_MS", 4000)
+    plancher = getattr(C, "RGB_RESPIRATION_MIN", 0.35)
+    onde = (1 - cos(2 * pi * (phase_ms % periode) / periode)) / 2
+    return plancher + (1.0 - plancher) * onde ** 1.6
 
 
 class Rgb:
@@ -86,6 +111,8 @@ class Rgb:
         self._eteint = False
         self._a_redessiner = True
         self._prochain = 0
+        self._phase = 0            # ou on en est dans la respiration
+        self._dernier = ticks_ms()
         if not getattr(C, "RGB_ENABLED", False):
             return
         try:
@@ -120,10 +147,13 @@ class Rgb:
     # ------------------------------------------------------------------
     # Ce que main.py appelle
     # ------------------------------------------------------------------
-    def profil(self, nom):
-        """Nouvelle couleur de fond : celle du profil qui vient d'etre pris."""
-        couleurs = getattr(C, "RGB_COULEURS", {})
-        self.base = tuple(couleurs.get(nom, C.RGB_COULEUR_DEFAUT))
+    def profil(self, couleur):
+        """Nouvelle couleur de fond : celle du logiciel qui vient d'etre pris.
+
+        C'est main.py qui choisit la couleur, a partir de la configuration :
+        rgb.py ne connait pas les noms de profils, seulement des couleurs.
+        """
+        self.base = tuple(couleur or C.RGB_COULEUR_DEFAUT)
         self.surbrillance = -1
         self._a_redessiner = True
         self.reveiller(ticks_ms())
@@ -169,6 +199,16 @@ class Rgb:
             self._eteint = True
             self._a_redessiner = True
 
+        # La respiration avance avec le TEMPS ECOULE, pas avec le nombre de
+        # tours de boucle : le rythme reste le meme quoi que fasse le
+        # macropad par ailleurs.
+        ecoule = ticks_diff(now, self._dernier)
+        self._dernier = now
+        if getattr(C, "RGB_RESPIRATION", True) and not self._eteint:
+            if 0 < ecoule < 1000:      # un saut d'horloge ne fait pas sauter
+                self._phase += ecoule  # la couleur
+            self._a_redessiner = True
+
         if not self._a_redessiner or ticks_diff(now, self._prochain) < 0:
             return
         self._prochain = ticks_add(now, C.RGB_MS)
@@ -183,12 +223,16 @@ class Rgb:
             self._peindre_tout((0, 0, 0))
             return
         fond = tuple(C.RGB_COULEUR_ERREUR) if self._erreur else self.base
+        if getattr(C, "RGB_RESPIRATION", True):
+            fond = _attenuer(fond, respiration(self._phase))
         if self.type == "PWM":
             # Une seule LED : la surbrillance n'a pas de sens, on montre
             # simplement la couleur du profil.
             self._peindre_tout(fond)
             return
         for index in range(self.nb):
+            # La touche que tu viens d'utiliser ne respire pas : elle est
+            # en blanc franc, sinon le retour visuel serait mou.
             couleur = _BLANC if index == self.surbrillance else fond
             self._pixel(index, couleur)
         self.materiel.write()
@@ -232,6 +276,11 @@ class Rgb:
         except Exception:
             pass
         self.actif = False
+
+
+def _attenuer(couleur, facteur):
+    """Multiplie une couleur par un facteur de 0.0 a 1.0."""
+    return tuple(int(valeur * facteur) for valeur in couleur)
 
 
 def limiter(couleur):
