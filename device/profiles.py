@@ -207,19 +207,45 @@ def COMBO(touches, label, actions):
     return (tuple(numero - 1 for numero in touches), label, actions)
 
 
-# Trois familles, trois geometries - c'est ce qui les rend memorisables :
+# Le pad est sous la MAIN GAUCHE, une touche par doigt et deux pour
+# l'index (voir DOIGTS dans config.py). De gauche a droite :
 #
-#   les deux paires du bord    -> les vues, gauche = avant, droite = apres
-#   la paire du milieu, sur B4 -> la famille polyligne
-#   les deux diagonales        -> les calques, cacher / remontrer
-#   les deux extremes          -> les hachures
+#     B6            B5           B4       B3 + B2    B1
+#     auriculaire   annulaire    majeur   index      pouce
+#
+# Les combinaisons suivent cette main, pas un dessin abstrait :
+#
+#   DEUX DOIGTS VOISINS -> les gestes frequents, les plus faciles
+#       B5+B6 annulaire+auriculaire, le bord GAUCHE  -> vue PRECEDENTE
+#       B3+B4 index+majeur,          le bord DROIT   -> vue SUIVANTE
+#       B4+B5 majeur+annulaire,      le MILIEU       -> la polyligne
+#
+#   ON SAUTE UN DOIGT -> les calques, cacher et remontrer
+#       B3+B5 index+annulaire (on saute le majeur)
+#       B4+B6 majeur+auriculaire (on saute l'annulaire)
+#
+#   LE GRAND ECART -> ce qui sert le moins
+#       B3+B6 index+auriculaire, toute la largeur de la main
+#
+# Gauche = precedent, droite = suivant : c'est le sens des fleches, et
+# sur une main gauche l'auriculaire est bien a gauche du majeur.
+#
+# B1 (pouce) et B2 (index) restent HORS combinaisons. B1 parce que c'est
+# le presse-papiers, la touche la plus utilisee des quatre profils, et
+# qu'une combinaison par-dessus lui ajouterait un risque de declenchement
+# involontaire. B2 parce qu'elle MAINTIENT Maj ou Ctrl : un maintien part
+# des l'appui, il ne peut pas attendre la fenetre des combinaisons.
+#
+# A savoir, et c'est la main qui le decide : tant que tu MAINTIENS B2
+# (Maj), ton index ne peut pas atteindre B3. Les trois combinaisons qui
+# utilisent B3 sont donc indisponibles pendant ce temps.
 #
 # _HATCHEDIT n'y figure pas volontairement : dans AutoCAD, un double-clic
 # sur une hachure ouvre deja son editeur.
 COMBOS = {
     "CIVIL3D": [
-        COMBO((3, 4), "VUE PREC.",  [("text_enter", "MPVIEWPREV")]),
-        COMBO((5, 6), "VUE SUIV.",  [("text_enter", "MPVIEWNEXT")]),
+        COMBO((5, 6), "VUE PREC.",  [("text_enter", "MPVIEWPREV")]),
+        COMBO((3, 4), "VUE SUIV.",  [("text_enter", "MPVIEWNEXT")]),
         COMBO((4, 5), "PEDIT",      [("text_enter", "_PEDIT")]),
         COMBO((3, 5), "CALQUE OFF", [("text_enter", "MPLAYEROFF")]),
         COMBO((4, 6), "CALQUE ON",  [("text_enter", "MPLAYERRESTORE")]),

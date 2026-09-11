@@ -40,7 +40,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`339 lignes - sha256 4efcbb0ce8988e7a`
+`358 lignes - sha256 09557329bf900e1b`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -90,6 +90,25 @@ Détail de la vérification : docs/02-cablage.md
 # VÉRIFIE sur ta carte qu'ils ne sont pas utilisés par le connecteur caméra.
 # Replis sûrs si besoin : 1, 2, 21, 47, 48.
 BUTTON_PINS = (4, 5, 6, 7, 12, 13)
+
+# --- Sous quel doigt se trouve chaque touche -------------------------
+# Le pad est posé sous la main GAUCHE : une touche par doigt, DEUX pour
+# l'index. Le pouce est à DROITE du groupe, l'auriculaire à GAUCHE.
+#
+#   gauche <------------------------------------------------> droite
+#   B6            B5           B4        B3 + B2       B1
+#   auriculaire   annulaire    majeur    index         pouce
+#
+# À QUOI ÇA SERT, ET CE N'EST PAS DÉCORATIF : deux touches placées sous
+# le MÊME doigt ne peuvent pas être appuyées en même temps. Sans cette
+# table, la page web te laisserait configurer une combinaison B2+B3 qui
+# ne partirait JAMAIS, sans un mot d'explication — elle enverrait
+# simplement les deux macros l'une après l'autre. Avec elle,
+# l'enregistrement est refusé en te disant pourquoi.
+#
+# Les noms sont libres : seule l'ÉGALITÉ compte. Si tu remontes le pad
+# autrement, corrige cette ligne. Mets None pour ne rien vérifier.
+DOIGTS = ("pouce", "index", "index", "majeur", "annulaire", "auriculaire")
 
 # Les deux modules capacitifs TTP223 qui changent de profil.
 TTP_PREVIOUS_PIN = 10
@@ -388,7 +407,7 @@ LED_RETURN_MS = 350     # retour progressif du flash vers la respiration
 
 ## device/profiles.py
 
-`308 lignes - sha256 a89e86f8bfa936c4`
+`334 lignes - sha256 ce336ada00f8d7e3`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -600,19 +619,45 @@ def COMBO(touches, label, actions):
     return (tuple(numero - 1 for numero in touches), label, actions)
 
 
-# Trois familles, trois geometries - c'est ce qui les rend memorisables :
+# Le pad est sous la MAIN GAUCHE, une touche par doigt et deux pour
+# l'index (voir DOIGTS dans config.py). De gauche a droite :
 #
-#   les deux paires du bord    -> les vues, gauche = avant, droite = apres
-#   la paire du milieu, sur B4 -> la famille polyligne
-#   les deux diagonales        -> les calques, cacher / remontrer
-#   les deux extremes          -> les hachures
+#     B6            B5           B4       B3 + B2    B1
+#     auriculaire   annulaire    majeur   index      pouce
+#
+# Les combinaisons suivent cette main, pas un dessin abstrait :
+#
+#   DEUX DOIGTS VOISINS -> les gestes frequents, les plus faciles
+#       B5+B6 annulaire+auriculaire, le bord GAUCHE  -> vue PRECEDENTE
+#       B3+B4 index+majeur,          le bord DROIT   -> vue SUIVANTE
+#       B4+B5 majeur+annulaire,      le MILIEU       -> la polyligne
+#
+#   ON SAUTE UN DOIGT -> les calques, cacher et remontrer
+#       B3+B5 index+annulaire (on saute le majeur)
+#       B4+B6 majeur+auriculaire (on saute l'annulaire)
+#
+#   LE GRAND ECART -> ce qui sert le moins
+#       B3+B6 index+auriculaire, toute la largeur de la main
+#
+# Gauche = precedent, droite = suivant : c'est le sens des fleches, et
+# sur une main gauche l'auriculaire est bien a gauche du majeur.
+#
+# B1 (pouce) et B2 (index) restent HORS combinaisons. B1 parce que c'est
+# le presse-papiers, la touche la plus utilisee des quatre profils, et
+# qu'une combinaison par-dessus lui ajouterait un risque de declenchement
+# involontaire. B2 parce qu'elle MAINTIENT Maj ou Ctrl : un maintien part
+# des l'appui, il ne peut pas attendre la fenetre des combinaisons.
+#
+# A savoir, et c'est la main qui le decide : tant que tu MAINTIENS B2
+# (Maj), ton index ne peut pas atteindre B3. Les trois combinaisons qui
+# utilisent B3 sont donc indisponibles pendant ce temps.
 #
 # _HATCHEDIT n'y figure pas volontairement : dans AutoCAD, un double-clic
 # sur une hachure ouvre deja son editeur.
 COMBOS = {
     "CIVIL3D": [
-        COMBO((3, 4), "VUE PREC.",  [("text_enter", "MPVIEWPREV")]),
-        COMBO((5, 6), "VUE SUIV.",  [("text_enter", "MPVIEWNEXT")]),
+        COMBO((5, 6), "VUE PREC.",  [("text_enter", "MPVIEWPREV")]),
+        COMBO((3, 4), "VUE SUIV.",  [("text_enter", "MPVIEWNEXT")]),
         COMBO((4, 5), "PEDIT",      [("text_enter", "_PEDIT")]),
         COMBO((3, 5), "CALQUE OFF", [("text_enter", "MPLAYEROFF")]),
         COMBO((4, 6), "CALQUE ON",  [("text_enter", "MPLAYERRESTORE")]),
@@ -2335,7 +2380,7 @@ def compile_actions(actions, layout, caps_lock=False):
 
 ## device/store.py
 
-`551 lignes - sha256 97501490d27f2da4`
+`578 lignes - sha256 7d936d01a20eaea9`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2597,6 +2642,23 @@ def couleur_usine(nom):
 # =====================================================================
 # Verification
 # =====================================================================
+def _meme_doigt(indices):
+    """(index_a, index_b, nom du doigt) si deux touches le partagent, sinon None.
+
+    config.DOIGTS peut etre absente ou None : le controle est alors
+    silencieusement saute, et rien ne se casse.
+    """
+    doigts = getattr(C, "DOIGTS", None)
+    if not doigts:
+        return None
+    for rang, index in enumerate(indices):
+        for autre in indices[rang + 1:]:
+            if (0 <= index < len(doigts) and 0 <= autre < len(doigts)
+                    and doigts[index] == doigts[autre]):
+                return index, autre, doigts[index]
+    return None
+
+
 def verifier_combos(combos, profils, nb_touches):
     """Verifie les combinaisons d'un profil. Retourne la liste des problemes."""
     problemes = []
@@ -2627,6 +2689,16 @@ def verifier_combos(combos, profils, nb_touches):
                                  % (nom, touches, deja[cle]))
                 continue
             deja[cle] = label
+            memes = _meme_doigt(indices)
+            if memes:
+                # Le seul controle qui parle du MONDE PHYSIQUE plutot que
+                # du fichier : un doigt ne peut pas appuyer deux touches a
+                # la fois. La combinaison serait muette, pas fausse - le
+                # pire des defauts a diagnostiquer.
+                problemes.append("%s %s : B%d et B%d sont sous le meme doigt "
+                                 "(%s), impossible a appuyer ensemble"
+                                 % (nom, touches, memes[0] + 1, memes[1] + 1,
+                                    memes[2]))
             if len(label) > P.COMBO_LABEL_MAX:
                 problemes.append("%s %s : libelle '%s' depasse %d caracteres"
                                  % (nom, touches, label, P.COMBO_LABEL_MAX))

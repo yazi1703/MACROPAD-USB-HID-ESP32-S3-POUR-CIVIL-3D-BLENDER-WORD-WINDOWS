@@ -46,6 +46,25 @@ Détail de la vérification : docs/02-cablage.md
 # Replis sûrs si besoin : 1, 2, 21, 47, 48.
 BUTTON_PINS = (4, 5, 6, 7, 12, 13)
 
+# --- Sous quel doigt se trouve chaque touche -------------------------
+# Le pad est posé sous la main GAUCHE : une touche par doigt, DEUX pour
+# l'index. Le pouce est à DROITE du groupe, l'auriculaire à GAUCHE.
+#
+#   gauche <------------------------------------------------> droite
+#   B6            B5           B4        B3 + B2       B1
+#   auriculaire   annulaire    majeur    index         pouce
+#
+# À QUOI ÇA SERT, ET CE N'EST PAS DÉCORATIF : deux touches placées sous
+# le MÊME doigt ne peuvent pas être appuyées en même temps. Sans cette
+# table, la page web te laisserait configurer une combinaison B2+B3 qui
+# ne partirait JAMAIS, sans un mot d'explication — elle enverrait
+# simplement les deux macros l'une après l'autre. Avec elle,
+# l'enregistrement est refusé en te disant pourquoi.
+#
+# Les noms sont libres : seule l'ÉGALITÉ compte. Si tu remontes le pad
+# autrement, corrige cette ligne. Mets None pour ne rien vérifier.
+DOIGTS = ("pouce", "index", "index", "majeur", "annulaire", "auriculaire")
+
 # Les deux modules capacitifs TTP223 qui changent de profil.
 TTP_PREVIOUS_PIN = 10
 TTP_NEXT_PIN = 11

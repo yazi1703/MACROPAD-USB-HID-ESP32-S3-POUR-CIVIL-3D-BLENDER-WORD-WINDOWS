@@ -257,6 +257,23 @@ def couleur_usine(nom):
 # =====================================================================
 # Verification
 # =====================================================================
+def _meme_doigt(indices):
+    """(index_a, index_b, nom du doigt) si deux touches le partagent, sinon None.
+
+    config.DOIGTS peut etre absente ou None : le controle est alors
+    silencieusement saute, et rien ne se casse.
+    """
+    doigts = getattr(C, "DOIGTS", None)
+    if not doigts:
+        return None
+    for rang, index in enumerate(indices):
+        for autre in indices[rang + 1:]:
+            if (0 <= index < len(doigts) and 0 <= autre < len(doigts)
+                    and doigts[index] == doigts[autre]):
+                return index, autre, doigts[index]
+    return None
+
+
 def verifier_combos(combos, profils, nb_touches):
     """Verifie les combinaisons d'un profil. Retourne la liste des problemes."""
     problemes = []
@@ -287,6 +304,16 @@ def verifier_combos(combos, profils, nb_touches):
                                  % (nom, touches, deja[cle]))
                 continue
             deja[cle] = label
+            memes = _meme_doigt(indices)
+            if memes:
+                # Le seul controle qui parle du MONDE PHYSIQUE plutot que
+                # du fichier : un doigt ne peut pas appuyer deux touches a
+                # la fois. La combinaison serait muette, pas fausse - le
+                # pire des defauts a diagnostiquer.
+                problemes.append("%s %s : B%d et B%d sont sous le meme doigt "
+                                 "(%s), impossible a appuyer ensemble"
+                                 % (nom, touches, memes[0] + 1, memes[1] + 1,
+                                    memes[2]))
             if len(label) > P.COMBO_LABEL_MAX:
                 problemes.append("%s %s : libelle '%s' depasse %d caracteres"
                                  % (nom, touches, label, P.COMBO_LABEL_MAX))

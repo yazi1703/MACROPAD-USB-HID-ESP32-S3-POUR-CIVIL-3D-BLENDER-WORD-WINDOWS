@@ -133,16 +133,33 @@ délai. Détail et limites dans [`docs/09`](docs/09-ecran-et-gestes.md).
 
 **Et deux touches appuyées ensemble font une commande de plus.** Six
 touches donnent quinze paires ; six sont utilisées dans Civil 3D, et
-**sans ralentir le moindre appui simple** :
+**sans ralentir le moindre appui simple**.
 
-| Touches | Écran | Ce que ça fait |
-|---|---|---|
-| **B3 + B4** | `VUE PREC.` | vue enregistrée précédente |
-| **B5 + B6** | `VUE SUIV.` | vue enregistrée suivante |
-| **B4 + B5** | `PEDIT` | `_PEDIT`, la famille polyligne |
-| **B3 + B5** | `CALQUE OFF` | éteint le calque de l'objet désigné |
-| **B4 + B6** | `CALQUE ON` | rallume le dernier calque éteint |
-| **B3 + B6** | `HACHURES` | `_HATCH` |
+Elles suivent la **main gauche** posée sur le pad — une touche par doigt,
+deux pour l'index, le pouce à droite du groupe :
+
+```
+   gauche  <───────────── main GAUCHE ─────────────>  droite
+     B6          B5          B4        B3   B2       B1
+   auricul.    annul.      majeur      index         pouce
+```
+
+| Touches | Doigts | Écran | Ce que ça fait |
+|---|---|---|---|
+| **B5 + B6** | voisins | `VUE PREC.` | vue enregistrée précédente |
+| **B3 + B4** | voisins | `VUE SUIV.` | vue enregistrée suivante |
+| **B4 + B5** | voisins | `PEDIT` | `_PEDIT`, la famille polyligne |
+| **B3 + B5** | on saute un doigt | `CALQUE OFF` | éteint le calque de l'objet désigné |
+| **B4 + B6** | on saute un doigt | `CALQUE ON` | rallume le dernier calque éteint |
+| **B3 + B6** | le grand écart | `HACHURES` | `_HATCH` |
+
+Trois règles à retenir : **doigts voisins** = les gestes fréquents,
+**sauter un doigt** = les calques, **le grand écart** = ce qui sert le
+moins. Et gauche = précédent, droite = suivant, comme les flèches.
+
+Le firmware **connaît tes doigts** (`DOIGTS` dans `config.py`) : il
+refuse une combinaison qui prendrait deux touches du même doigt — elle ne
+partirait jamais, sans un mot d'explication.
 
 Les quatre premières passent par **tes propres commandes AutoLISP**, à
 charger une fois dans Civil 3D : voir
@@ -244,7 +261,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   └── README.md                 comment les charger au démarrage
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             191 tests du firmware, exécutables sur PC
+│   ├── test_logic.py             195 tests du firmware, exécutables sur PC
 │   ├── test_pc.py                25 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
@@ -270,7 +287,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 216 tests ... OK
+→ Ran 220 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport

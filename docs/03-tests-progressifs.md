@@ -375,7 +375,7 @@ Et les **combinaisons**, deux touches appuyées en même temps — d'abord
 |---|---|
 | B4 + B5 | `_PEDIT` démarre, et **ni `_PLINE` ni `_ISOLATEOBJECTS`** |
 | B3 + B6 | `_HATCH` : la boîte de hachures s'ouvre |
-| B3 + B4 | `MPVIEWPREV` — **seulement si le LISP est chargé**, voir [`civil3d/README.md`](../civil3d/README.md) |
+| B3 + B4 | `MPVIEWNEXT` — **seulement si le LISP est chargé**, voir [`civil3d/README.md`](../civil3d/README.md) |
 
 L'écran doit annoncer chaque combinaison en gros pendant une seconde
 (`B4+B5` au-dessus de `PEDIT`), puis revenir au tableau tout seul.

@@ -703,7 +703,7 @@ class PageWebDeConfiguration(unittest.TestCase):
         # Les combinaisons voyagent avec le profil, en numeros de touches
         # lisibles : [3, 4] c'est bien B3 et B4.
         combos = data["profils"]["CIVIL3D"]["combos"]
-        self.assertEqual(combos[0]["touches"], [3, 4])
+        self.assertEqual(combos[0]["touches"], [5, 6])
         self.assertEqual(combos[0]["label"], "VUE PREC.")
         self.assertEqual(combos[0]["actions"][0]["valeur"], "MPVIEWPREV")
         # La table des logiciels voyage avec la configuration.
@@ -1271,7 +1271,7 @@ class CombinaisonsDansLaBoucleReelle(unittest.TestCase):
         return compile_actions(actions, C.KEYBOARD_LAYOUT)
 
     def test_deux_touches_ensemble_tapent_la_commande_de_la_combinaison(self):
-        """B3+B4 tape MPVIEWPREV, et surtout PAS F3 ni _PLINE."""
+        """B3+B4 tape MPVIEWNEXT, et surtout PAS F3 ni _PLINE."""
         def chrono(t):
             # Doigts poses a 12 ms d'intervalle : personne n'appuie deux
             # touches a la milliseconde pres.
@@ -1279,7 +1279,7 @@ class CombinaisonsDansLaBoucleReelle(unittest.TestCase):
             Pin.levels[7] = 0 if 2612 <= t < 2700 else 1     # B4
 
         rapports = self._boucle(chrono)
-        attendu = self._attendu([("text_enter", "MPVIEWPREV")])
+        attendu = self._attendu([("text_enter", "MPVIEWNEXT")])
         self.assertEqual(rapports, attendu)
         # Les macros des deux touches seules ne sont jamais parties.
         self.assertNotIn(self._attendu([("key", "F3")])[0], rapports)
@@ -1399,10 +1399,10 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
         data = store.vers_json(6)
         combos = data["profils"]["CIVIL3D"]["combos"]
         premiere = combos[0]
-        self.assertEqual(premiere["touches"], [3, 4])
-        # ... et en interne, ces memes touches portent 2 et 3.
+        self.assertEqual(premiere["touches"], [5, 6])
+        # ... et en interne, ces memes touches portent 4 et 5.
         interne = store.combos_depuis_json(combos)
-        self.assertEqual(interne[0][0], (2, 3))
+        self.assertEqual(interne[0][0], (4, 5))
 
     def test_le_libelle_est_tronque_pas_refuse(self):
         import store
@@ -1474,6 +1474,49 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
     def test_une_macro_intapable_est_refusee(self):
         self._refuse({"CIVIL3D": [((2, 3), "EURO", [("text", "100 EUR \u20ac")])]},
                      "B3+B4")
+
+    # --- ce que la MAIN interdit ----------------------------------------
+    def test_deux_touches_du_meme_doigt_sont_refusees(self):
+        """B2 et B3 sont toutes les deux sous l'index : injouable.
+
+        Ce controle est le seul qui parle du monde physique. Sans lui, la
+        combinaison serait MUETTE - elle enverrait les deux macros l'une
+        apres l'autre - et rien n'expliquerait pourquoi.
+        """
+        self._refuse({"CIVIL3D": [((1, 2), "INDEX", [("key", "F3")])]},
+                     "meme doigt")
+
+    def test_le_message_nomme_les_touches_et_le_doigt(self):
+        import store
+        profils = store.defauts()[0]
+        problemes = store.verifier_combos(
+            {"CIVIL3D": [((1, 2), "X", [("key", "F3")])]}, profils, 6)
+        self.assertIn("B2 et B3", problemes[0])
+        self.assertIn("index", problemes[0])
+
+    def test_les_combinaisons_d_usine_sont_toutes_jouables(self):
+        """Aucune paire d'usine ne tombe sous un seul doigt."""
+        import store, profiles as P, config as C
+        doigts = C.DOIGTS
+        for nom, liste in P.COMBOS.items():
+            for indices, label, _actions in liste:
+                portes = [doigts[i] for i in indices]
+                self.assertEqual(len(set(portes)), len(portes),
+                                 "%s %s : %s" % (nom, label, portes))
+
+    def test_sans_table_de_doigts_rien_n_est_verifie(self):
+        """Un pad remonte autrement met DOIGTS a None : plus de controle."""
+        import store, config as C
+        ancien = C.DOIGTS
+        C.DOIGTS = None
+        try:
+            profils = store.defauts()[0]
+            self.assertEqual(
+                store.verifier_combos(
+                    {"CIVIL3D": [((1, 2), "X", [("key", "F3")])]}, profils, 6),
+                [])
+        finally:
+            C.DOIGTS = ancien
 
     def test_un_profil_inconnu(self):
         self._refuse({"INEXISTANT": [((2, 3), "X", [("key", "F3")])]},

@@ -131,6 +131,7 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 ## Les combinaisons — deux touches ensemble (V1)
 
 ```
+[ ] DOIGTS dans config.py correspond bien a ta main (appuie, lis l'ecran)
 [ ] B4+B5 lance _PEDIT, et NI _PLINE NI _ISOLATEOBJECTS
 [ ] B3+B6 ouvre les hachures
 [ ] l'écran annonce la combinaison en gros, puis revient tout seul

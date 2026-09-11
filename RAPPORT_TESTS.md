@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 216 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 220 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 216 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  191 pour le firmware, 25 pour le compagnon Windows.
+- 220 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  195 pour le firmware, 25 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -68,8 +68,10 @@ AVANT les combinaisons recupere celles d'usine plutot que de les perdre en
 silence, tandis qu'une liste presente mais vide est respectee ; et six
 formes fautives sont refusees avec un message nomme - une seule touche, une
 touche qui n'existe pas, la meme touche deux fois, deux combinaisons sur le
-meme couple, une macro intapable, et un `maintien`, qui resterait enfonce
-cote Windows faute d'une touche unique a surveiller. La page web est
+meme couple, une macro intapable, un `maintien`, qui resterait enfonce
+cote Windows faute d'une touche unique a surveiller, et - le seul
+controle du projet qui parle du monde PHYSIQUE - deux touches placees
+sous le meme doigt, qu'aucune main ne peut appuyer ensemble. La page web est
 exercee hors navigateur : elle affiche les six combinaisons de Civil 3D,
 comprend une saisie mal ecrite (`5 et 6` devient `[5, 6]`), n'ecrit pas
 dans la mauvaise ligne, et **les renvoie entieres a l'enregistrement** -
@@ -355,7 +357,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 216 tests
+Ran 220 tests
 
 OK
 ```

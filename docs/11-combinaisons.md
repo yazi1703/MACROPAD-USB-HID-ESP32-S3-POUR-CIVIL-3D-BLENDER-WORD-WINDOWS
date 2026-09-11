@@ -27,10 +27,18 @@ B1 (le presse-papiers) et B2 (Maj/Ctrl) n'entrent dans **aucune**
 combinaison. Elles ne passent même pas par `combos.py` : leur chemin dans
 le code est exactement celui d'avant, à l'instruction près.
 
-> C'est aussi pour cela que **B1 et B2 ne doivent jamais entrer dans une
-> combinaison** : B2 garde Maj enfoncée, et une combinaison n'a pas de
-> touche unique à surveiller pour la relâcher. Un test refuse d'ailleurs
-> tout `maintien` dans une combinaison.
+> **B2 ne doit jamais entrer dans une combinaison** : elle garde Maj
+> enfoncée, un maintien part **dès l'appui** et ne peut donc pas attendre
+> la fenêtre. Un test refuse d'ailleurs tout `maintien` dans une
+> combinaison.
+>
+> **B1 en est écartée pour une autre raison** : c'est le presse-papiers,
+> la touche la plus utilisée des quatre profils. Le pouce serait pourtant
+> le meilleur partenaire de combinaison — il se pose sur un autre plan que
+> les quatre doigts, donc sans aucun effort. Mais une combinaison
+> par-dessus le Ctrl+C ajoute un risque de déclenchement involontaire sur
+> la touche où l'on peut le moins se le permettre. Si tu veux échanger ce
+> risque contre le confort, dis-le : c'est une ligne de `COMBOS`.
 
 ### 2. Un appui court part déjà **au relâchement**
 
@@ -56,26 +64,47 @@ long sur B3 partirait 50 ms trop tard. Avec lui, il part à
 
 ## 11.2 Les combinaisons de Civil 3D
 
-Elles sont pensées pour être **retenues par la géométrie**, pas par
-cœur : trois familles, trois formes sur le pad.
-
-| Touches | Écran | Ce que ça fait |
-|---|---|---|
-| **B3 + B4** | `VUE PREC.` | vue enregistrée précédente |
-| **B5 + B6** | `VUE SUIV.` | vue enregistrée suivante |
-| **B4 + B5** | `PEDIT` | `_PEDIT` — la famille polyligne, autour de B4 |
-| **B3 + B5** | `CALQUE OFF` | éteint le calque de l'objet désigné |
-| **B4 + B6** | `CALQUE ON` | rallume le dernier calque éteint |
-| **B3 + B6** | `HACHURES` | `_HATCH` — les deux extrêmes |
+Elles ne sont pas dessinées sur un schéma abstrait : elles suivent **ta
+main**. Le pad est sous la main **gauche**, une touche par doigt et deux
+pour l'index — le pouce à droite du groupe, l'auriculaire à gauche :
 
 ```
-   B3   B4   B5   B6
-   └────┘         │     les vues : gauche = avant, droite = après
-         └────┘         la polyligne : la paire du milieu, sur B4
-   └─────────┘          les calques : les deux diagonales
-        └─────────┘
-   └──────────────┘     les hachures : les deux extrêmes
+   gauche  <───────────── main GAUCHE ─────────────>  droite
+
+     B6          B5          B4        B3   B2       B1
+   auricul.    annul.      majeur      index         pouce
+
+   └──────────┘                                    VUE PREC.   voisins
+                           └────────┘              VUE SUIV.   voisins
+               └──────────┘                        PEDIT       voisins
+               └───────────────────┘               CALQUE OFF  saute 1
+   └───────────────────┘                           CALQUE ON   saute 1
+   └────────────────────────────────┘              HACHURES    grand écart
 ```
+
+| Touches | Doigts | Écran | Ce que ça fait |
+|---|---|---|---|
+| **B5 + B6** | annulaire + auriculaire — **voisins** | `VUE PREC.` | vue enregistrée précédente |
+| **B3 + B4** | index + majeur — **voisins** | `VUE SUIV.` | vue enregistrée suivante |
+| **B4 + B5** | majeur + annulaire — **voisins** | `PEDIT` | `_PEDIT`, la famille polyligne |
+| **B3 + B5** | index + annulaire — on **saute** le majeur | `CALQUE OFF` | éteint le calque de l'objet désigné |
+| **B4 + B6** | majeur + auriculaire — on **saute** l'annulaire | `CALQUE ON` | rallume le dernier calque éteint |
+| **B3 + B6** | index + auriculaire — **le grand écart** | `HACHURES` | `_HATCH` |
+
+Trois règles, et elles se retiennent en une phrase chacune :
+
+* **deux doigts voisins** = les gestes fréquents, les plus faciles ;
+* **on saute un doigt** = les calques, cacher et remontrer ;
+* **le grand écart** = ce qui sert le moins.
+
+Et le sens des vues suit celui des flèches : sur une main gauche,
+l'auriculaire est bien **à gauche** du majeur, donc `B5+B6` (bord gauche)
+= précédent, `B3+B4` (bord droit) = suivant.
+
+> **Ce que la main impose, et que le code ne peut pas contourner :** tant
+> que tu **maintiens B2** (Maj), ton index ne peut pas atteindre B3. Les
+> trois combinaisons qui utilisent B3 sont donc indisponibles pendant ce
+> temps. Ce n'est pas un défaut, c'est une main.
 
 `_HATCHEDIT` n'y figure pas **volontairement** : dans AutoCAD, un
 double-clic sur une hachure ouvre déjà son éditeur.
@@ -124,6 +153,35 @@ Les LED des **deux** touches réagissent, comme pour un appui normal.
 
 ---
 
+## 11.3 bis Le firmware connaît tes doigts
+
+`config.py` déclare sous quel doigt se trouve chaque touche :
+
+```python
+DOIGTS = ("pouce", "index", "index", "majeur", "annulaire", "auriculaire")
+```
+
+Ce n'est pas décoratif. **Deux touches sous le même doigt ne peuvent pas
+être appuyées en même temps** — B2 et B3 sont toutes les deux sous ton
+index. Sans cette table, la page web te laisserait configurer `B2+B3`, et
+cette combinaison ne partirait **jamais** : elle enverrait simplement les
+deux macros l'une après l'autre, sans un mot d'explication. Une panne
+muette, la pire à diagnostiquer.
+
+Avec elle, l'enregistrement est refusé :
+
+```
+CIVIL3D B2+B3 : B2 et B3 sont sous le meme doigt (index),
+                impossible a appuyer ensemble
+```
+
+C'est le **seul** contrôle du projet qui parle du monde physique plutôt
+que du contenu d'un fichier. Les noms sont libres, seule l'**égalité**
+compte : si tu remontes le pad autrement, corrige cette ligne. `None`
+désactive le contrôle.
+
+---
+
 ## 11.4 Les règles, et pourquoi
 
 | Règle | Pourquoi |
@@ -132,6 +190,7 @@ Les LED des **deux** touches réagissent, comme pour un appui normal.
 | **Changer de profil annule** aussi | Les combinaisons du nouveau profil ne sont pas celles de l'ancien. |
 | Un `maintien` (Ctrl, Maj) est **refusé** dans une combinaison | Un maintien se relâche quand **sa** touche se relâche. Une combinaison n'en a pas une seule à surveiller : Ctrl resterait enfoncé côté Windows, et plus rien ne répondrait normalement. |
 | Il faut **au moins deux touches** | Une « combinaison » d'une seule touche rendrait cette touche inutilisable seule. |
+| Deux touches **du même doigt** sont refusées | Elles ne peuvent pas être appuyées ensemble. Voir 11.3 bis. |
 | Deux combinaisons ne peuvent pas avoir **le même couple** de touches | Sinon laquelle partirait ? |
 | Pendant qu'une combinaison est partie, les autres touches sont **ignorées jusqu'au relâchement** | Rouler les doigts sur le pad en relâchant ne doit pas déclencher une seconde combinaison par accident. |
 
@@ -240,6 +299,12 @@ changer.
   ressenti sous le doigt.
 * **`GESTE_COMBO_MS = 50` est un pari**, pas une mesure. C'est le premier
   chiffre à ajuster après quelques minutes d'usage réel.
+* **La table `DOIGTS` vient de ce que tu m'as décrit**, pas d'une
+  observation : main gauche, une touche par doigt, deux pour l'index, et
+  les numéros B1→B6 dans cet ordre. Vérifie-la en appuyant sur chaque
+  touche — l'écran surligne la ligne correspondante avec son numéro. Une
+  ligne fausse ne casse rien, mais elle refuserait une combinaison
+  jouable, ou en laisserait passer une injouable.
 * Les quatre commandes AutoLISP sont écrites et relues, mais **elles
   n'ont pas tourné dans un vrai Civil 3D**. Leurs limites connues sont
   listées dans [`civil3d/README.md`](../civil3d/README.md).
