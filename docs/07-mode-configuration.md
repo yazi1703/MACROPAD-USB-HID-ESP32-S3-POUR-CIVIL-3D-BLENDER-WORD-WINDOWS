@@ -100,6 +100,36 @@ Les deux durées se règlent dans `config.py` (`GESTE_LONG_MS`,
 dès le relâchement : tu ne paies l'attente que là où tu t'en sers.
 Voir le [chapitre 9](09-ecran-et-gestes.md) pour le détail.
 
+### Remettre les compteurs à zéro
+
+Le bouton **`Compteurs a zero`** efface les compteurs d'usage des touches.
+
+Ils vivent **sur la carte**, pas sur le PC : c'est elle qui compte les
+appuis. Le bouton lui demande donc de les oublier — par le câble USB
+depuis le compagnon, ou directement depuis le portail WiFi — puis relit
+tout, pour que les chiffres affichés soient bien ceux de la carte.
+
+L'effacement **survit au redémarrage** : le fichier `stats.json` est
+supprimé, pas seulement vidé. Sans cela, les anciens chiffres seraient
+revenus au prochain branchement.
+
+> Les macros ne sont **pas** touchées : ce bouton ne remet à zéro que les
+> compteurs. Pour les macros, c'est `Valeurs d'usine` (le bouton rouge).
+
+### Si la page est vide et que rien ne répond
+
+Deux causes très différentes, et un réflexe unique pour les distinguer :
+
+| Ce que tu vois | Cause |
+|---|---|
+| une ligne rouge qui dit **pourquoi** (`macropad non connecte : …`) et une carte d'explication | la **liaison** avec la carte est coupée — voir [`docs/08.9`](08-detection-auto.md) |
+| une ligne rouge qui dit **`erreur JavaScript`** avec un numéro de ligne | un vrai défaut de la page. Signale le message tel quel |
+| **rien du tout**, pas même un message | tu sers une **ancienne version** de la page : mets `pc/macropad_auto.py` à jour |
+
+Cette troisième ligne est la raison d'être des deux filets ajoutés depuis :
+une page qui échoue **doit le dire**. Elle n'a plus le droit de rester
+muette.
+
 ### L'enregistreur de séquence
 
 À côté de **`+ etape`**, un bouton **`⏺ Enregistrer`**. Tu cliques, tu

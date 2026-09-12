@@ -550,6 +550,29 @@ dans le REPL — au lieu de laisser un macropad entièrement muet :
 
 Un écran absent n'aggrave rien : l'erreur d'origine remonte intacte.
 
+### Le filet commun aux corrections 11 et 13
+
+Ces deux pannes avaient la même signature : **la page s'affiche, et plus
+rien ne répond.** En JavaScript, une seule erreur arrête tout le script ;
+le HTML étant déjà là, il ne reste qu'une page morte et silencieuse. Les
+deux fois, il a fallu deviner.
+
+La page installe donc maintenant, **en première instruction**, un
+gestionnaire qui écrit l'erreur à l'écran :
+
+```
+La page a rencontre une erreur JavaScript et s'est arretee :
+
+truc is not defined
+(ligne 42, colonne 7)
+
+Rien n'a ete envoye au macropad. Recharge la page ; si ca
+recommence, signale ce message tel quel.
+```
+
+Ce n'est pas une correction de plus : c'est ce qui rendra la **prochaine**
+diagnosticable en une seconde au lieu d'une heure.
+
 > **La leçon, pour la suite :** toute constante ajoutée à `config.py` doit
 > être lue par `reglage()` et inscrite dans `REGLAGES_NEUFS` (`main.py`) et
 > `REGLAGES_ATTENDUS` (`diag.py`). Sans ça, la prochaine mise à jour

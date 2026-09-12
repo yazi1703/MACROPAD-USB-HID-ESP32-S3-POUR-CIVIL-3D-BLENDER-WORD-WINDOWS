@@ -189,6 +189,19 @@ class Link:
             self.sortie("#OK:rechargement")
             return (EVT_RECHARGER, None)
 
+        if ligne == "!ZERO":
+            # Remise a zero des compteurs d'usage. remettre_a_zero() efface
+            # AUSSI le fichier : sans cela, enregistrer() refuserait d'ecrire
+            # une table vide et les anciens chiffres reviendraient au
+            # prochain demarrage. Une remise a zero qui ne survit pas au
+            # redemarrage n'en est pas une.
+            if self.stats is None:
+                self.sortie("#KO:compteurs indisponibles")
+                return None
+            self.stats.remettre_a_zero()
+            self.sortie("#OK:compteurs remis a zero")
+            return None
+
         return None
 
     # ------------------------------------------------------------------

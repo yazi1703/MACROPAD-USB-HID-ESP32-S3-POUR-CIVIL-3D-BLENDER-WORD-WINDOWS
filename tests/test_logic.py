@@ -691,6 +691,38 @@ class PageWebDeConfiguration(unittest.TestCase):
         self.assertIn(b"Macropad", sortie)
         self.assertIn(b"/api/profils", sortie)
 
+    def test_remise_a_zero_des_compteurs(self):
+        """Les compteurs vivent sur la carte : c'est elle qui les oublie."""
+        import portal, stats
+        # Un fichier de compteurs laisse par un autre test serait relu par
+        # Stats() a sa construction : on part d'une ardoise propre.
+        try:
+            os.remove(C.STATS_FILE)
+        except OSError:
+            pass
+        compteurs = stats.Stats(6)
+        compteurs.compter("CIVIL3D", 2)
+        compteurs.compter("CIVIL3D", 2)
+        self.assertEqual(compteurs.total(), 2)
+
+        entete = ("POST /api/compteurs HTTP/1.1\r\nHost: x\r\n\r\n")
+        client = self.FauxClient(entete.encode())
+        portal.Portail(6, compteurs)._traiter(client)
+
+        self.assertIn(b"200 OK", client.sortie)
+        self.assertIn(b'"ok": true', client.sortie.replace(b'"ok":true',
+                                                           b'"ok": true'))
+        self.assertEqual(compteurs.total(), 0)
+
+    def test_remise_a_zero_sans_compteurs_est_refusee_proprement(self):
+        """Sans objet Stats, on refuse avec une raison - on ne plante pas."""
+        import portal
+        entete = "POST /api/compteurs HTTP/1.1\r\nHost: x\r\n\r\n"
+        client = self.FauxClient(entete.encode())
+        portal.Portail(6)._traiter(client)
+        self.assertIn(b"200 OK", client.sortie)
+        self.assertIn(b"indisponibles", client.sortie)
+
     def test_api_renvoie_les_profils_usine(self):
         import json as J
         sortie = self._requete("GET", "/api/profils")
@@ -859,6 +891,44 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         self.assertIn("FR_AZERTY", sorties[0])
 
     # --- lecture de la configuration par le PC --------------------------
+    def test_le_pc_remet_les_compteurs_a_zero(self):
+        """!ZERO doit effacer les compteurs ET leur fichier.
+
+        Sans la suppression du fichier, enregistrer() refuserait d'ecrire
+        une table vide et les anciens chiffres reviendraient au prochain
+        demarrage. Une remise a zero qui ne survit pas au redemarrage n'en
+        est pas une.
+        """
+        import link, stats
+        try:
+            os.remove(C.STATS_FILE)
+        except OSError:
+            pass
+        compteurs = stats.Stats(6)
+        compteurs.compter("WORD", 0)
+        compteurs.compter("WORD", 5)
+        self.assertTrue(compteurs.enregistrer())
+        self.assertTrue(os.path.exists(C.STATS_FILE))
+
+        source = self.FausseSource()
+        sorties = []
+        lien = link.Link(6, source=source, sortie=sorties.append,
+                         stats=compteurs)
+        source.envoyer("!ZERO\n")
+        lien.service()
+
+        self.assertTrue(any("#OK:" in ligne for ligne in sorties), sorties)
+        self.assertEqual(compteurs.total(), 0)
+        self.assertFalse(os.path.exists(C.STATS_FILE),
+                         "le fichier survit : les chiffres reviendront")
+
+    def test_zero_sans_compteurs_repond_sans_planter(self):
+        import link
+        lien, source, sorties = self._lien()
+        source.envoyer("!ZERO\n")
+        lien.service()
+        self.assertTrue(any("#KO:" in ligne for ligne in sorties), sorties)
+
     def test_le_pc_lit_la_configuration(self):
         import json as J
         lien, source, sorties = self._lien()
@@ -3263,6 +3333,27 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         # mais renvoie bien une liste vide plutot que rien : sinon la
         # carte remettrait celles d'usine a chaque enregistrement.
         self.assertEqual(vu["combos_profil_sans"], 0)
+
+    def test_une_erreur_javascript_s_affiche_au_lieu_de_tout_tuer(self):
+        """Le pire mode de panne de cette page, rencontre DEUX fois.
+
+        En JavaScript, une seule erreur arrete tout le script. Le HTML
+        etant deja la, la page s'affiche - et plus rien ne repond. Ni
+        bouton, ni tableau, et pas le moindre message. Les deux fois, il a
+        fallu deviner. Maintenant l'erreur est ecrite a l'ecran.
+        """
+        import store
+        vu = self._construire(store.vers_json(6))
+        self.assertIn("erreur JavaScript", vu["erreur_affichee"])
+        self.assertIn("truc is not defined", vu["erreur_affichee"])
+        self.assertIn("ligne 42", vu["erreur_affichee"])
+        # Et elle rassure sur le point qui compte.
+        self.assertIn("Rien n'a ete envoye au macropad", vu["erreur_affichee"])
+
+    def test_le_bouton_des_compteurs_vise_la_bonne_route(self):
+        import store
+        vu = self._construire(store.vers_json(6))
+        self.assertEqual(vu["zero_poste"], ["/api/compteurs"])
 
     def test_l_enregistreur_transforme_les_frappes_en_etapes(self):
         """Tu tapes ta sequence, la page en fait des etapes.

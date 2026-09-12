@@ -67,8 +67,10 @@ let horloge = 1000000;
 Date.now = function () { return horloge; };
 
 let envoye = null;               // ce que la page a POSTE au macropad
+const postes = [];               // les URL qu'elle a POSTEes, dans l'ordre
 function fetch(url, options) {
   if (options && options.method === 'POST') {
+    postes.push(url);
     if (options.body) { envoye = JSON.parse(options.body); }
     return Promise.resolve({ json: function () {
       return Promise.resolve({ ok: true, raison: '' }); } });
@@ -86,6 +88,8 @@ new Function('document', 'window', 'fetch', 'URL', 'Blob', 'confirm',
                       'recDemarrer:recDemarrer,recStop:recStop,' +
                       'frapper:function(e){return recTouche(e);},' +
                       'enCours:function(){return !!REC;},' +
+                      'zero:zero,onerror:function(){' +
+                      'return window.onerror.apply(null,arguments);},' +
                       'charger_sauvegarde:charger_sauvegarde};')(
   document, window, fetch, URL, Blob, confirm, location);
 
@@ -297,6 +301,17 @@ setTimeout(function () {
       frappe({ code: 'Escape', key: 'Escape' });
       vu.rec_echap_arrete = !page.enCours();
       vu.rec_echap_etapes = cible.double;
+
+      // ---- la remise a zero des compteurs ----------------------------
+      postes.length = 0;
+      page.zero();
+      vu.zero_poste = postes.slice();
+
+      // ---- le filet : une erreur JavaScript doit se VOIR --------------
+      // Deux fois dans ce projet, une erreur a tue tout le script : la
+      // page s'affichait, et plus rien ne repondait. Sans un mot.
+      page.onerror('truc is not defined', 'page.js', 42, 7);
+      vu.erreur_affichee = registre.msg.textContent;
 
       // ---- restauration d'une sauvegarde -----------------------------
       // En dernier : elle remplace tout le contenu du formulaire.

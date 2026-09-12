@@ -613,6 +613,39 @@ class Macropad:
         texte = "".join(m[3:] for m in morceaux if m.startswith("#C:"))
         return json.loads(texte)
 
+    def compteurs_a_zero(self):
+        """Demande au macropad d'effacer ses compteurs d'usage.
+
+        Ils vivent SUR LA CARTE, pas sur le PC : c'est elle qui compte les
+        appuis, et c'est donc a elle de les oublier.
+        """
+        with self.verrou:
+            if self.simuler:
+                self._ecrire("!ZERO")
+                return True, ""
+            if not self.assurer():
+                return False, self._sans_carte()
+            try:
+                self.serie.reset_input_buffer()
+                self._ecrire("!ZERO")
+            except Exception as exc:
+                return False, "macropad deconnecte (%s)" % exc
+            limite = time.time() + 3.0
+            while time.time() < limite:
+                try:
+                    brut = self.serie.readline()
+                except Exception as exc:
+                    self._perdu(exc)
+                    return False, "macropad deconnecte (%s)" % exc
+                if not brut:
+                    continue
+                ligne = brut.decode("utf-8", "replace").strip()
+                if ligne.startswith("#OK:"):
+                    return True, ""
+                if ligne.startswith("#KO:"):
+                    return False, ligne[4:]
+        return False, "le macropad n'a pas confirme"
+
     def ecrire_config(self, data):
         """Envoie une configuration. Retourne (True, "") ou (False, raison)."""
         texte = json.dumps(data)
@@ -757,11 +790,34 @@ defile.</p>
 <button class=p onclick=save()>Enregistrer</button>
 <button onclick=dl()>Telecharger la sauvegarde</button>
 <button onclick=restaurer()>Restaurer une sauvegarde</button>
+<button onclick=zero()>Compteurs a zero</button>
 <button class=d onclick=usine()>Valeurs d'usine</button>
 </div>
 <div id=msg></div>
 </main>
 <script>
+// =====================================================================
+// LE FILET : UNE PAGE NE DOIT JAMAIS MOURIR EN SILENCE
+// =====================================================================
+// En JavaScript, une seule erreur arrete TOUT le script. La page s'affiche
+// alors - le HTML est deja la - mais plus rien ne repond : ni bouton, ni
+// tableau, et pas le moindre message. C'est arrive deux fois dans ce
+// projet (corrections 11 et 13), et les deux fois il a fallu deviner.
+//
+// Ce gestionnaire est donc la PREMIERE chose du script : tout ce qui suit
+// est couvert. Une erreur s'affiche desormais a l'ecran, avec sa ligne.
+window.onerror=function(message,source,ligne,colonne){
+ try{
+  var m=document.getElementById("msg");
+  if(m){
+   m.className="ko";m.style.display="block";
+   m.textContent="La page a rencontre une erreur JavaScript et s'est "+
+    "arretee :\n\n"+message+"\n(ligne "+ligne+", colonne "+colonne+")"+
+    "\n\nRien n'a ete envoye au macropad. Recharge la page ; si ca "+
+    "recommence, signale ce message tel quel.";}
+ }catch(e){}
+ return false;};
+
 var D={ordre:[],profils:{},apps:{repli:{profil:"WINDOWS",abrege:"Win"},liste:[]}};
 var N=6,GESTES=["court","long","double"];
 var LIB={court:"court",long:"long",double:"double"};
@@ -1198,6 +1254,17 @@ function restaurer(){
   lecteur.readAsText(f);};
  i.click();}
 
+// Les compteurs d'usage vivent SUR LA CARTE : c'est elle qui compte les
+// appuis. On lui demande donc de les oublier, puis on relit tout pour que
+// les chiffres affiches soient bien ceux de la carte et non les notres.
+function zero(){
+ if(!confirm("Remettre a zero les compteurs d'usage des touches ?"))return;
+ fetch("/api/compteurs",{method:"POST"}).then(function(r){return r.json();})
+ .then(function(r){
+  say(r.ok?"Compteurs remis a zero.":"Refuse :\n"+r.raison,r.ok);
+  if(r.ok)charger();})
+ .catch(function(e){say("Erreur : "+e,0);});}
+
 function usine(){if(!confirm("Revenir aux valeurs d'usine ?"))return;
  fetch("/api/usine",{method:"POST"}).then(function(){location.reload();});}
 function save(){fetch("/api/profils",{method:"POST",
@@ -1267,6 +1334,15 @@ def creer_serveur(macropad, table=None):
                 self._repondre(PAGE, "text/html")
 
         def do_POST(self):
+            if self.path.startswith("/api/compteurs"):
+                try:
+                    ok, raison = macropad.compteurs_a_zero()
+                except Exception as exc:
+                    ok, raison = False, str(exc)
+                print("Compteurs :", "remis a zero" if ok
+                      else "refuse (%s)" % raison)
+                self._repondre(json.dumps({"ok": ok, "raison": raison}))
+                return
             taille = int(self.headers.get("Content-Length", 0))
             corps = self.rfile.read(taille)
             try:

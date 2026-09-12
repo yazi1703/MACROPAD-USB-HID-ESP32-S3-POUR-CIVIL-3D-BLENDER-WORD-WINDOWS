@@ -3267,7 +3267,7 @@ class Stats:
 
 ## device/portal.py
 
-`799 lignes - sha256 2c3001ba1fa68d1e`
+`846 lignes - sha256 e275370d1907dd62`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -3424,11 +3424,34 @@ defile.</p>
 <button class=p onclick=save()>Enregistrer</button>
 <button onclick=dl()>Telecharger la sauvegarde</button>
 <button onclick=restaurer()>Restaurer une sauvegarde</button>
+<button onclick=zero()>Compteurs a zero</button>
 <button class=d onclick=usine()>Valeurs d'usine</button>
 </div>
 <div id=msg></div>
 </main>
 <script>
+// =====================================================================
+// LE FILET : UNE PAGE NE DOIT JAMAIS MOURIR EN SILENCE
+// =====================================================================
+// En JavaScript, une seule erreur arrete TOUT le script. La page s'affiche
+// alors - le HTML est deja la - mais plus rien ne repond : ni bouton, ni
+// tableau, et pas le moindre message. C'est arrive deux fois dans ce
+// projet (corrections 11 et 13), et les deux fois il a fallu deviner.
+//
+// Ce gestionnaire est donc la PREMIERE chose du script : tout ce qui suit
+// est couvert. Une erreur s'affiche desormais a l'ecran, avec sa ligne.
+window.onerror=function(message,source,ligne,colonne){
+ try{
+  var m=document.getElementById("msg");
+  if(m){
+   m.className="ko";m.style.display="block";
+   m.textContent="La page a rencontre une erreur JavaScript et s'est "+
+    "arretee :\n\n"+message+"\n(ligne "+ligne+", colonne "+colonne+")"+
+    "\n\nRien n'a ete envoye au macropad. Recharge la page ; si ca "+
+    "recommence, signale ce message tel quel.";}
+ }catch(e){}
+ return false;};
+
 var D={ordre:[],profils:{},apps:{repli:{profil:"WINDOWS",abrege:"Win"},liste:[]}};
 var N=6,GESTES=["court","long","double"];
 var LIB={court:"court",long:"long",double:"double"};
@@ -3865,6 +3888,17 @@ function restaurer(){
   lecteur.readAsText(f);};
  i.click();}
 
+// Les compteurs d'usage vivent SUR LA CARTE : c'est elle qui compte les
+// appuis. On lui demande donc de les oublier, puis on relit tout pour que
+// les chiffres affiches soient bien ceux de la carte et non les notres.
+function zero(){
+ if(!confirm("Remettre a zero les compteurs d'usage des touches ?"))return;
+ fetch("/api/compteurs",{method:"POST"}).then(function(r){return r.json();})
+ .then(function(r){
+  say(r.ok?"Compteurs remis a zero.":"Refuse :\n"+r.raison,r.ok);
+  if(r.ok)charger();})
+ .catch(function(e){say("Erreur : "+e,0);});}
+
 function usine(){if(!confirm("Revenir aux valeurs d'usine ?"))return;
  fetch("/api/usine",{method:"POST"}).then(function(){location.reload();});}
 function save(){fetch("/api/profils",{method:"POST",
@@ -4039,6 +4073,19 @@ class Portail:
             else:
                 self._repondre(client, json.dumps(self._etat_json()),
                                "application/json")
+        elif chemin.startswith("/api/compteurs") and methode == "POST":
+            # Ici les compteurs sont a portee de main : pas de liaison
+            # serie a traverser, c'est le meme programme.
+            if self.stats is None:
+                self._repondre(client,
+                               json.dumps({"ok": False,
+                                           "raison": "compteurs indisponibles"}),
+                               "application/json")
+            else:
+                self.stats.remettre_a_zero()
+                print("[portal] compteurs d'usage remis a zero")
+                self._repondre(client, json.dumps({"ok": True, "raison": ""}),
+                               "application/json")
         elif chemin.startswith("/api/usine") and methode == "POST":
             store.effacer()
             print("[portal] retour aux profils d'usine")
@@ -4075,7 +4122,7 @@ class Portail:
 
 ## device/link.py
 
-`230 lignes - sha256 7f3d5d937ddfcfb6`
+`243 lignes - sha256 f3b8a54a9718792b`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -4268,6 +4315,19 @@ class Link:
         if ligne == "!RELOAD":
             self.sortie("#OK:rechargement")
             return (EVT_RECHARGER, None)
+
+        if ligne == "!ZERO":
+            # Remise a zero des compteurs d'usage. remettre_a_zero() efface
+            # AUSSI le fichier : sans cela, enregistrer() refuserait d'ecrire
+            # une table vide et les anciens chiffres reviendraient au
+            # prochain demarrage. Une remise a zero qui ne survit pas au
+            # redemarrage n'en est pas une.
+            if self.stats is None:
+                self.sortie("#KO:compteurs indisponibles")
+                return None
+            self.stats.remettre_a_zero()
+            self.sortie("#OK:compteurs remis a zero")
+            return None
 
         return None
 
