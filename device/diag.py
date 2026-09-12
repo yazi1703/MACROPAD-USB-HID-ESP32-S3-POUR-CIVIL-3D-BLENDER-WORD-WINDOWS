@@ -153,6 +153,9 @@ def controle():
     # --- 4. Le brochage --------------------------------------------
     print("4. Brochage")
     mauvaises = []
+    for numero, premier, second in broches_en_double():
+        mauvaises.append("GPIO%d sert a DEUX choses : %s et %s"
+                         % (numero, premier, second))
     for numero, role in sorted(broches_deja_prises().items()):
         verdict, raison = verifier_broche(numero)
         if verdict in ("reservee", "inexistante"):
@@ -252,14 +255,19 @@ def verifier_broche(numero):
     return "libre", ""
 
 
-def broches_deja_prises():
-    """{numero: a quoi elle sert} pour tout ce que config.py declare deja."""
-    prises = {}
+def roles_declares():
+    """[(numero, role), ...] pour tout ce que config.py declare, SANS dedoublonner.
+
+    C'est la forme brute : deux entrees sur la meme broche y restent
+    visibles. broches_deja_prises() la resume, broches_en_double() y
+    cherche les collisions.
+    """
+    roles = []
 
     def poser(numero, role):
         if numero is None:
             return
-        prises.setdefault(int(numero), role)
+        roles.append((int(numero), role))
 
     for rang, numero in enumerate(C.BUTTON_PINS):
         poser(numero, "touche B%d" % (rang + 1))
@@ -275,7 +283,31 @@ def broches_deja_prises():
         poser(getattr(C, "RGB_PIN_R", None), "LED RGB rouge")
         poser(getattr(C, "RGB_PIN_V", None), "LED RGB verte")
         poser(getattr(C, "RGB_PIN_B", None), "LED RGB bleue")
+    return roles
+
+
+def broches_deja_prises():
+    """{numero: a quoi elle sert} pour tout ce que config.py declare deja."""
+    prises = {}
+    for numero, role in roles_declares():
+        prises.setdefault(numero, role)
     return prises
+
+
+def broches_en_double():
+    """[(numero, role1, role2), ...] : deux fonctions sur la meme broche.
+
+    Le genre d'erreur qu'on fait en corrigeant un numero a la main - et
+    qui ne se voit nulle part : la broche repond, mais a deux maitres.
+    """
+    premier = {}
+    doubles = []
+    for numero, role in roles_declares():
+        if numero in premier:
+            doubles.append((numero, premier[numero], role))
+        else:
+            premier[numero] = role
+    return doubles
 
 
 def broches_libres():
@@ -388,7 +420,7 @@ def rgb(nb=None, broche=None, luminosite=12):
     soit bien TON cablage qui soit teste, et pas la configuration.
 
         diag.rgb()          # utilise RGB_PIN et RGB_COUNT
-        diag.rgb(6, 16)     # six LED sur GPIO16
+        diag.rgb(6, 17)     # six LED sur GPIO17
 
     Ce que tu dois voir, dans l'ordre :
 

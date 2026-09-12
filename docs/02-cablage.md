@@ -101,6 +101,9 @@ MicroPython**. Le port natif, lui, n'apparait que lorsque MicroPython tourne
 | ESC LED | GPIO15 | 2,2 kOhm -> base BC547 | PWM 1 kHz |
 | ESC +5 V | 5V (VBUS) | 330 Ohm -> LED | alimentation de la LED |
 | ESC masse | GND | GND commun | **obligatoire** |
+| LED RGB données | GPIO17 | 220 à 470 Ω → **DIN** du ruban | GPIO16 évité : c'est `XTAL_32K_N` |
+| LED RGB +5 V | 5V (VBUS) | + du ruban | condensateur 470 µF aux bornes du ruban |
+| LED RGB masse | GND | − du ruban | **à brancher EN PREMIER** (voir docs/10) |
 
 ### Quel doigt sur quelle broche — a ne pas melanger
 

@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 248 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 250 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 248 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  218 pour le firmware, 30 pour le compagnon Windows.
+- 250 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  220 pour le firmware, 30 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -53,6 +53,8 @@ donnerait un pad au comportement different selon l'age du fichier. Les sept
 autres exercent diag.controle() : reglage absent, interrupteur a False,
 SAFE MODE, broche reservee, fichier absent distingue d'un fichier present
 qui ne s'importe pas, et le cas sain.
+
+Deux tests de plus y veillent : `diag.controle()` signale DEUX ROLES SUR UNE MEME BROCHE - l'erreur qu'on fait en corrigeant un numero a la main, ou la broche repond mais a deux maitres - et le brochage livre est verifie sain, variante RGB active comprise.
 
 **Le brochage, verifie AVANT le fer a souder** (`BrochesAvantDeSouder`,
 8 tests). Une soudure ne se defait pas d'un clic : ces tests verifient
@@ -382,7 +384,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 248 tests
+Ran 250 tests
 
 OK
 ```

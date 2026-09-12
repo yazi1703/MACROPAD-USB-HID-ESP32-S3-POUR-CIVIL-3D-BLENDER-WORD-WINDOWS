@@ -205,7 +205,12 @@ RGB_ENABLED = False
 RGB_TYPE = "WS2812"
 
 # --- montage WS2812 ---------------------------------------------------
-RGB_PIN = 16                # fil de donnees (via 330 a 470 ohms en serie)
+# GPIO17 et pas GPIO16 : sur l'ESP32-S3, GPIO15 et GPIO16 sont les
+# broches prevues pour un quartz horloger 32,768 kHz (XTAL_32K_P et
+# XTAL_32K_N). Toutes les cartes ne le montent pas, mais GPIO17 n'a
+# aucune fonction speciale : c'est un choix plus sur, et c'est celui
+# qui est reellement soude sur ce macropad.
+RGB_PIN = 17                # fil de donnees (via 330 a 470 ohms en serie)
 RGB_COUNT = 6               # une LED par touche
 RGB_ORDRE = "GRB"           # ordre des couleurs de TES LED (voir la doc)
 

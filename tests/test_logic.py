@@ -2085,6 +2085,30 @@ class ControleGeneral(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("combos", texte)
 
+    def test_controle_signale_deux_roles_sur_une_meme_broche(self):
+        """L'erreur qu'on fait en corrigeant un numero a la main.
+
+        La broche repond, mais a deux maitres : rien ne le signale, et le
+        symptome est incomprehensible. Ici RGB_PIN vient marcher sur les
+        pieds de la touche B4.
+        """
+        import diag
+        ancienne = C.RGB_PIN
+        C.RGB_PIN = C.BUTTON_PINS[3]
+        try:
+            self.assertTrue(diag.broches_en_double())
+            ok, texte = self._controle()
+        finally:
+            C.RGB_PIN = ancienne
+        self.assertFalse(ok)
+        self.assertIn("DEUX choses", texte)
+        self.assertIn("GPIO%d" % C.BUTTON_PINS[3], texte)
+
+    def test_pas_de_doublon_dans_la_configuration_livree(self):
+        """Le brochage du depot doit etre sain, variante active comprise."""
+        import diag
+        self.assertEqual(diag.broches_en_double(), [])
+
     def test_controle_est_vert_sur_une_configuration_saine(self):
         import runtime
         gardes = (C.HID_ENABLED, C.RGB_ENABLED, C.LINK_ENABLED, C.OLED_ENABLED)
@@ -2308,7 +2332,7 @@ class LedsRgb(unittest.TestCase):
         annonce = sortie.getvalue()
         self.assertIn("RGB", annonce)
         self.assertIn("6 LED", annonce)
-        self.assertIn("GPIO16", annonce)
+        self.assertIn("GPIO%d" % C.RGB_PIN, annonce)
         self.assertIn("GRB", annonce)
 
     def test_le_demarrage_dit_pourquoi_rien_ne_s_allume(self):

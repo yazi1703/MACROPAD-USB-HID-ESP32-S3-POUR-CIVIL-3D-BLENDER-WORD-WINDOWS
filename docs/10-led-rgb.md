@@ -194,7 +194,7 @@ projet.
 | Depuis | À travers | Vers |
 |---|---|---|
 | **VBUS (5 V)** | *(rien, ou la 1N4148 si scintillements)* | **+5V** du ruban |
-| **GPIO16** | **une résistance de 220 à 470 Ω** | **DIN** du ruban |
+| **GPIO17** | **une résistance de 220 à 470 Ω** | **DIN** du ruban |
 | **GND** | — | **GND** du ruban |
 
 Plus le **condensateur 470 µF entre +5V et GND**, soudé au plus près du
@@ -209,7 +209,7 @@ ruban.
                                   (le GND doit être COMMUN, sans quoi
                                    le signal n'a aucune référence)
 
-   GPIO16 ──── 220 à 470 Ω ────► DIN du ruban
+   GPIO17 ──── 220 à 470 Ω ────► DIN du ruban
               (au plus près de la première LED)
 ```
 
@@ -302,7 +302,8 @@ GPIO. Alimente les deux ensemble.
 
 | Broche | Verdict |
 |---|---|
-| **16, 17, 18, 21** | ✅ libres, sans fonction spéciale — **GPIO16 est la valeur livrée** |
+| **17, 18, 21** | ✅ libres, sans aucune fonction spéciale — **GPIO17 est la valeur livrée** |
+| **16** | ⚠️ utilisable, mais c'est `XTAL_32K_N` : à éviter si ta carte monte un quartz 32,768 kHz |
 | 48 (ou 38) | ⚠️ souvent la LED RGB **déjà soudée** sur la carte — parfait pour un premier essai sans rien câbler |
 | 0, 3, 45, 46 | ❌ broches de strapping |
 | 19, 20 | ❌ USB — on n'y touche jamais |
@@ -325,7 +326,7 @@ Puis renseigne `RGB_ANODE_COMMUNE` dans `config.py`.
 
 ```
   anode commune :   patte commune ──► 3,3 V
-                    R ── 220 Ω ──► GPIO16
+                    R ── 220 Ω ──► GPIO17
                     V ── 220 Ω ──► GPIO17
                     B ── 220 Ω ──► GPIO18
 
@@ -397,7 +398,7 @@ soit dans Thonny pendant que tu as les mains dans le montage.
 ```python
 RGB_ENABLED = True
 RGB_TYPE = "WS2812"
-RGB_PIN = 16
+RGB_PIN = 17
 RGB_COUNT = 6
 ```
 
@@ -489,7 +490,7 @@ macropad de taper**.
 fait des LED, en une ligne :
 
 ```
-RGB : 6 LED sur GPIO16, ordre GRB, luminosite 40/255
+RGB : 6 LED sur GPIO17, ordre GRB, luminosite 40/255
 ```
 
 ou bien :

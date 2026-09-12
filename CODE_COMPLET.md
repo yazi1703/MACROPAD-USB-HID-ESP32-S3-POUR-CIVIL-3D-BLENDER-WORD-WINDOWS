@@ -40,7 +40,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`358 lignes - sha256 09557329bf900e1b`
+`363 lignes - sha256 6a1103d3c30c5262`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -250,7 +250,12 @@ RGB_ENABLED = False
 RGB_TYPE = "WS2812"
 
 # --- montage WS2812 ---------------------------------------------------
-RGB_PIN = 16                # fil de donnees (via 330 a 470 ohms en serie)
+# GPIO17 et pas GPIO16 : sur l'ESP32-S3, GPIO15 et GPIO16 sont les
+# broches prevues pour un quartz horloger 32,768 kHz (XTAL_32K_P et
+# XTAL_32K_N). Toutes les cartes ne le montent pas, mais GPIO17 n'a
+# aucune fonction speciale : c'est un choix plus sur, et c'est celui
+# qui est reellement soude sur ce macropad.
+RGB_PIN = 17                # fil de donnees (via 330 a 470 ohms en serie)
 RGB_COUNT = 6               # une LED par touche
 RGB_ORDRE = "GRB"           # ordre des couleurs de TES LED (voir la doc)
 
@@ -5573,7 +5578,7 @@ def limiter(couleur):
 
 ## device/diag.py
 
-`690 lignes - sha256 da65a11b242b40dc`
+`722 lignes - sha256 7751190b40e1a40e`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -5731,6 +5736,9 @@ def controle():
     # --- 4. Le brochage --------------------------------------------
     print("4. Brochage")
     mauvaises = []
+    for numero, premier, second in broches_en_double():
+        mauvaises.append("GPIO%d sert a DEUX choses : %s et %s"
+                         % (numero, premier, second))
     for numero, role in sorted(broches_deja_prises().items()):
         verdict, raison = verifier_broche(numero)
         if verdict in ("reservee", "inexistante"):
@@ -5830,14 +5838,19 @@ def verifier_broche(numero):
     return "libre", ""
 
 
-def broches_deja_prises():
-    """{numero: a quoi elle sert} pour tout ce que config.py declare deja."""
-    prises = {}
+def roles_declares():
+    """[(numero, role), ...] pour tout ce que config.py declare, SANS dedoublonner.
+
+    C'est la forme brute : deux entrees sur la meme broche y restent
+    visibles. broches_deja_prises() la resume, broches_en_double() y
+    cherche les collisions.
+    """
+    roles = []
 
     def poser(numero, role):
         if numero is None:
             return
-        prises.setdefault(int(numero), role)
+        roles.append((int(numero), role))
 
     for rang, numero in enumerate(C.BUTTON_PINS):
         poser(numero, "touche B%d" % (rang + 1))
@@ -5853,7 +5866,31 @@ def broches_deja_prises():
         poser(getattr(C, "RGB_PIN_R", None), "LED RGB rouge")
         poser(getattr(C, "RGB_PIN_V", None), "LED RGB verte")
         poser(getattr(C, "RGB_PIN_B", None), "LED RGB bleue")
+    return roles
+
+
+def broches_deja_prises():
+    """{numero: a quoi elle sert} pour tout ce que config.py declare deja."""
+    prises = {}
+    for numero, role in roles_declares():
+        prises.setdefault(numero, role)
     return prises
+
+
+def broches_en_double():
+    """[(numero, role1, role2), ...] : deux fonctions sur la meme broche.
+
+    Le genre d'erreur qu'on fait en corrigeant un numero a la main - et
+    qui ne se voit nulle part : la broche repond, mais a deux maitres.
+    """
+    premier = {}
+    doubles = []
+    for numero, role in roles_declares():
+        if numero in premier:
+            doubles.append((numero, premier[numero], role))
+        else:
+            premier[numero] = role
+    return doubles
 
 
 def broches_libres():
@@ -5966,7 +6003,7 @@ def rgb(nb=None, broche=None, luminosite=12):
     soit bien TON cablage qui soit teste, et pas la configuration.
 
         diag.rgb()          # utilise RGB_PIN et RGB_COUNT
-        diag.rgb(6, 16)     # six LED sur GPIO16
+        diag.rgb(6, 17)     # six LED sur GPIO17
 
     Ce que tu dois voir, dans l'ordre :
 

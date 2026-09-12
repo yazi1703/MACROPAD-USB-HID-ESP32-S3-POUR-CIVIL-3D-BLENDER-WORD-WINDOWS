@@ -98,6 +98,8 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 [ ] aucune broche a 0 au repos, sans que tu y touches
 [ ] BUTTON_PINS : B1 GPIO4, B2 GPIO5, B3 GPIO6, B4 GPIO7, B5 GPIO12, B6 GPIO13
 [ ] DOIGTS correspond a la main : pouce, index, index, majeur, annulaire, auriculaire
+[ ] RGB_PIN correspond a la broche REELLEMENT soudee (17 ici, pas 16)
+[ ] GND du ruban relie AVANT le +5 V - sinon la 1re LED grille
 [ ] rien sur GPIO19 ni GPIO20 (USB) - jamais
 [ ] rien sur GPIO26 a GPIO37 (flash et PSRAM du N16R8)
 ```
