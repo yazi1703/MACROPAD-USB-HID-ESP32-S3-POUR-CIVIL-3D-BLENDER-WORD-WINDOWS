@@ -462,6 +462,84 @@ fait échouer ce dernier.
 
 ---
 
+## Correction 14 — Une ligne manquante dans `config.py`, trois pannes d'un coup (trouvée à l'usage)
+
+**Le symptôme.** Deux choses tombent en même temps : **les LED RGB ne
+s'allument plus**, et le compagnon PC répond **« macropad non connecte »**.
+Deux pannes sans rapport apparent — on cherche une soudure.
+
+**La cause, et c'est une faute de conception de ma part.** Le projet te dit,
+partout, de **garder ton `config.py`** quand tu téléverses une nouvelle
+version du dossier `device/` : sinon `HID_ENABLED` et `RGB_ENABLED`
+repassent à `False` et le macropad cesse de taper. C'est le bon conseil.
+
+Mais j'ai ensuite ajouté du code qui lisait une constante **neuve** en
+direct :
+
+```python
+combos = Combos(NB_TOUCHES, C.GESTE_COMBO_MS)     # <-- ajoutée avec les combinaisons
+```
+
+Un `config.py` conservé d'une version précédente ne l'a pas. Résultat :
+
+```
+AttributeError: module 'config' has no attribute 'GESTE_COMBO_MS'
+```
+
+`main.py` s'arrête **au démarrage**. Et `main.py` qui ne démarre pas, ce
+n'est pas une panne, c'est **trois** :
+
+| Ce qui ne tourne plus | Ce que tu constates |
+|---|---|
+| `Rgb()` n'est jamais créé | les LED restent éteintes |
+| `Link` n'est jamais créé | « macropad non connecte » dans le navigateur |
+| aucune macro n'est envoyée | plus une seule touche |
+
+Le conseil (« garde ton `config.py` ») et le code (« lis cette constante
+neuve ») se contredisaient. C'est le conseil qui avait raison ; c'est le
+code qui devait céder.
+
+**La correction, en trois temps.**
+
+1. **Plus aucune constante neuve n'est lue en direct.** `main.reglage()`
+   retombe sur la valeur d'usine et **mémorise** ce qui manquait. Idem pour
+   `COMBO_FLASH_MS` dans `display.py` et `COMBO_LABEL_MAX` dans `store.py`.
+   Le macropad démarre, quel que soit l'âge de `config.py`.
+
+2. **Il le dit, il ne se tait pas.** Au démarrage, le REPL affiche les
+   quatre interrupteurs et la liste des réglages absents :
+
+   ```
+   HID_ENABLED  : False  <- aucune touche ne sera tapee
+   RGB_ENABLED  : False  <- LED RGB eteintes
+   LINK_ENABLED : True
+   OLED_ENABLED : True
+   ----------------------------------------------
+   config.py est plus ANCIEN que le firmware.
+   Reglages absents, remplaces par leur valeur d'usine :
+      - GESTE_COMBO_MS
+   ```
+
+3. **`diag.controle()`** répond à « rien ne marche, par où je commence ? »
+   en une commande : fichiers présents, `config.py` à jour, interrupteurs,
+   brochage, mode de démarrage — puis la liste numérotée de ce qu'il faut
+   corriger, dans l'ordre.
+
+**Les tests.** Neuf, dont deux qui gardent la porte fermée pour de bon :
+l'un fait tourner `main.run()` avec `GESTE_COMBO_MS`, `COMBO_FLASH_MS` et
+`DOIGTS` **retirés de `config`**, et exige que le macropad démarre ;
+l'autre compare chaque valeur de repli à celle du dépôt — un repli qui
+divergerait donnerait un pad au comportement différent selon l'âge du
+fichier, le pire des pièges. Remettre la lecture directe fait échouer le
+premier ; changer un repli fait échouer le second.
+
+> **La leçon, pour la suite :** toute constante ajoutée à `config.py` doit
+> être lue par `reglage()` et inscrite dans `REGLAGES_NEUFS` (`main.py`) et
+> `REGLAGES_ATTENDUS` (`diag.py`). Sans ça, la prochaine mise à jour
+> refabrique exactement la même panne.
+
+---
+
 ## Ce qui n'a PAS été touché
 
 - La structure `device/` et les quatre fichiers USB officiels recopiés :

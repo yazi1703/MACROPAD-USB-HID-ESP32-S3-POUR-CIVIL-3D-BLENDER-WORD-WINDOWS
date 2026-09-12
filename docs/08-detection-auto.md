@@ -325,6 +325,7 @@ le firmware normalement**, tu ne perds pas cette porte de sortie.
 
 | Symptôme | Cause probable |
 |---|---|
+| **Les LED sont éteintes ET le compagnon ne voit rien** | une seule cause en amont, pas deux pannes : lance `import diag` puis `diag.controle()` |
 | `macropad non connecte : … aucun port Espressif (VID 0x303A)` | le port **natif** n'est pas branché — c'est le port marqué USB, pas COM/UART |
 | `macropad non connecte : Port COMx indisponible (Acces refuse)` | quelque chose tient déjà ce port : Thonny le plus souvent. Bouton STOP, ou bascule Thonny sur le port UART |
 | `macropad non connecte : pyserial n'est pas installe` | `py -m pip install pyserial` |

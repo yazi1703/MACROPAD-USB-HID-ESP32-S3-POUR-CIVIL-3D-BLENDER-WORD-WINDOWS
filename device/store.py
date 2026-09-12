@@ -90,6 +90,10 @@ from layouts import compile_actions
 
 TYPES = ("key", "combo", "maintien", "pause", "text", "text_enter", "none")
 
+# Repli si profiles.py est reste a une version anterieure : une carte dont
+# on n'a televerse qu'une partie des fichiers doit demarrer, pas planter.
+LABEL_COMBO_MAX = getattr(P, "COMBO_LABEL_MAX", 16)
+
 
 # =====================================================================
 # Conversion entre la forme des pages web et la forme interne
@@ -202,7 +206,7 @@ def combos_depuis_json(champ):
             raise ValueError("combinaison : 'touches' n'est pas une liste")
         indices = tuple(sorted(int(numero) - 1 for numero in touches))
         combos.append((indices,
-                       str(entree.get("label", ""))[:P.COMBO_LABEL_MAX],
+                       str(entree.get("label", ""))[:LABEL_COMBO_MAX],
                        actions_depuis_json(entree.get("actions"))))
     return combos
 
@@ -314,9 +318,9 @@ def verifier_combos(combos, profils, nb_touches):
                                  "(%s), impossible a appuyer ensemble"
                                  % (nom, touches, memes[0] + 1, memes[1] + 1,
                                     memes[2]))
-            if len(label) > P.COMBO_LABEL_MAX:
+            if len(label) > LABEL_COMBO_MAX:
                 problemes.append("%s %s : libelle '%s' depasse %d caracteres"
-                                 % (nom, touches, label, P.COMBO_LABEL_MAX))
+                                 % (nom, touches, label, LABEL_COMBO_MAX))
             for genre, _valeur in (actions or []):
                 if genre == "maintien":
                     # Un maintien se relache quand SA touche se relache. Une

@@ -405,7 +405,8 @@ class Display:
         self.surbrillance = -1
         try:
             self._deux_lignes(str(ligne1)[:16], str(ligne2)[:16])
-            self.splash_until = ticks_add(now, C.COMBO_FLASH_MS)
+            self.splash_until = ticks_add(
+                now, getattr(C, "COMBO_FLASH_MS", 1200))
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)

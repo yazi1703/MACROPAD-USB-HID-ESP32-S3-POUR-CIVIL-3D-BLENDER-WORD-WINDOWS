@@ -840,7 +840,7 @@ else:
 
 ## device/main.py
 
-`461 lignes - sha256 a8edc5de9521a063`
+`514 lignes - sha256 2f21fc8e6224e22c`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -904,6 +904,58 @@ from layouts import compile_actions
 from link import Link, EVT_PROFIL, EVT_DOCUMENT, EVT_RECHARGER
 
 NB_TOUCHES = len(C.BUTTON_PINS)
+
+# Les reglages que ce firmware attend de config.py, avec leur valeur de
+# repli. Ajoute ici toute constante NEUVE que tu introduis : c'est ce qui
+# evite qu'elle fasse tomber la carte.
+REGLAGES_NEUFS = (
+    ("GESTE_COMBO_MS", 50),
+    ("COMBO_FLASH_MS", 1200),
+)
+_manquants = []
+
+
+def reglage(nom, defaut):
+    """Lit un reglage de config.py, avec un repli si ce fichier est ancien.
+
+    POURQUOI CE DETOUR, ET IL A UNE HISTOIRE : le projet te dit de GARDER
+    ton config.py quand tu televerses une nouvelle version du dossier
+    device - sinon HID_ENABLED et RGB_ENABLED repassent a False et le
+    macropad cesse de taper. La consequence, c'est qu'un firmware neuf
+    tourne tres souvent avec un config.py d'avant.
+
+    Sans ce repli, une seule constante ajoutee entre les deux faisait
+    planter main.py AU DEMARRAGE. Et main.py qui ne demarre pas, ce n'est
+    pas une panne, c'est trois : plus de clavier, plus de LED, plus de
+    liaison avec le PC. Le genre de symptome ou l'on cherche un probleme
+    de soudure pendant une heure.
+    """
+    if hasattr(C, nom):
+        return getattr(C, nom)
+    if nom not in _manquants:
+        _manquants.append(nom)
+    return defaut
+
+
+def annoncer_etat():
+    """Les interrupteurs qui expliquent 'rien ne marche', d'un coup d'oeil."""
+    print("-" * 46)
+    print("HID_ENABLED  :", C.HID_ENABLED,
+          "" if C.HID_ENABLED else " <- aucune touche ne sera tapee")
+    print("RGB_ENABLED  :", getattr(C, "RGB_ENABLED", False),
+          "" if getattr(C, "RGB_ENABLED", False) else " <- LED RGB eteintes")
+    print("LINK_ENABLED :", C.LINK_ENABLED,
+          "" if C.LINK_ENABLED else " <- le compagnon PC ne verra rien")
+    print("OLED_ENABLED :", getattr(C, "OLED_ENABLED", True))
+    if _manquants:
+        print("-" * 46)
+        print("config.py est plus ANCIEN que le firmware.")
+        print("Reglages absents, remplaces par leur valeur d'usine :")
+        for nom in _manquants:
+            print("   -", nom)
+        print("Le macropad fonctionne quand meme. Pour les regler toi-meme,")
+        print("recopie ces lignes depuis le config.py du depot.")
+    print("-" * 46)
 
 
 # =====================================================================
@@ -1003,7 +1055,7 @@ def run():
     stats = Stats(NB_TOUCHES)
     gestes = Gestes(NB_TOUCHES, C.GESTE_LONG_MS, C.GESTE_DOUBLE_MS)
     gestes.configurer(manager.macros)
-    combos = Combos(NB_TOUCHES, C.GESTE_COMBO_MS)
+    combos = Combos(NB_TOUCHES, reglage("GESTE_COMBO_MS", 50))
     combos.configurer(table_combos.get(manager.name))
 
     led = None
@@ -1130,6 +1182,7 @@ def run():
                 declencher(index, geste)
 
     afficher(False)
+    annoncer_etat()
     print("Profil :", manager.name,
           "HID :", "initialise" if keyboard else "DESACTIVE")
     if runtime.hid_error:
@@ -2380,7 +2433,7 @@ def compile_actions(actions, layout, caps_lock=False):
 
 ## device/store.py
 
-`578 lignes - sha256 7d936d01a20eaea9`
+`582 lignes - sha256 751428298c1a77c6`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2474,6 +2527,10 @@ import profiles as P
 from layouts import compile_actions
 
 TYPES = ("key", "combo", "maintien", "pause", "text", "text_enter", "none")
+
+# Repli si profiles.py est reste a une version anterieure : une carte dont
+# on n'a televerse qu'une partie des fichiers doit demarrer, pas planter.
+LABEL_COMBO_MAX = getattr(P, "COMBO_LABEL_MAX", 16)
 
 
 # =====================================================================
@@ -2587,7 +2644,7 @@ def combos_depuis_json(champ):
             raise ValueError("combinaison : 'touches' n'est pas une liste")
         indices = tuple(sorted(int(numero) - 1 for numero in touches))
         combos.append((indices,
-                       str(entree.get("label", ""))[:P.COMBO_LABEL_MAX],
+                       str(entree.get("label", ""))[:LABEL_COMBO_MAX],
                        actions_depuis_json(entree.get("actions"))))
     return combos
 
@@ -2699,9 +2756,9 @@ def verifier_combos(combos, profils, nb_touches):
                                  "(%s), impossible a appuyer ensemble"
                                  % (nom, touches, memes[0] + 1, memes[1] + 1,
                                     memes[2]))
-            if len(label) > P.COMBO_LABEL_MAX:
+            if len(label) > LABEL_COMBO_MAX:
                 problemes.append("%s %s : libelle '%s' depasse %d caracteres"
-                                 % (nom, touches, label, P.COMBO_LABEL_MAX))
+                                 % (nom, touches, label, LABEL_COMBO_MAX))
             for genre, _valeur in (actions or []):
                 if genre == "maintien":
                     # Un maintien se relache quand SA touche se relache. Une
@@ -4451,7 +4508,7 @@ def create_interface():
 
 ## device/display.py
 
-`534 lignes - sha256 1b958d46239896a1`
+`535 lignes - sha256 cf62658b9fec284c`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -4861,7 +4918,8 @@ class Display:
         self.surbrillance = -1
         try:
             self._deux_lignes(str(ligne1)[:16], str(ligne2)[:16])
-            self.splash_until = ticks_add(now, C.COMBO_FLASH_MS)
+            self.splash_until = ticks_add(
+                now, getattr(C, "COMBO_FLASH_MS", 1200))
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
@@ -5475,7 +5533,7 @@ def limiter(couleur):
 
 ## device/diag.py
 
-`403 lignes - sha256 56c6eaa64c2d9316`
+`555 lignes - sha256 070dd6c5531855d5`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -5505,6 +5563,7 @@ avec la commande donne "SyntaxError: invalid syntax".
 
 Test par test :
 
+    diag.controle()             # « rien ne marche » : par ou commencer
     diag.broches()              # AVANT DE SOUDER : les broches sont-elles libres ?
     diag.keymap()               # vérifie l'AZERTY, sans matériel
     diag.keymap("_ISOLATEOBJECTS")
@@ -5516,6 +5575,157 @@ Pour arrêter avant la fin : Ctrl-C, ou le bouton STOP de Thonny.
 import sys
 from time import ticks_ms, ticks_diff, sleep_ms
 import config as C
+
+
+# =====================================================================
+# LE CONTROLE GENERAL : « rien ne marche, par ou je commence ? »
+# =====================================================================
+# Quand DEUX choses tombent en meme temps - les LED eteintes ET le
+# compagnon PC qui ne voit rien - il n'y a presque jamais deux pannes.
+# Il y en a une, en amont des deux. Cette fonction la trouve.
+
+# Les fichiers que le firmware attend sur la carte.
+MODULES_ATTENDUS = ("config", "profiles", "runtime", "inputs", "gestures",
+                    "combos", "layouts", "store", "stats", "link",
+                    "hid_keyboard", "display", "led", "rgb", "sh1106")
+
+# Les reglages ajoutes au fil des versions. Un config.py conserve d'une
+# version precedente ne les a pas : le firmware se rabat sur une valeur
+# d'usine, mais autant le savoir.
+REGLAGES_ATTENDUS = (
+    ("config", "GESTE_COMBO_MS"),
+    ("config", "COMBO_FLASH_MS"),
+    ("config", "DOIGTS"),
+    ("profiles", "COMBO_LABEL_MAX"),
+    ("profiles", "COMBOS"),
+)
+
+# Les quatre interrupteurs qui expliquent, a eux seuls, la plupart des
+# « rien ne se passe ».
+INTERRUPTEURS = (
+    ("HID_ENABLED", True, "le macropad ne tapera AUCUNE touche"),
+    ("RGB_ENABLED", True, "les LED RGB resteront eteintes"),
+    ("LINK_ENABLED", True, "le compagnon PC ne verra jamais la carte"),
+    ("OLED_ENABLED", True, "l'ecran restera noir"),
+)
+
+
+def controle():
+    """Le premier reflexe quand plusieurs choses ne marchent plus.
+
+    Verifie, dans l'ordre ou les causes s'enchainent :
+      1. tous les fichiers du firmware sont-ils sur la carte ?
+      2. config.py est-il aussi recent que le reste ?
+      3. les quatre interrupteurs sont-ils sur la bonne position ?
+      4. le brochage est-il coherent ?
+
+    Ne touche a aucun materiel et n'envoie aucune touche.
+    """
+    import runtime
+    print("=" * 46)
+    print(" CONTROLE GENERAL DU MACROPAD")
+    print("=" * 46)
+    soucis = []
+
+    # --- 1. Les fichiers -------------------------------------------
+    print("1. Fichiers du firmware")
+    absents, casses = [], []
+    for nom in MODULES_ATTENDUS:
+        try:
+            __import__(nom)
+        except Exception as exc:
+            # Un fichier ABSENT et un fichier PRESENT QUI PLANTE ne se
+            # reparent pas pareil : le premier se reteleverse, le second se
+            # lit. Le message d'erreur nomme le module introuvable, et ce
+            # n'est pas forcement celui qu'on importe.
+            texte = str(exc).lower()
+            if "no module named" in texte and nom.lower() in texte:
+                absents.append(nom)
+                print("   ABSENT   %s" % nom)
+            else:
+                casses.append((nom, exc))
+                print("   PRESENT mais son import echoue : %s (%s)" % (nom, exc))
+    if absents:
+        soucis.append("%d fichier(s) absent(s) de la carte : %s"
+                      % (len(absents), ", ".join(absents)))
+        print("   -> reteleverse le CONTENU de device/ a la racine de la carte.")
+    for nom, exc in casses:
+        soucis.append("%s ne s'importe pas : %s" % (nom, exc))
+    if not absents and not casses:
+        print("   les %d fichiers sont la et s'importent." % len(MODULES_ATTENDUS))
+
+    # --- 2. config.py est-il a jour ? ------------------------------
+    print("2. Reglages")
+    vieux = []
+    for module, reglage in REGLAGES_ATTENDUS:
+        try:
+            if not hasattr(__import__(module), reglage):
+                vieux.append("%s.%s" % (module, reglage))
+        except Exception:
+            pass
+    if vieux:
+        soucis.append("config.py ou profiles.py est plus ancien que le "
+                      "firmware (%s)" % ", ".join(vieux))
+        print("   ces reglages manquent, valeur d'usine utilisee :")
+        for nom in vieux:
+            print("     -", nom)
+        print("   -> recopie les lignes manquantes depuis le depot.")
+    else:
+        print("   config.py et profiles.py sont a jour.")
+
+    # --- 3. Les interrupteurs --------------------------------------
+    print("3. Interrupteurs de config.py")
+    for nom, attendu, consequence in INTERRUPTEURS:
+        valeur = getattr(C, nom, None)
+        if valeur is None:
+            print("   %-13s ABSENT" % nom)
+            continue
+        if bool(valeur) != attendu:
+            soucis.append("%s = %s : %s" % (nom, valeur, consequence))
+            print("   %-13s %-5s <- %s" % (nom, valeur, consequence))
+        else:
+            print("   %-13s %s" % (nom, valeur))
+
+    # --- 4. Le brochage --------------------------------------------
+    print("4. Brochage")
+    mauvaises = []
+    for numero, role in sorted(broches_deja_prises().items()):
+        verdict, raison = verifier_broche(numero)
+        if verdict in ("reservee", "inexistante"):
+            mauvaises.append("GPIO%d (%s) : %s" % (numero, role, raison))
+    if mauvaises:
+        soucis.extend(mauvaises)
+        for ligne in mauvaises:
+            print("  ", ligne)
+    else:
+        print("   les %d broches declarees sont utilisables."
+              % len(broches_deja_prises()))
+
+    # --- 5. L'etat du demarrage ------------------------------------
+    print("5. Demarrage")
+    print("   SAFE MODE   :", runtime.safe_mode,
+          "   (B1 maintenu au RESET : aucun clavier, aucune liaison)")
+    print("   MODE CONFIG :", runtime.config_mode,
+          "   (B2 maintenu au RESET : WiFi, aucune liaison serie)")
+    print("   clavier USB :", "cree" if runtime.interface else "ABSENT")
+    if runtime.hid_error:
+        soucis.append("erreur HID au demarrage : %s" % runtime.hid_error)
+        print("   erreur HID :", runtime.hid_error)
+    if runtime.safe_mode or runtime.config_mode:
+        soucis.append("la carte n'est pas en mode normal : ni clavier, "
+                      "ni liaison avec le compagnon PC")
+
+    print("=" * 46)
+    if soucis:
+        print(" %d POINT(S) A CORRIGER, dans cet ordre :" % len(soucis))
+        for rang, souci in enumerate(soucis):
+            print("   %d. %s" % (rang + 1, souci))
+    else:
+        print(" TOUT EST COHERENT.")
+        print(" Si quelque chose ne marche toujours pas, c'est du cablage :")
+        print("   diag.broches()  puis  diag.run()  puis  diag.rgb()")
+    print("=" * 46)
+    return not soucis
 
 
 # =====================================================================

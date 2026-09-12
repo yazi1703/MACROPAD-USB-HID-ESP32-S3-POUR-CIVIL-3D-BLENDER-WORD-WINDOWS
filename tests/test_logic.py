@@ -1,5 +1,5 @@
 """Tests sur PC : temps, GPIO et transport simulés ; aucune validation USB physique."""
-import ast, json, os, shutil, subprocess, sys, tempfile, types, pathlib, unittest, time, runpy
+import ast, io, json, os, shutil, subprocess, sys, tempfile, types, pathlib, unittest, time, runpy
 from unittest.mock import patch
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT/'device'), str(ROOT/'device/lib')]
@@ -27,6 +27,16 @@ machine.Pin, machine.PWM = Pin, PWM
 machine.USBDevice = type('USBDevice', (), {})
 sys.modules['machine'] = machine
 mp = types.ModuleType('micropython'); mp.const=lambda v:v; sys.modules['micropython']=mp
+# framebuf existe sur la carte, pas sur un PC. Sans ce bouchon, sh1106.py
+# ne s'importe pas ici et diag.controle() croirait a un firmware casse.
+_fb = types.ModuleType('framebuf')
+class _FrameBuffer:
+    def __init__(self, *a, **kw): pass
+    def fill(self, c): pass
+    def text(self, *a, **kw): pass
+    def pixel(self, x, y): return 0
+_fb.FrameBuffer = _FrameBuffer; _fb.MONO_HLSB = 3; _fb.MONO_VLSB = 0
+sys.modules['framebuf'] = _fb
 from inputs import Debouncer
 from profiles import ProfileManager, PROFILES, TESTS
 from layouts import compile_actions, character_keys, letter_code
@@ -1885,6 +1895,141 @@ class CouleursDesProfils(unittest.TestCase):
         self.assertTrue(ok, raison)
         _, _, _, couleurs, _, _, _, _ = store.charger(6)
         self.assertEqual(couleurs["CIVIL3D"], tuple(C.RGB_COULEURS["CIVIL3D"]))
+
+
+class ControleGeneral(unittest.TestCase):
+    """« Rien ne marche » : une seule commande doit dire par ou commencer.
+
+    Ces tests naissent d'un cas reel, et d'un defaut que j'avais
+    introduit : le firmware neuf lisait C.GESTE_COMBO_MS en direct, alors
+    que le projet dit de GARDER son config.py en televersant. Resultat,
+    main.py plantait au demarrage - et une seule ligne manquante donnait
+    TROIS pannes simultanees : pas de clavier, pas de LED, pas de liaison
+    avec le PC. On cherche une soudure pendant une heure.
+    """
+
+    def test_un_config_ancien_ne_doit_plus_empecher_le_demarrage(self):
+        """Le test qui compte : main.run() demarre sans les reglages neufs."""
+        import main
+        manquants = ("GESTE_COMBO_MS", "COMBO_FLASH_MS", "DOIGTS")
+        gardes = {}
+        for nom in manquants:
+            gardes[nom] = getattr(C, nom)
+            delattr(C, nom)
+        main._manquants[:] = []
+        transport = Transport()
+
+        def sleep_simule(ms):
+            clock[0] += ms
+            if clock[0] >= 400:
+                raise KeyboardInterrupt()
+
+        try:
+            import runtime
+            with patch.object(runtime, 'interface', transport), \
+                 patch.object(runtime, 'safe_mode', False), \
+                 patch.object(runtime, 'config_mode', False), \
+                 patch.object(main, 'sleep_ms', sleep_simule):
+                with self.assertRaises(KeyboardInterrupt):
+                    main.run()
+        finally:
+            for nom, valeur in gardes.items():
+                setattr(C, nom, valeur)
+
+        # Il a demarre, ET il a dit ce qui manquait plutot que de se taire.
+        self.assertIn("GESTE_COMBO_MS", main._manquants)
+
+    def test_le_repli_vaut_la_valeur_du_depot(self):
+        """Un repli qui differerait du depot ferait un pad au comportement
+        different selon l'age du config.py : piege absolu."""
+        import main
+        for nom, defaut in main.REGLAGES_NEUFS:
+            self.assertEqual(getattr(C, nom), defaut,
+                             "%s : le repli de main.py a diverge de config.py"
+                             % nom)
+
+    def test_reglage_prefere_toujours_config(self):
+        import main
+        self.assertEqual(main.reglage("GESTE_COMBO_MS", 999), C.GESTE_COMBO_MS)
+        self.assertEqual(main.reglage("CONSTANTE_QUI_N_EXISTE_PAS", 7), 7)
+
+    # --- diag.controle() -------------------------------------------------
+    def _controle(self):
+        import diag
+        sortie = io.StringIO()
+        with patch('sys.stdout', sortie):
+            ok = diag.controle()
+        return ok, sortie.getvalue()
+
+    def test_controle_signale_un_reglage_manquant(self):
+        garde = C.GESTE_COMBO_MS
+        del C.GESTE_COMBO_MS
+        try:
+            ok, texte = self._controle()
+        finally:
+            C.GESTE_COMBO_MS = garde
+        self.assertFalse(ok)
+        self.assertIn("config.GESTE_COMBO_MS", texte)
+        self.assertIn("plus ancien que le firmware", texte)
+
+    def test_controle_signale_les_interrupteurs_a_False(self):
+        """C'est LA cause de « les LED ne s'allument pas »."""
+        garde = C.RGB_ENABLED
+        C.RGB_ENABLED = False
+        try:
+            ok, texte = self._controle()
+        finally:
+            C.RGB_ENABLED = garde
+        self.assertFalse(ok)
+        self.assertIn("RGB_ENABLED", texte)
+        self.assertIn("eteintes", texte)
+
+    def test_controle_signale_le_safe_mode(self):
+        """En SAFE MODE il n'y a ni clavier ni liaison : deux pannes, une cause."""
+        import runtime
+        with patch.object(runtime, 'safe_mode', True):
+            ok, texte = self._controle()
+        self.assertFalse(ok)
+        self.assertIn("SAFE MODE", texte)
+        self.assertIn("ni clavier", texte)
+
+    def test_controle_signale_une_broche_reservee(self):
+        anciennes = C.BUTTON_PINS
+        C.BUTTON_PINS = (4, 5, 6, 30, 12, 13)      # GPIO30 = flash SPICLK
+        try:
+            ok, texte = self._controle()
+        finally:
+            C.BUTTON_PINS = anciennes
+        self.assertFalse(ok)
+        self.assertIn("GPIO30", texte)
+
+    def test_controle_distingue_un_fichier_absent_d_un_fichier_casse(self):
+        import diag
+        garde = dict(sys.modules)
+        sys.modules['combos'] = None               # provoque l'ImportError
+        try:
+            ok, texte = self._controle()
+        finally:
+            sys.modules.clear()
+            sys.modules.update(garde)
+        self.assertFalse(ok)
+        self.assertIn("combos", texte)
+
+    def test_controle_est_vert_sur_une_configuration_saine(self):
+        import runtime
+        gardes = (C.HID_ENABLED, C.RGB_ENABLED, C.LINK_ENABLED, C.OLED_ENABLED)
+        C.HID_ENABLED = C.RGB_ENABLED = C.LINK_ENABLED = C.OLED_ENABLED = True
+        try:
+            with patch.object(runtime, 'safe_mode', False), \
+                 patch.object(runtime, 'config_mode', False), \
+                 patch.object(runtime, 'interface', object()), \
+                 patch.object(runtime, 'hid_error', None):
+                ok, texte = self._controle()
+        finally:
+            (C.HID_ENABLED, C.RGB_ENABLED,
+             C.LINK_ENABLED, C.OLED_ENABLED) = gardes
+        self.assertTrue(ok, texte)
+        self.assertIn("TOUT EST COHERENT", texte)
 
 
 class BrochesAvantDeSouder(unittest.TestCase):

@@ -60,6 +60,58 @@ from link import Link, EVT_PROFIL, EVT_DOCUMENT, EVT_RECHARGER
 
 NB_TOUCHES = len(C.BUTTON_PINS)
 
+# Les reglages que ce firmware attend de config.py, avec leur valeur de
+# repli. Ajoute ici toute constante NEUVE que tu introduis : c'est ce qui
+# evite qu'elle fasse tomber la carte.
+REGLAGES_NEUFS = (
+    ("GESTE_COMBO_MS", 50),
+    ("COMBO_FLASH_MS", 1200),
+)
+_manquants = []
+
+
+def reglage(nom, defaut):
+    """Lit un reglage de config.py, avec un repli si ce fichier est ancien.
+
+    POURQUOI CE DETOUR, ET IL A UNE HISTOIRE : le projet te dit de GARDER
+    ton config.py quand tu televerses une nouvelle version du dossier
+    device - sinon HID_ENABLED et RGB_ENABLED repassent a False et le
+    macropad cesse de taper. La consequence, c'est qu'un firmware neuf
+    tourne tres souvent avec un config.py d'avant.
+
+    Sans ce repli, une seule constante ajoutee entre les deux faisait
+    planter main.py AU DEMARRAGE. Et main.py qui ne demarre pas, ce n'est
+    pas une panne, c'est trois : plus de clavier, plus de LED, plus de
+    liaison avec le PC. Le genre de symptome ou l'on cherche un probleme
+    de soudure pendant une heure.
+    """
+    if hasattr(C, nom):
+        return getattr(C, nom)
+    if nom not in _manquants:
+        _manquants.append(nom)
+    return defaut
+
+
+def annoncer_etat():
+    """Les interrupteurs qui expliquent 'rien ne marche', d'un coup d'oeil."""
+    print("-" * 46)
+    print("HID_ENABLED  :", C.HID_ENABLED,
+          "" if C.HID_ENABLED else " <- aucune touche ne sera tapee")
+    print("RGB_ENABLED  :", getattr(C, "RGB_ENABLED", False),
+          "" if getattr(C, "RGB_ENABLED", False) else " <- LED RGB eteintes")
+    print("LINK_ENABLED :", C.LINK_ENABLED,
+          "" if C.LINK_ENABLED else " <- le compagnon PC ne verra rien")
+    print("OLED_ENABLED :", getattr(C, "OLED_ENABLED", True))
+    if _manquants:
+        print("-" * 46)
+        print("config.py est plus ANCIEN que le firmware.")
+        print("Reglages absents, remplaces par leur valeur d'usine :")
+        for nom in _manquants:
+            print("   -", nom)
+        print("Le macropad fonctionne quand meme. Pour les regler toi-meme,")
+        print("recopie ces lignes depuis le config.py du depot.")
+    print("-" * 46)
+
 
 # =====================================================================
 # MODE CONFIG : WiFi + page web
@@ -158,7 +210,7 @@ def run():
     stats = Stats(NB_TOUCHES)
     gestes = Gestes(NB_TOUCHES, C.GESTE_LONG_MS, C.GESTE_DOUBLE_MS)
     gestes.configurer(manager.macros)
-    combos = Combos(NB_TOUCHES, C.GESTE_COMBO_MS)
+    combos = Combos(NB_TOUCHES, reglage("GESTE_COMBO_MS", 50))
     combos.configurer(table_combos.get(manager.name))
 
     led = None
@@ -285,6 +337,7 @@ def run():
                 declencher(index, geste)
 
     afficher(False)
+    annoncer_etat()
     print("Profil :", manager.name,
           "HID :", "initialise" if keyboard else "DESACTIVE")
     if runtime.hid_error:
