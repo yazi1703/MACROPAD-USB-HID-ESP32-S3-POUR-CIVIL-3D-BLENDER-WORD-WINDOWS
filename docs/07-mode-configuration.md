@@ -184,6 +184,20 @@ Le [chapitre 11](11-combinaisons.md) détaille le reste.
 | touche | `TAB`, `F5`, `G` | une seule touche |
 | combinaison | `CTRL+Z`, `CTRL+SHIFT+ESC` | plusieurs touches ensemble |
 | **maintenir** | `CTRL`, `SHIFT`, `CTRL+ALT` | **garde la touche enfoncée** tant que ton doigt reste dessus |
+
+> **Tout se règle ici, y compris la touche modificatrice.** Pour échanger
+> Ctrl et Maj sur B1, il suffit de changer les deux valeurs :
+>
+> | Geste de B1 | Type | Valeur |
+> |---|---|---|
+> | **court** | `maintenir` | `CTRL` |
+> | **double** | `maintenir` | `MAJ` |
+>
+> `MAJ` et `SHIFT` désignent la même touche, les deux sont acceptés. Le
+> geste **court** est le maintien **instantané** : mets-y celui que tu
+> utilises le plus. Une valeur inventée (`CONTROLE`, par exemple) est
+> **refusée avant d'être écrite** — la configuration précédente reste
+> intacte.
 | **pause** | `500` | attend ce nombre de millisecondes avant l'étape suivante |
 | texte | `_HATCH` | écrit la chaîne |
 | texte + Entrée | `_MATCHPROP` | écrit la chaîne puis valide |

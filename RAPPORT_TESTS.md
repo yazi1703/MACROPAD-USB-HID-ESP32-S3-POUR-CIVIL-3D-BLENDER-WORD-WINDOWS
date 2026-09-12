@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 285 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 288 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 285 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  255 pour le firmware, 30 pour le compagnon Windows.
+- 288 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  258 pour le firmware, 30 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -70,6 +70,17 @@ sur GPIO30 - l'horloge de la flash - et on verifie que `diag.broches()`
 la SIGNALE sans jamais construire le `Pin`, avec un faux Pin qui echoue si
 on l'appelle. Creer un Pin sur la flash suffit a faire tomber la carte :
 l'outil de diagnostic ne doit pas etre ce qui la fait tomber.
+
+**CE QUE LA PAGE PEUT REGLER** (`LaPagePeutToutRegler`, 3 tests). Nes
+d'une question posee telle quelle : « je peux le faire depuis la page
+HTTP ? ». La reponse devait etre verifiable, pas affirmee. On fabrique
+donc la configuration exactement comme la PAGE l'enverrait - ses types,
+ses valeurs textuelles - et on verifie que la carte l'accepte et la relit
+a l'identique : echanger les deux modificateurs de B1 se fait sans
+toucher au code. Deux garde-fous l'accompagnent : MAJ et SHIFT doivent
+compiler vers la MEME frappe, sinon un reglage fait a la page enverrait
+autre chose que prevu ; et une valeur inventee est refusee AVANT d'etre
+ecrite, la configuration precedente restant intacte.
 
 **LE MAINTIEN DU BOUTON ESC** (`EscMaintenu`, 5 tests, dans la vraie
 boucle de main.py). Le point delicat : ESC a une priorite absolue et part
@@ -398,7 +409,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 285 tests
+Ran 288 tests
 
 OK
 ```

@@ -103,9 +103,9 @@ class Logic(unittest.TestCase):
         # l'index). Seul l'appui LONG de B2 change d'un profil a l'autre.
         for nom, macros in PROFILES.items():
             label, gestes = macros[0]
-            self.assertEqual(label, 'MAJ', nom)
-            self.assertEqual(gestes['court'], [('maintien',('SHIFT',))], nom)
-            self.assertEqual(gestes['double'], [('maintien',('CTRL',))], nom)
+            self.assertEqual(label, 'CTRL', nom)
+            self.assertEqual(gestes['court'], [('maintien',('CTRL',))], nom)
+            self.assertEqual(gestes['double'], [('maintien',('SHIFT',))], nom)
             self.assertNotIn('long', gestes, nom)
 
             label, gestes = macros[1]
@@ -754,9 +754,9 @@ class PageWebDeConfiguration(unittest.TestCase):
         self.assertEqual(civil[3]["court"][0]["valeur"], "_PLINE")
         self.assertEqual(civil[3]["court"][0]["type"], "text_enter")
         # Les deux touches globales sont lisibles dans le formulaire.
-        self.assertEqual(civil[0]["court"][0]["valeur"], "SHIFT")
+        self.assertEqual(civil[0]["court"][0]["valeur"], "CTRL")
         self.assertEqual(civil[0]["court"][0]["type"], "maintien")
-        self.assertEqual(civil[0]["double"][0]["valeur"], "CTRL")
+        self.assertEqual(civil[0]["double"][0]["valeur"], "SHIFT")
         self.assertEqual(civil[1]["court"][0]["valeur"], "CTRL+C")
         self.assertEqual(civil[1]["double"][0]["valeur"], "CTRL+V")
         # L'appui long de B3 montre toute la vue.
@@ -2000,15 +2000,75 @@ class ToucheModificatrice(unittest.TestCase):
         # Elle est sur B1 - le POUCE - et dans TOUS les profils.
         for nom in C.PROFILES_ORDER:
             label, gestes = P.PROFILES[nom][0]
-            self.assertEqual(label, "MAJ", nom)
-            # Maj d'abord : c'est le maintien INSTANTANE, et celui qu'on
-            # utilise le plus, main droite a la souris.
-            self.assertEqual(gestes["court"], [("maintien", ("SHIFT",))], nom)
-            self.assertEqual(gestes["double"], [("maintien", ("CTRL",))], nom)
+            self.assertEqual(label, "CTRL", nom)
+            # Ctrl d'abord : c'est le maintien INSTANTANE. Le second
+            # demande un appui bref, il arrive donc apres GESTE_DOUBLE_MS.
+            self.assertEqual(gestes["court"], [("maintien", ("CTRL",))], nom)
+            self.assertEqual(gestes["double"], [("maintien", ("SHIFT",))], nom)
         label, gestes = P.PROFILES["CIVIL3D"][0]
         # Et elles restent verifiables comme n'importe quelle macro.
         self.assertEqual(store.verifier({"CIVIL3D": P.PROFILES["CIVIL3D"]},
                                         ["CIVIL3D"], 6), [])
+
+
+class LaPagePeutToutRegler(unittest.TestCase):
+    """La question posee : « je peux le faire depuis la page HTTP ? »
+
+    La reponse doit etre verifiable, pas affirmee. On fabrique donc la
+    configuration exactement comme la PAGE l'enverrait - avec ses types et
+    ses valeurs textuelles - et on verifie que la carte l'accepte et la
+    relit a l'identique.
+    """
+
+    def setUp(self):
+        try:
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    def test_echanger_les_deux_modificateurs_depuis_la_page(self):
+        """Ctrl sur l'appui court, Maj sur le double - sans toucher au code."""
+        import store
+        data = store.vers_json(6)
+        b1 = data["profils"]["CIVIL3D"]["touches"][0]
+        # Ce que tu tapes dans la page : le type "maintenir" et un nom.
+        b1["court"] = [{"type": "maintien", "valeur": "MAJ"}]
+        b1["double"] = [{"type": "maintien", "valeur": "CTRL"}]
+        b1["label"] = "MAJ"
+
+        ok, raison = store.enregistrer_json(data, 6)
+        self.assertTrue(ok, raison)
+
+        profils = store.charger(6)[0]
+        label, gestes = profils["CIVIL3D"][0]
+        self.assertEqual(label, "MAJ")
+        self.assertEqual(gestes["court"], [("maintien", ("MAJ",))])
+        self.assertEqual(gestes["double"], [("maintien", ("CTRL",))])
+
+    def test_le_nom_MAJ_est_bien_compris_par_le_clavier(self):
+        """« MAJ » et « SHIFT » designent la meme touche.
+
+        La page propose les deux ; le firmware doit taper la meme chose,
+        sinon un reglage fait a la page enverrait autre chose que prevu.
+        """
+        self.assertEqual(compile_actions([("maintien", ("MAJ",))],
+                                         C.KEYBOARD_LAYOUT),
+                         compile_actions([("maintien", ("SHIFT",))],
+                                         C.KEYBOARD_LAYOUT))
+
+    def test_un_maintien_invente_est_refuse_avant_d_etre_ecrit(self):
+        """Une faute de frappe dans la page ne doit RIEN casser."""
+        import store
+        data = store.vers_json(6)
+        data["profils"]["CIVIL3D"]["touches"][0]["court"] = [
+            {"type": "maintien", "valeur": "CONTROLE"}]
+        ok, raison = store.enregistrer_json(data, 6)
+        self.assertFalse(ok)
+        self.assertIn("CONTROLE", raison)
+        # Et rien n'a ete ecrit : la configuration precedente est intacte.
+        self.assertFalse(os.path.exists(C.PROFILES_FILE))
 
 
 class CouleursDesProfils(unittest.TestCase):

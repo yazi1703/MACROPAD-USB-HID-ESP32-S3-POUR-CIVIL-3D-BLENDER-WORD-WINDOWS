@@ -82,7 +82,7 @@ BLENDER  →  CIVIL3D  →  WORD  →  WINDOWS  →  BLENDER
 
 |  | BLENDER | CIVIL 3D | WORD | WINDOWS |
 |---|---|---|---|---|
-| **B1** pouce | **Maj maintenue** | **Maj maintenue** | **Maj maintenue** | **Maj maintenue** |
+| **B1** pouce | **Ctrl maintenu** | **Ctrl maintenu** | **Ctrl maintenu** | **Ctrl maintenu** |
 | **B2** index | **Ctrl+C** | **Ctrl+C** | **Ctrl+C** | **Ctrl+C** |
 | **B3** index | `S` | **F3** accrochages | Ctrl+I | Win+E |
 | **B4** majeur | `Tab` | `_PLINE` + Entrée | Ctrl+U | Ctrl+Maj+Échap |
@@ -99,8 +99,13 @@ souris pendant ce temps.
 
 | Ce que tu fais | Ce que le PC reçoit |
 |---|---|
-| tu appuies et tu **maintiens** | **Maj** enfoncée, relâchée quand tu lâches |
-| tu appuies **brièvement**, puis tu **maintiens** | **Ctrl** enfoncé, relâché quand tu lâches |
+| tu appuies et tu **maintiens** | **Ctrl** enfoncé, relâché quand tu lâches |
+| tu appuies **brièvement**, puis tu **maintiens** | **Maj** enfoncée, relâchée quand tu lâches |
+
+**Ctrl est en premier** parce que c'est le maintien **instantané** : il
+part dès l'appui. Le second demande un appui bref d'abord, il arrive donc
+après `GESTE_DOUBLE_MS`. **Les deux s'échangent depuis la page de
+configuration**, sans toucher au code.
 
 **Elle est sur le pouce, et c'est tout l'intérêt** : le pouce se pose sur
 un autre plan que les quatre doigts, il peut donc rester appuyé sans
@@ -125,7 +130,7 @@ Les autres appuis longs et doubles des valeurs d'usine :
 
 | | Appui long | Double appui |
 |---|---|---|
-| **partout** B1 MAJ | — | **Ctrl maintenu** (voir ci-dessous) |
+| **partout** B1 CTRL | — | **Maj maintenue** (voir ci-dessous) |
 | **BLENDER** B2 COPIER | `R` rotation | Ctrl+V |
 | **CIVIL 3D** B2 COPIER | Ctrl+X couper | Ctrl+V |
 | **WORD** B2 COPIER | Ctrl+B gras | Ctrl+V |
@@ -146,10 +151,8 @@ Les autres appuis longs et doubles des valeurs d'usine :
 > court ». L'appui **long**, lui, ne coûte rien. Sur tes touches les plus
 > utilisées, laisse la colonne « double » vide.
 
-**Maj est en premier** sur B1 parce que c'est le maintien **instantané**,
-et c'est celui qu'on utilise le plus, main droite à la souris (Maj+clic
-pour désélectionner). Le modificateur descend **dès l'appui**, sans aucun
-délai. Détail et limites dans [`docs/09`](docs/09-ecran-et-gestes.md).
+Le modificateur descend **dès l'appui**, sans aucun délai. Détail et
+limites dans [`docs/09`](docs/09-ecran-et-gestes.md).
 
 **Et deux touches appuyées ensemble font une commande de plus.** Six
 touches donnent quinze paires ; six sont utilisées dans Civil 3D, et
@@ -283,7 +286,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   └── README.md                 comment les charger au démarrage
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             255 tests du firmware, exécutables sur PC
+│   ├── test_logic.py             258 tests du firmware, exécutables sur PC
 │   ├── test_pc.py                30 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
@@ -309,7 +312,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 285 tests ... OK
+→ Ran 288 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport

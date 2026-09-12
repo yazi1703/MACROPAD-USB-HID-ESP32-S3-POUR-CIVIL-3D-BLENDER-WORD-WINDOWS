@@ -462,7 +462,7 @@ LED_RETURN_MS = 350     # retour progressif du flash vers la respiration
 
 ## device/profiles.py
 
-`380 lignes - sha256 989bde8dd21c3915`
+`386 lignes - sha256 729d6113d5f4cf91`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -566,27 +566,33 @@ def K(label, court, long=None, double=None):
 # avant de conclure "c'etait un appui court" - ici, avant de copier. Sur
 # une touche ou tu veux zero attente, laisse la colonne "double" vide et
 # sers-toi de l'appui long, qui lui ne coute rien.
-def modificateur(label="MAJ"):
+def modificateur(label="CTRL"):
     """B1 : une vraie touche modificatrice, dans TOUS les profils.
 
-    Elle ne tape rien. Elle enfonce Maj ou Ctrl et les GARDE enfonces tant
+    Elle ne tape rien. Elle enfonce Ctrl ou Maj et les GARDE enfonces tant
     que ton doigt reste dessus, pour que tu cliques a la souris pendant ce
     temps.
 
-      appui maintenu             -> MAJ  (Maj+clic : deselectionner)
-      appui bref puis maintenu   -> CTRL (Ctrl+clic : ajouter)
+      appui maintenu             -> CTRL (Ctrl+clic : ajouter a la selection)
+      appui bref puis maintenu   -> MAJ  (Maj+clic : deselectionner)
 
-    Maj est en premier parce que c'est le maintien INSTANTANE, et celui
-    qu'on utilise le plus, main droite a la souris.
+    CTRL EST EN PREMIER parce que c'est le maintien INSTANTANE : il part
+    des l'appui, sans le moindre delai. Le second demande un appui bref
+    d'abord, donc il arrive apres GESTE_DOUBLE_MS. On met donc devant
+    celui qu'on utilise le plus.
 
     ELLE EST SUR LE POUCE, ET C'EST TOUT L'INTERET. Le pouce se pose sur
     un autre plan que les quatre doigts : il peut donc rester appuye sans
     rendre aucune autre touche inatteignable. Quand ce role etait sur
     l'index (B2), le maintenir bloquait B3 - meme doigt - et donc les
     trois combinaisons qui l'utilisent.
+
+    Les deux se echangent DEPUIS LA PAGE DE CONFIGURATION, sans toucher au
+    code : type "maintenir", valeur CTRL sur l'appui court et MAJ sur le
+    double appui. Voir docs/07.
     """
-    return K(label, [("maintien", ("SHIFT",))],
-             double=[("maintien", ("CTRL",))])
+    return K(label, [("maintien", ("CTRL",))],
+             double=[("maintien", ("SHIFT",))])
 
 
 def presse_papiers(long=None):
