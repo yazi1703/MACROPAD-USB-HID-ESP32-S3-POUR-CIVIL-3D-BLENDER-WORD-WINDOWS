@@ -61,6 +61,7 @@ REGLAGES_ATTENDUS = (
     ("config", "COMBO_FLASH_MS"),
     ("config", "DOIGTS"),
     ("config", "RGB_RESPIRATION_MAX"),
+    ("config", "RGB_COULEURS2"),
     ("profiles", "COMBO_LABEL_MAX"),
     ("profiles", "COMBOS"),
 )

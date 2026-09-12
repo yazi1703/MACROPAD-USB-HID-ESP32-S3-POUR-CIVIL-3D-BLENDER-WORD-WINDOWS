@@ -235,6 +235,25 @@ RGB_COULEURS = {
     "WORD":    (40, 70, 255),      # bleu Word
     "WINDOWS": (0, 200, 90),       # vert
 }
+# --- la SECONDE couleur, celle qui alterne ---------------------------
+# Un profil peut porter deux couleurs. Le pad respire alors dans la
+# premiere, puis dans la seconde, puis revient : la bascule se fait
+# PENDANT LE CREUX de la respiration, la ou le pad est le plus sombre, si
+# bien qu'on voit bien deux couleurs mais jamais le changement.
+#
+# Un profil absent de cette table, ou dont la seconde couleur est None,
+# ne fait pas alterner : il respire dans sa couleur unique. Vide cette
+# table pour supprimer l'alternance partout.
+#
+# Ce sont les couleurs de la seconde identite de chaque logiciel. Elles
+# se changent depuis la page de configuration, comme les premieres.
+RGB_COULEURS2 = {
+    "BLENDER": (60, 90, 140),      # le bleu-gris de l'interface Blender
+    "CIVIL3D": (0, 200, 140),      # le vert "terrain" de Civil 3D
+    "WORD":    (120, 170, 255),    # bleu Word plus clair
+    "WINDOWS": (0, 120, 215),      # le bleu d'accentuation de Windows
+}
+
 RGB_COULEUR_DEFAUT = (120, 120, 120)   # profil sans couleur declaree
 RGB_COULEUR_ERREUR = (255, 0, 0)       # panne HID : visible sans lire
 

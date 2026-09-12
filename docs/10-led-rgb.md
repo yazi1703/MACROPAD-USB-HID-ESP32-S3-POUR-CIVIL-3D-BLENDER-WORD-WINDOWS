@@ -123,6 +123,58 @@ respiration ramènerait exactement le même problème.
 
 ---
 
+## 10.1 quater Deux couleurs qui alternent
+
+Un profil peut porter **deux** couleurs. Le pad respire alors dans la
+première, puis dans la seconde, puis revient — un cycle complet dure donc
+**deux respirations** (8 s par défaut).
+
+Le point de conception : **la bascule se fait pendant le creux.**
+
+```
+   luminosité   ╱╲          ╱╲          ╱╲
+                  ╲        ╱  ╲        ╱  ╲
+   couleur     ─── A ──╳─── B ──╳─── A ──╳───
+                       ↑        ↑        ↑
+                    le creux, là où le pad est le plus sombre
+```
+
+Au **sommet** d'une respiration la couleur est la première, pure ; au
+sommet de la suivante, la seconde, pure. Entre les deux, le mélange
+traverse le creux. On voit donc bien deux couleurs, et **jamais le
+changement** — alors qu'une bascule nette se verrait, le creux valant
+tout de même un quart de la luminosité.
+
+La courbe est aussi la plus **lente aux sommets** : chaque couleur
+s'attarde à son maximum, exactement comme la respiration s'attarde en bas.
+Sans cela, on n'aurait qu'un dégradé continu sans jamais voir vraiment
+l'une ni l'autre.
+
+Les couleurs d'usine sont la seconde identité de chaque logiciel :
+
+| Profil | Première | Seconde |
+|---|---|---|
+| **BLENDER** | orange | le bleu-gris de l'interface |
+| **CIVIL 3D** | bleu cyan | le vert « terrain » |
+| **WORD** | bleu Word | un bleu plus clair |
+| **WINDOWS** | vert | le bleu d'accentuation Windows |
+
+Elles se choisissent **dans la page de configuration**, à côté de la
+première : une case à cocher met l'alternance en service, un second
+sélecteur donne la couleur. Décoche la case et le profil revient à sa
+couleur unique.
+
+Dans `profils.json`, cela s'écrit `"couleur2": "#00c88c"`. Une chaîne
+**vide** veut dire « pas d'alternance », et elle est respectée ; une clé
+**absente** — un fichier écrit avant cette version — reprend la couleur
+d'usine.
+
+> **Une panne HID efface l'alternance** : le rouge doit être lisible sans
+> réfléchir. Et l'appui sur une touche garde sa propre réserve de
+> luminosité (section 10.1 ter), indépendamment de la couleur en cours.
+
+---
+
 ## 10.2 Le vrai danger : le courant
 
 Une WS2812 en **blanc à fond** tire **60 mA**. Six touches :

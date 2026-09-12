@@ -40,7 +40,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`385 lignes - sha256 b7095a375bc943d3`
+`404 lignes - sha256 4feae3ef84d91b97`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -280,6 +280,25 @@ RGB_COULEURS = {
     "WORD":    (40, 70, 255),      # bleu Word
     "WINDOWS": (0, 200, 90),       # vert
 }
+# --- la SECONDE couleur, celle qui alterne ---------------------------
+# Un profil peut porter deux couleurs. Le pad respire alors dans la
+# premiere, puis dans la seconde, puis revient : la bascule se fait
+# PENDANT LE CREUX de la respiration, la ou le pad est le plus sombre, si
+# bien qu'on voit bien deux couleurs mais jamais le changement.
+#
+# Un profil absent de cette table, ou dont la seconde couleur est None,
+# ne fait pas alterner : il respire dans sa couleur unique. Vide cette
+# table pour supprimer l'alternance partout.
+#
+# Ce sont les couleurs de la seconde identite de chaque logiciel. Elles
+# se changent depuis la page de configuration, comme les premieres.
+RGB_COULEURS2 = {
+    "BLENDER": (60, 90, 140),      # le bleu-gris de l'interface Blender
+    "CIVIL3D": (0, 200, 140),      # le vert "terrain" de Civil 3D
+    "WORD":    (120, 170, 255),    # bleu Word plus clair
+    "WINDOWS": (0, 120, 215),      # le bleu d'accentuation de Windows
+}
+
 RGB_COULEUR_DEFAUT = (120, 120, 120)   # profil sans couleur declaree
 RGB_COULEUR_ERREUR = (255, 0, 0)       # panne HID : visible sans lire
 
@@ -867,7 +886,7 @@ else:
 
 ## device/main.py
 
-`601 lignes - sha256 fa91922c71d7695f`
+`603 lignes - sha256 6c14c345a7d05f82`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1091,8 +1110,8 @@ def run():
         return
 
     # --- Chargement de la configuration --------------------------------
-    profils, ordre, titres, couleurs, table_combos, apps, repli, origine = \
-        store.charger(NB_TOUCHES)
+    (profils, ordre, titres, couleurs, couleurs2, table_combos,
+     apps, repli, origine) = store.charger(NB_TOUCHES)
     print("Macros chargees depuis :", origine)
 
     manager = ProfileManager(ordre, C.DEFAULT_PROFILE, profils, NB_TOUCHES)
@@ -1145,7 +1164,7 @@ def run():
         combos.configurer(table_combos.get(manager.name))
         # La couleur suit le logiciel : c'est le profil actif qui la donne,
         # et le PC change de profil tout seul selon la fenetre active.
-        rgb.profil(couleurs.get(manager.name))
+        rgb.profil(couleurs.get(manager.name), couleurs2.get(manager.name))
 
     def recharger_profils():
         """Relit profils.json et applique la nouvelle configuration.
@@ -1153,16 +1172,18 @@ def run():
         Appele quand une page web vient d'enregistrer : les changements
         prennent effet immediatement, sans RESET.
         """
-        nonlocal manager, titres, ordre, couleurs, table_combos
+        nonlocal manager, titres, ordre, couleurs, couleurs2, table_combos
         try:
-            (neufs, ordre_neuf, titres_neufs, couleurs_neuves, combos_neuves,
-             _apps, _repli, origine_neuve) = store.charger(NB_TOUCHES)
+            (neufs, ordre_neuf, titres_neufs, couleurs_neuves, secondes_neuves,
+             combos_neuves, _apps, _repli,
+             origine_neuve) = store.charger(NB_TOUCHES)
             nouveau = ProfileManager(ordre_neuf, manager.name, neufs, NB_TOUCHES)
         except Exception as exc:
             print("[main] configuration refusee, on garde l'ancienne :", exc)
             return
         manager, titres, ordre = nouveau, titres_neufs, ordre_neuf
         couleurs = couleurs_neuves
+        couleurs2 = secondes_neuves
         table_combos = combos_neuves
         afficher(False)
         print("Macros rechargees depuis :", origine_neuve)
@@ -2547,7 +2568,7 @@ def compile_actions(actions, layout, caps_lock=False):
 
 ## device/store.py
 
-`582 lignes - sha256 751428298c1a77c6`
+`610 lignes - sha256 563be5cacd43d98b`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2810,6 +2831,16 @@ def couleur_usine(nom):
         nom, C.RGB_COULEUR_DEFAUT))
 
 
+def couleur_usine2(nom):
+    """Seconde couleur d'usine d'un profil, ou None s'il n'en a pas.
+
+    None veut dire "pas d'alternance" : le profil respire dans sa couleur
+    unique. C'est le cas de tous les profils absents de RGB_COULEURS2.
+    """
+    couleur = getattr(C, "RGB_COULEURS2", {}).get(nom)
+    return tuple(couleur) if couleur else None
+
+
 # =====================================================================
 # Verification
 # =====================================================================
@@ -2939,8 +2970,9 @@ def defauts():
         profils[nom] = [(label, dict(gestes)) for label, gestes in touches]
     apps = [tuple(a) for a in P.APPS]
     couleurs = dict((nom, couleur_usine(nom)) for nom in profils)
+    couleurs2 = dict((nom, couleur_usine2(nom)) for nom in profils)
     return (profils, list(C.PROFILES_ORDER), dict(P.TITLES), couleurs,
-            combos_usine(), apps, tuple(P.APPS_REPLI))
+            couleurs2, combos_usine(), apps, tuple(P.APPS_REPLI))
 
 
 # =====================================================================
@@ -2948,7 +2980,7 @@ def defauts():
 # =====================================================================
 def vers_json(nb_touches, stats=None):
     """Configuration complete, prete a etre envoyee a une page web."""
-    (profils, ordre, titres, couleurs, combos,
+    (profils, ordre, titres, couleurs, couleurs2, combos,
      apps, repli, origine) = charger(nb_touches)
     blocs = {}
     for nom, touches in profils.items():
@@ -2964,6 +2996,9 @@ def vers_json(nb_touches, stats=None):
             "titre": titres.get(nom, nom),
             "couleur": couleur_vers_texte(
                 couleurs.get(nom) or couleur_usine(nom)),
+            # Chaine vide = aucune seconde couleur, donc aucune alternance.
+            "couleur2": (couleur_vers_texte(couleurs2.get(nom))
+                         if couleurs2.get(nom) else ""),
             "touches": liste,
             "combos": combos_vers_json(combos.get(nom)),
         }
@@ -2986,6 +3021,7 @@ def depuis_json(data, nb_touches):
     """Forme web -> forme interne. Leve une exception si c'est illisible."""
     ordre = [str(n) for n in data["ordre"]]
     profils, titres, couleurs, combos = {}, {}, {}, {}
+    couleurs2 = {}
     usine = combos_usine()
     for nom, bloc in data["profils"].items():
         touches = []
@@ -3010,6 +3046,15 @@ def depuis_json(data, nb_touches):
         titres[str(nom)] = str(bloc.get("titre", nom))
         couleurs[str(nom)] = couleur_depuis_texte(bloc.get("couleur"),
                                                   couleur_usine(str(nom)))
+        if "couleur2" in bloc:
+            texte = str(bloc.get("couleur2") or "").strip()
+            couleurs2[str(nom)] = (couleur_depuis_texte(texte)
+                                   if texte else None)
+        else:
+            # Fichier ecrit avant l'alternance : on remet celle d'usine,
+            # comme pour les combinaisons. Une chaine VIDE, elle, veut dire
+            # "pas d'alternance" et est respectee.
+            couleurs2[str(nom)] = couleur_usine2(str(nom))
         if "combos" in bloc:
             combos[str(nom)] = combos_depuis_json(bloc.get("combos"))
         else:
@@ -3028,14 +3073,15 @@ def depuis_json(data, nb_touches):
     bloc_repli = bloc_apps.get("repli") or {}
     repli = (str(bloc_repli.get("profil", P.APPS_REPLI[0])).upper(),
              str(bloc_repli.get("abrege", P.APPS_REPLI[1]))[:7])
-    return profils, ordre, titres, couleurs, combos, apps, repli
+    return profils, ordre, titres, couleurs, couleurs2, combos, apps, repli
 
 
 # =====================================================================
 # Lecture et ecriture du fichier
 # =====================================================================
 def charger(nb_touches):
-    """Retourne (profils, ordre, titres, couleurs, combos, apps, repli, origine).
+    """Retourne (profils, ordre, titres, couleurs, couleurs2, combos, apps,
+    repli, origine).
 
     origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire d'ou
     viennent les macros actives.
@@ -3051,7 +3097,7 @@ def charger(nb_touches):
         return defauts() + ("usine",)
 
     try:
-        (profils, ordre, titres, couleurs, combos,
+        (profils, ordre, titres, couleurs, couleurs2, combos,
          apps, repli) = depuis_json(data, nb_touches)
     except Exception as exc:
         print("[store] %s mal forme (%s), retour aux valeurs d'usine"
@@ -3065,11 +3111,12 @@ def charger(nb_touches):
             print("   -", probleme)
         return defauts() + ("usine",)
 
-    return profils, ordre, titres, couleurs, combos, apps, repli, "fichier"
+    return (profils, ordre, titres, couleurs, couleurs2, combos, apps, repli,
+            "fichier")
 
 
-def enregistrer(profils, ordre, titres, couleurs, combos, apps, repli,
-                nb_touches):
+def enregistrer(profils, ordre, titres, couleurs, couleurs2, combos, apps,
+                repli, nb_touches):
     """Verifie puis ecrit. Retourne (True, "") ou (False, raison)."""
     problemes = verifier(profils, ordre, nb_touches, combos)
     if problemes:
@@ -3087,6 +3134,8 @@ def enregistrer(profils, ordre, titres, couleurs, combos, apps, repli,
             "titre": titres.get(nom, nom),
             "couleur": couleur_vers_texte(
                 (couleurs or {}).get(nom) or couleur_usine(nom)),
+            "couleur2": (couleur_vers_texte((couleurs2 or {}).get(nom))
+                         if (couleurs2 or {}).get(nom) else ""),
             "touches": liste,
             "combos": combos_vers_json((combos or {}).get(nom)),
         }
@@ -3116,12 +3165,12 @@ def enregistrer(profils, ordre, titres, couleurs, combos, apps, repli,
 def enregistrer_json(data, nb_touches):
     """Enregistre directement une configuration recue d'une page web."""
     try:
-        (profils, ordre, titres, couleurs, combos,
+        (profils, ordre, titres, couleurs, couleurs2, combos,
          apps, repli) = depuis_json(data, nb_touches)
     except Exception as exc:
         return False, "donnees illisibles : %s" % exc
-    return enregistrer(profils, ordre, titres, couleurs, combos, apps, repli,
-                       nb_touches)
+    return enregistrer(profils, ordre, titres, couleurs, couleurs2, combos,
+                       apps, repli, nb_touches)
 
 
 def effacer():
@@ -3267,7 +3316,7 @@ class Stats:
 
 ## device/portal.py
 
-`846 lignes - sha256 e275370d1907dd62`
+`862 lignes - sha256 f8f45b82d46cab5e`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -3344,6 +3393,8 @@ border-radius:7px;padding:7px 9px;font:13px/1.2 ui-monospace,monospace;
 width:100%}
 input[type=color]{width:42px;flex:0 0 42px;padding:2px;height:33px;
 cursor:pointer}
+input[type=color]:disabled{opacity:.3;cursor:default}
+input.alt{width:auto;flex:0 0 auto;margin:0 0 0 2px;cursor:pointer}
 .val{display:flex;gap:5px;align-items:center}
 .pile{display:flex;flex-direction:column;gap:5px}
 .pile select{flex:0 0 138px}
@@ -3804,6 +3855,20 @@ function render(){
   var t=inp(p.titre,16,function(v){p.titre=v;});t.className="grow";
   t.title="titre affiche sur l'ecran";head.appendChild(t);
   head.appendChild(col(p.couleur,function(v){p.couleur=v;}));
+  // La SECONDE couleur, celle qui alterne. Une case a cocher la met en
+  // service : sans elle, il n'y aurait aucun moyen de dire "je n'en veux
+  // pas" - un selecteur de couleur rend toujours une couleur.
+  var actif=!!p.couleur2;
+  var boite=el("input",{type:"checkbox"});
+  boite.checked=actif;boite.className="alt";
+  boite.title="faire alterner une seconde couleur";
+  var deux=col(p.couleur2||"#808080",function(v){p.couleur2=v;});
+  deux.title="seconde couleur, elle alterne avec la premiere";
+  if(!actif)deux.disabled=true;
+  boite.onchange=function(){
+   p.couleur2=boite.checked?(deux.value||"#808080"):"";render();};
+  head.appendChild(boite);
+  head.appendChild(deux);
   head.appendChild(el("button",{cls:"d s",onclick:function(){del(nom);}},
    ["Supprimer"]));
   var tb=el("table",{},[el("tr",{},[el("th",{},["#"]),el("th",{},["Geste"]),
@@ -5465,7 +5530,7 @@ class Led:
 
 ## device/rgb.py
 
-`357 lignes - sha256 be86893ec81bae1b`
+`399 lignes - sha256 6d1905b2dc8911bb`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -5577,6 +5642,34 @@ def respiration(phase_ms):
     return plancher + (plafond - plancher) * onde ** 1.6
 
 
+def melange(phase_ms):
+    """Part de la SECONDE couleur a un instant du cycle, de 0.0 a 1.0.
+
+    Vaut 0 au sommet d'une respiration et 1 au sommet de la suivante : la
+    couleur bascule donc PENDANT LE CREUX, la ou le pad est le plus
+    sombre. On voit bien deux couleurs, jamais le changement - alors
+    qu'une bascule nette au creux se verrait quand meme, le creux valant
+    tout de meme un quart de la luminosite.
+
+    La courbe est aussi la plus LENTE aux sommets : chaque couleur
+    s'attarde a son maximum, exactement comme une respiration s'attarde
+    en bas. Fonction pure, donc testable sans la moindre LED.
+    """
+    periode = getattr(C, "RGB_RESPIRATION_MS", 4000)
+    # Decalage d'un demi-cycle : l'origine des phases est un creux, et on
+    # veut que le melange soit fixe aux SOMMETS.
+    ecart = (phase_ms - periode / 2.0) % (2.0 * periode)
+    return (1 - cos(pi * ecart / periode)) / 2
+
+
+def melanger(couleur, couleur2, part):
+    """Interpole deux couleurs. part = 0 donne la premiere, 1 la seconde."""
+    if not couleur2:
+        return couleur
+    return tuple(int(a + (b - a) * part)
+                 for a, b in zip(couleur, couleur2))
+
+
 class Rgb:
     """Pilote les LED RGB. Se desactive toute seule en cas de probleme."""
 
@@ -5586,6 +5679,7 @@ class Rgb:
         self.type = None
         self.nb = 0
         self.base = (0, 0, 0)          # couleur du profil courant
+        self.base2 = None              # sa seconde couleur, ou None
         self._erreur = False           # panne HID : tout passe au rouge
         # Une "energie" par touche : elle monte a chaque appui et redescend
         # toute seule. C'est ce qui fait qu'un appui se voit tout de suite
@@ -5643,13 +5737,19 @@ class Rgb:
     # ------------------------------------------------------------------
     # Ce que main.py appelle
     # ------------------------------------------------------------------
-    def profil(self, couleur):
+    def profil(self, couleur, couleur2=None):
         """Nouvelle couleur de fond : celle du logiciel qui vient d'etre pris.
 
-        C'est main.py qui choisit la couleur, a partir de la configuration :
-        rgb.py ne connait pas les noms de profils, seulement des couleurs.
+        C'est main.py qui choisit les couleurs, a partir de la
+        configuration : rgb.py ne connait pas les noms de profils,
+        seulement des couleurs.
+
+        couleur2 est facultative. Quand elle est donnee, le pad respire
+        alternativement dans l'une puis dans l'autre ; sinon il garde la
+        premiere, exactement comme avant.
         """
         self.base = tuple(couleur or C.RGB_COULEUR_DEFAUT)
+        self.base2 = tuple(couleur2) if couleur2 else None
         for index in range(len(self.niveaux)):
             self.niveaux[index] = 0.0
         self._a_redessiner = True
@@ -5734,7 +5834,14 @@ class Rgb:
         if self._eteint:
             self._peindre_tout((0, 0, 0))
             return
-        fond = tuple(C.RGB_COULEUR_ERREUR) if self._erreur else self.base
+        if self._erreur:
+            # Une panne HID efface tout : ni profil, ni alternance. Le
+            # rouge doit etre lisible sans reflechir.
+            fond = tuple(C.RGB_COULEUR_ERREUR)
+        elif self.base2 and getattr(C, "RGB_RESPIRATION", True):
+            fond = melanger(self.base, self.base2, melange(self._phase))
+        else:
+            fond = self.base
         # Le souffle de la respiration, entre son plancher et 1.0. Les
         # impulsions des touches s'AJOUTENT par-dessus : un appui monte
         # donc pareil, que la respiration soit en haut ou en bas de son
@@ -5831,7 +5938,7 @@ def limiter(couleur):
 
 ## device/diag.py
 
-`737 lignes - sha256 d2772b323104f886`
+`738 lignes - sha256 50aa712ffbe026c4`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -5897,6 +6004,7 @@ REGLAGES_ATTENDUS = (
     ("config", "COMBO_FLASH_MS"),
     ("config", "DOIGTS"),
     ("config", "RGB_RESPIRATION_MAX"),
+    ("config", "RGB_COULEURS2"),
     ("profiles", "COMBO_LABEL_MAX"),
     ("profiles", "COMBOS"),
 )

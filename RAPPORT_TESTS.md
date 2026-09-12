@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 267 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 280 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 267 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  237 pour le firmware, 30 pour le compagnon Windows.
+- 280 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  250 pour le firmware, 30 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -40,7 +40,7 @@ La respiration est verifiee comme une fonction pure - douce aux deux extremites,
 
 Deux outils de depannage s'y ajoutent, nes d'un ruban qui ne repondait a rien : `diag.rgb_pin()` balaie les broches plausibles pour retrouver celle ou le fil est soude - le test verifie qu'il n'essaie QUE des broches libres, car piloter en sortie le SDA de l'ecran ou l'horloge de la flash transformerait un diagnostic en panne - et `diag.rgb_saute(n)` pilote le ruban comme s'il avait n LED de plus, pour contourner une premiere puce grillee : le test verifie que les LED ignorees restent noires a CHAQUE envoi et que l'allumage est bien decale. Le diagnostic de cablage `diag.rgb()`, qu'on lance dans le REPL avant meme d'activer les LED, est teste lui aussi : il allume bien chaque LED seule et dans l'ordre - c'est ce qui permet de COMPTER celles qui repondent -, il place l'octet rouge la ou la puce l'attend quand il annonce ROUGE (sinon il induirait en erreur celui qui regle justement RGB_ORDRE), il eteint tout en partant meme interrompu par Ctrl-C, et il se contente d'un message si le firmware n'embarque pas neopixel.
 
-La RESERVE D'APPUI a les siens, nes d'un defaut constate a l'usage : au sommet de la respiration on ne voyait plus quelle touche venait de servir. La cause n'etait pas la luminosite mais le plafond de courant, applique CANAL PAR CANAL : un bleu a 255 y touchait deja, et l'appui ne pouvait que delaver les autres canaux. Les tests exigent desormais que CHAQUE canal allume monte a l'appui, que le gain depasse +60 %, que l'appui atteigne exactement la couleur pleine du profil, qu'un bleu pur reagisse lui aussi, et que la respiration reste sous son plafond - remonter celui-ci a 1.0 fait echouer deux tests, et supprimer la reserve du mode sans respiration en fait echouer six. La reaction a l'appui a ses propres tests, nes d'une latence constatee sur le materiel : la LED s'intensifie des le premier tour de boucle et seulement la sienne, deux appuis coup sur coup montent plus haut qu'un seul, la retombee passe par plus de cinq paliers sans jamais remonter et finit exactement sur la couleur du profil, l'empilement est plafonne, et - le test qui compte - vingt appuis empiles sur du blanc ne franchissent pas le plafond de courant. Un dernier verifie que l'impulsion s'AJOUTE a la respiration : le gain est le meme en haut et en bas du cycle.
+L'ALTERNANCE DE DEUX COULEURS a aussi les siens : le melange doit etre PUR AUX SOMMETS - premiere couleur au sommet d'une respiration, seconde au sommet de la suivante - et bouger le moins possible a ces sommets, faute de quoi on n'aurait qu'un degrade continu sans jamais voir vraiment l'une ni l'autre. Le rendu est verifie aussi, pas seulement la formule : le pad passe bien par les deux couleurs, un profil a une seule couleur garde une TEINTE constante, et une panne HID efface l'alternance. Cote configuration, couleur2 voyage dans profils.json avec la meme regle que les combinaisons - chaine vide = aucune alternance et c'est respecte, cle absente = valeur d'usine - et une couleur illisible ne fait perdre aucune macro. La RESERVE D'APPUI a les siens, nes d'un defaut constate a l'usage : au sommet de la respiration on ne voyait plus quelle touche venait de servir. La cause n'etait pas la luminosite mais le plafond de courant, applique CANAL PAR CANAL : un bleu a 255 y touchait deja, et l'appui ne pouvait que delaver les autres canaux. Les tests exigent desormais que CHAQUE canal allume monte a l'appui, que le gain depasse +60 %, que l'appui atteigne exactement la couleur pleine du profil, qu'un bleu pur reagisse lui aussi, et que la respiration reste sous son plafond - remonter celui-ci a 1.0 fait echouer deux tests, et supprimer la reserve du mode sans respiration en fait echouer six. La reaction a l'appui a ses propres tests, nes d'une latence constatee sur le materiel : la LED s'intensifie des le premier tour de boucle et seulement la sienne, deux appuis coup sur coup montent plus haut qu'un seul, la retombee passe par plus de cinq paliers sans jamais remonter et finit exactement sur la couleur du profil, l'empilement est plafonne, et - le test qui compte - vingt appuis empiles sur du blanc ne franchissent pas le plafond de courant. Un dernier verifie que l'impulsion s'AJOUTE a la respiration : le gain est le meme en haut et en bas du cycle.
 
 Enfin, deux tests font tourner main.run() en entier avec RGB_ENABLED a True et un faux ruban horodate. Le second reproduit la latence d'origine : il appuie sur la touche 1, celle qui a un double appui et dont la macro ne part donc qu'apres GESTE_DOUBLE_MS, et exige que la LED ait deja reagi dans les 60 premieres millisecondes. Il echoue sur la version precedente : rien ne sert de savoir que rgb.py fonctionne seul si l'activer fait tomber la boucle principale. Il verifie que le ruban est rafraichi tout au long de la boucle, qu'il change de couleur au changement de profil, et qu'il est ETEINT a l'arret.
 
@@ -386,7 +386,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 267 tests
+Ran 280 tests
 
 OK
 ```

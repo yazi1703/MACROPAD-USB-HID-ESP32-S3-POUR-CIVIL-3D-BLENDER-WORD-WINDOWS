@@ -424,7 +424,7 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
     def test_rotation_sur_six_touches(self):
         from profiles import ProfileManager
         import store
-        (profils, ordre, titres, couleurs, combos,
+        (profils, ordre, titres, couleurs, couleurs2, combos,
          apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, 'usine')
         p = ProfileManager(ordre, C.DEFAULT_PROFILE, profils, 6)
@@ -435,11 +435,12 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
     # --- enregistrement JSON --------------------------------------------
     def test_aller_retour_json(self):
         import store
-        profils, ordre, titres, couleurs, combos, apps, repli = store.defauts()
+        (profils, ordre, titres, couleurs, couleurs2,
+         combos, apps, repli) = store.defauts()
         ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
-                                       combos, apps, repli, 6)
+                                       couleurs2, combos, apps, repli, 6)
         self.assertTrue(ok, raison)
-        (relus, ordre2, titres2, couleurs2, combos2,
+        (relus, ordre2, titres2, couleursB, secondesB, combosB,
          apps2, repli2, origine) = store.charger(6)
         self.assertEqual(origine, 'fichier')
         self.assertEqual(ordre2, ordre)
@@ -457,26 +458,28 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
 
     def test_macro_intapable_refusee(self):
         import store
-        profils, ordre, titres, couleurs, combos, apps, repli = store.defauts()
+        (profils, ordre, titres, couleurs, couleurs2,
+         combos, apps, repli) = store.defauts()
         profils['CIVIL3D'][0] = ('KO', {'court': [('key', 'TOUCHE_BIDON')]})
         ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
-                                       combos, apps, repli, 6)
+                                       couleurs2, combos, apps, repli, 6)
         self.assertFalse(ok)
         self.assertIn('CIVIL3D', raison)
 
     def test_libelle_trop_long_refuse(self):
         import store
-        profils, ordre, titres, couleurs, combos, apps, repli = store.defauts()
+        (profils, ordre, titres, couleurs, couleurs2,
+         combos, apps, repli) = store.defauts()
         profils['WORD'][0] = ('BEAUCOUPTROPLONG', {'court': [('key', 'A')]})
         ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
-                                       combos, apps, repli, 6)
+                                       couleurs2, combos, apps, repli, 6)
         self.assertFalse(ok)
 
     def test_fichier_corrompu_repli_sur_usine(self):
         import store
         with open(C.PROFILES_FILE, 'w') as f:
             f.write('{ ceci n est pas du JSON')
-        (profils, ordre, titres, couleurs, combos,
+        (profils, ordre, titres, couleurs, couleurs2, combos,
          apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, 'usine')      # ne doit PAS planter
         self.assertEqual(len(profils['CIVIL3D']), 6)
@@ -489,7 +492,7 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
                 'profils': {'X': {'titre': 'X', 'touches': [touche] * 6}}}
         with open(C.PROFILES_FILE, 'w') as f:
             J.dump(data, f)
-        (profils, ordre, titres, couleurs, combos,
+        (profils, ordre, titres, couleurs, couleurs2, combos,
          apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, 'usine')
 
@@ -768,7 +771,7 @@ class PageWebDeConfiguration(unittest.TestCase):
 
         # La modification doit etre relue telle quelle par le firmware.
         import store
-        (profils, ordre, titres, couleurs, combos,
+        (profils, ordre, titres, couleurs, couleurs2, combos,
          apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(profils["CIVIL3D"][0][0], "TALUS")
@@ -791,7 +794,7 @@ class PageWebDeConfiguration(unittest.TestCase):
         self.assertIn("WORD", resultat["raison"])
         # Rien ne doit avoir ete ecrit : on reste sur les profils d'usine.
         import store
-        self.assertEqual(store.charger(6)[7], "usine")
+        self.assertEqual(store.charger(6)[8], "usine")
 
     def test_enregistrement_refuse_un_json_casse(self):
         import json as J
@@ -802,9 +805,9 @@ class PageWebDeConfiguration(unittest.TestCase):
     def test_retour_usine(self):
         import store
         store.enregistrer(*store.defauts(), nb_touches=6)
-        self.assertEqual(store.charger(6)[7], "fichier")
+        self.assertEqual(store.charger(6)[8], "fichier")
         self._requete("POST", "/api/usine")
-        self.assertEqual(store.charger(6)[7], "usine")
+        self.assertEqual(store.charger(6)[8], "usine")
 
     def test_chemin_inconnu(self):
         self.assertIn(b"404", self._requete("GET", "/nimportequoi"))
@@ -974,7 +977,7 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         self.assertIn((link.EVT_RECHARGER, None), evenements)
         self.assertTrue(any(s.startswith("#OK:") for s in sorties), sorties)
 
-        (profils, ordre, titres, couleurs, combos,
+        (profils, ordre, titres, couleurs, couleurs2, combos,
          apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(profils["CIVIL3D"][0][0], "TALUS")
@@ -996,7 +999,7 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         self.assertNotIn((link.EVT_RECHARGER, None), evenements)
         self.assertTrue(any(s.startswith("#KO:") for s in sorties), sorties)
         # Rien n'a ete ecrit : on reste sur les profils d'usine.
-        self.assertEqual(store.charger(6)[7], "usine")
+        self.assertEqual(store.charger(6)[8], "usine")
 
     def test_json_casse_refuse(self):
         lien, source, sorties = self._lien()
@@ -1442,7 +1445,7 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
     # --- les valeurs d'usine -------------------------------------------
     def test_les_combinaisons_d_usine_sont_chargees(self):
         import store, profiles as P
-        combos = store.defauts()[4]
+        combos = store.defauts()[5]
         self.assertEqual(combos["CIVIL3D"], list(P.COMBOS["CIVIL3D"]))
         # Un profil sans combinaison n'en invente pas.
         self.assertEqual(combos.get("WORD", []), [])
@@ -1465,13 +1468,14 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
     # --- aller-retour vers le fichier ----------------------------------
     def test_aller_retour_par_le_fichier(self):
         import store
-        profils, ordre, titres, couleurs, combos, apps, repli = store.defauts()
+        (profils, ordre, titres, couleurs, couleurs2,
+         combos, apps, repli) = store.defauts()
         ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
-                                       combos, apps, repli, 6)
+                                       couleurs2, combos, apps, repli, 6)
         self.assertTrue(ok, raison)
-        relus = store.charger(6)[4]
+        relus = store.charger(6)[5]
         self.assertEqual(relus["CIVIL3D"], combos["CIVIL3D"])
-        self.assertEqual(store.charger(6)[7], "fichier")
+        self.assertEqual(store.charger(6)[8], "fichier")
 
     def test_les_numeros_du_fichier_sont_ceux_du_pad(self):
         """Dans le JSON, [3, 4] c'est B3 et B4 - pas les indices internes."""
@@ -1503,8 +1507,8 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
     def test_un_fichier_sans_combos_recupere_celles_d_usine(self):
         import store, profiles as P
         self._fichier_sans_combos()
-        profils, ordre, titres, couleurs, combos, apps, repli, origine = \
-            store.charger(6)
+        (profils, ordre, titres, couleurs, couleurs2, combos, apps, repli,
+         origine) = store.charger(6)
         self.assertEqual(origine, "fichier")     # le reste est bien relu
         self.assertEqual(combos["CIVIL3D"], list(P.COMBOS["CIVIL3D"]))
 
@@ -1516,7 +1520,7 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
         data.pop("origine", None)
         with open(C.PROFILES_FILE, "w") as fichier:
             J.dump(data, fichier)
-        self.assertEqual(store.charger(6)[4]["CIVIL3D"], [])
+        self.assertEqual(store.charger(6)[5]["CIVIL3D"], [])
 
     # --- ce qui doit etre refuse ----------------------------------------
     def _refuse(self, combos, morceau):
@@ -1605,10 +1609,11 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
     def test_verifier_refuse_l_enregistrement(self):
         """Le controle est bien branche sur le chemin d'enregistrement."""
         import store
-        profils, ordre, titres, couleurs, combos, apps, repli = store.defauts()
+        (profils, ordre, titres, couleurs, couleurs2,
+         combos, apps, repli) = store.defauts()
         combos["CIVIL3D"] = [((2,), "SEULE", [("key", "F3")])]
         ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
-                                       combos, apps, repli, 6)
+                                       couleurs2, combos, apps, repli, 6)
         self.assertFalse(ok)
         self.assertIn("au moins deux touches", raison)
         # Et rien n'a ete ecrit : la configuration precedente est intacte.
@@ -1621,8 +1626,8 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
         data.pop("origine", None)
         with open(C.PROFILES_FILE, "w") as fichier:
             J.dump(data, fichier)
-        profils, ordre, titres, couleurs, combos, apps, repli, origine = \
-            store.charger(6)
+        (profils, ordre, titres, couleurs, couleurs2, combos, apps, repli,
+         origine) = store.charger(6)
         self.assertEqual(origine, "usine")
         self.assertEqual(combos["CIVIL3D"], list(P.COMBOS["CIVIL3D"]))
 
@@ -1737,7 +1742,7 @@ class SuitesDEtapesEtPauses(unittest.TestCase):
     def test_l_ancienne_forme_a_une_seule_action_se_relit(self):
         # Un profils.json ecrit avant les suites range UN objet par geste.
         import store
-        (profils, ordre, titres, couleurs, combos,
+        (profils, ordre, titres, couleurs, couleurs2, combos,
          apps, repli) = store.depuis_json({
             "version": 2, "ordre": ["X"],
             "profils": {"X": {"titre": "X", "touches": [
@@ -1929,7 +1934,7 @@ class CouleursDesProfils(unittest.TestCase):
 
     def test_les_couleurs_usine_viennent_de_config(self):
         import store
-        _, _, _, couleurs, _, _, _ = store.defauts()
+        _, _, _, couleurs, _, _, _, _ = store.defauts()
         self.assertEqual(couleurs["CIVIL3D"], tuple(C.RGB_COULEURS["CIVIL3D"]))
         self.assertEqual(couleurs["BLENDER"], tuple(C.RGB_COULEURS["BLENDER"]))
 
@@ -1946,7 +1951,7 @@ class CouleursDesProfils(unittest.TestCase):
         ok, raison = store.enregistrer_json(data, 6)
         self.assertTrue(ok, raison)
 
-        _, _, _, couleurs, _, _, _, origine = store.charger(6)
+        _, _, _, couleurs, _, _, _, _, origine = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(couleurs["WORD"], (0x12, 0x34, 0x56))
         # Les autres n'ont pas bouge.
@@ -1963,7 +1968,7 @@ class CouleursDesProfils(unittest.TestCase):
             del bloc["couleur"]
         ok, raison = store.enregistrer_json(data, 6)
         self.assertTrue(ok, raison)
-        _, _, _, couleurs, _, _, _, _ = store.charger(6)
+        _, _, _, couleurs, _, _, _, _, _ = store.charger(6)
         self.assertEqual(couleurs["CIVIL3D"], tuple(C.RGB_COULEURS["CIVIL3D"]))
 
 
@@ -2371,6 +2376,102 @@ class BrochesAvantDeSouder(unittest.TestCase):
         finally:
             C.BUTTON_PINS = anciennes
         self.assertTrue(diag.broches(secondes=0))
+
+
+class SecondeCouleurDansLaConfiguration(unittest.TestCase):
+    """La couleur qui alterne voyage dans profils.json comme la premiere.
+
+    Meme exigence que pour les combinaisons : un fichier ecrit AVANT
+    l'alternance doit continuer de se relire sans rien perdre, et "je n'en
+    veux pas" doit survivre au redemarrage.
+    """
+
+    def setUp(self):
+        try:
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    def test_les_secondes_couleurs_d_usine_sont_chargees(self):
+        import store
+        secondes = store.defauts()[4]
+        self.assertEqual(secondes["CIVIL3D"],
+                         tuple(C.RGB_COULEURS2["CIVIL3D"]))
+
+    def test_un_profil_sans_seconde_couleur_donne_None(self):
+        """None, et pas du noir : noir serait une couleur, donc une
+        alternance vers l'extinction."""
+        import store
+        ancienne = dict(C.RGB_COULEURS2)
+        C.RGB_COULEURS2 = {}
+        try:
+            self.assertIsNone(store.couleur_usine2("CIVIL3D"))
+            self.assertIsNone(store.defauts()[4]["CIVIL3D"])
+        finally:
+            C.RGB_COULEURS2 = ancienne
+
+    def test_aller_retour_par_le_fichier(self):
+        import store
+        (profils, ordre, titres, couleurs, couleurs2,
+         combos, apps, repli) = store.defauts()
+        couleurs2["CIVIL3D"] = (10, 20, 30)
+        ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
+                                       couleurs2, combos, apps, repli, 6)
+        self.assertTrue(ok, raison)
+        self.assertEqual(store.charger(6)[4]["CIVIL3D"], (10, 20, 30))
+
+    def test_la_page_lit_et_ecrit_couleur2(self):
+        import store
+        data = store.vers_json(6)
+        self.assertEqual(data["profils"]["CIVIL3D"]["couleur2"],
+                         store.couleur_vers_texte(C.RGB_COULEURS2["CIVIL3D"]))
+        # Un profil sans seconde couleur donne une chaine VIDE : c'est ce
+        # que la page sait rendre, et ce qui la desactive.
+        ancienne = dict(C.RGB_COULEURS2)
+        C.RGB_COULEURS2 = {}
+        try:
+            self.assertEqual(store.vers_json(6)["profils"]["WORD"]["couleur2"],
+                             "")
+        finally:
+            C.RGB_COULEURS2 = ancienne
+
+    def test_une_chaine_vide_coupe_l_alternance_pour_de_bon(self):
+        """« Je n'en veux pas » doit survivre au redemarrage."""
+        import store, json as J
+        data = store.vers_json(6)
+        data["profils"]["CIVIL3D"]["couleur2"] = ""
+        data.pop("origine", None)
+        with open(C.PROFILES_FILE, "w") as fichier:
+            J.dump(data, fichier)
+        self.assertIsNone(store.charger(6)[4]["CIVIL3D"])
+
+    def test_un_fichier_sans_couleur2_reprend_celle_d_usine(self):
+        import store, json as J
+        data = store.vers_json(6)
+        for bloc in data["profils"].values():
+            bloc.pop("couleur2")
+        data.pop("origine", None)
+        with open(C.PROFILES_FILE, "w") as fichier:
+            J.dump(data, fichier)
+        (profils, ordre, titres, couleurs, couleurs2, combos, apps, repli,
+         origine) = store.charger(6)
+        self.assertEqual(origine, "fichier")
+        self.assertEqual(couleurs2["CIVIL3D"],
+                         tuple(C.RGB_COULEURS2["CIVIL3D"]))
+
+    def test_une_seconde_couleur_illisible_ne_fait_rien_perdre(self):
+        """Une couleur fausse ne doit pas empecher de garder ses macros."""
+        import store, json as J
+        data = store.vers_json(6)
+        data["profils"]["CIVIL3D"]["couleur2"] = "pas une couleur"
+        data.pop("origine", None)
+        with open(C.PROFILES_FILE, "w") as fichier:
+            J.dump(data, fichier)
+        profils = store.charger(6)[0]
+        self.assertEqual(len(profils["CIVIL3D"]), 6)
+        self.assertEqual(store.charger(6)[8], "fichier")
 
 
 class LedsRgb(unittest.TestCase):
@@ -2842,6 +2943,97 @@ class LedsRgb(unittest.TestCase):
         self.assertTrue(
             any(sum(image[0]) > sum(image[1]) for image in tot),
             "la LED n'a pas reagi avant %d ms" % (macro - appui))
+
+    # --- la seconde couleur, celle qui alterne ---------------------------
+    def test_le_melange_est_pur_aux_sommets(self):
+        """C'est TOUT le principe : on voit deux couleurs, jamais la bascule.
+
+        Au sommet d'une respiration, la couleur est la premiere sans
+        melange ; au sommet de la suivante, la seconde sans melange. Le
+        changement se fait donc pendant le CREUX, la ou le pad est le plus
+        sombre.
+        """
+        import rgb
+        periode = C.RGB_RESPIRATION_MS
+        self.assertAlmostEqual(rgb.melange(periode / 2), 0.0, places=6)
+        self.assertAlmostEqual(rgb.melange(3 * periode / 2), 1.0, places=6)
+        self.assertAlmostEqual(rgb.melange(5 * periode / 2), 0.0, places=6)
+        # Le cycle complet dure DEUX respirations.
+        for phase in range(0, periode * 4, 97):
+            self.assertAlmostEqual(rgb.melange(phase),
+                                   rgb.melange(phase + 2 * periode), places=6)
+
+    def test_le_melange_bouge_le_moins_au_sommet(self):
+        """Chaque couleur s'ATTARDE a son maximum, comme la respiration.
+
+        Si le melange filait a la meme vitesse partout, on ne verrait
+        jamais vraiment ni l'une ni l'autre - juste un dégradé continu.
+        """
+        import rgb
+        periode = C.RGB_RESPIRATION_MS
+        pas = periode // 20
+        au_sommet = abs(rgb.melange(periode / 2 + pas)
+                        - rgb.melange(periode / 2))
+        au_creux = abs(rgb.melange(pas) - rgb.melange(0))
+        self.assertLess(au_sommet, au_creux / 3)
+
+    def test_melanger_interpole_et_accepte_l_absence(self):
+        import rgb
+        self.assertEqual(rgb.melanger((0, 0, 0), (100, 200, 50), 0.0),
+                         (0, 0, 0))
+        self.assertEqual(rgb.melanger((0, 0, 0), (100, 200, 50), 1.0),
+                         (100, 200, 50))
+        self.assertEqual(rgb.melanger((0, 0, 0), (100, 200, 50), 0.5),
+                         (50, 100, 25))
+        # Pas de seconde couleur : on garde la premiere, sans alternance.
+        self.assertEqual(rgb.melanger((9, 8, 7), None, 0.5), (9, 8, 7))
+
+    def test_le_pad_passe_vraiment_par_les_deux_couleurs(self):
+        """Verifie le rendu, pas seulement la formule."""
+        self._regler(RGB_RESPIRATION=True, RGB_RESPIRATION_MS=4000)
+        import rgb
+        objet = self._rgb()
+        c1, c2 = (255, 0, 0), (0, 0, 255)
+        objet.profil(c1, c2)
+        vues = []
+        for instant in range(0, 8001, 100):
+            objet.tick(instant)
+            vues.append(objet.materiel.pixels[0])
+        # L'ordre est GRB : le rouge est en position 1, le bleu en 2.
+        rouges = [v[1] for v in vues]
+        bleus = [v[2] for v in vues]
+        self.assertGreater(max(rouges), 0, "le pad n'a jamais rougi")
+        self.assertGreater(max(bleus), 0, "le pad n'a jamais bleui")
+        # Et il y a bien un moment ou l'un domine, puis l'autre.
+        self.assertTrue(any(r > b for r, b in zip(rouges, bleus)))
+        self.assertTrue(any(b > r for r, b in zip(rouges, bleus)))
+
+    def test_sans_seconde_couleur_rien_ne_change(self):
+        """Un profil a une seule couleur doit se comporter comme avant."""
+        self._regler(RGB_RESPIRATION=True, RGB_RESPIRATION_MS=4000)
+        objet = self._rgb()
+        objet.profil((255, 0, 0))
+        teintes = set()
+        for instant in range(0, 8001, 100):
+            objet.tick(instant)
+            r, v, b = objet.materiel.pixels[0]
+            if v:
+                teintes.add((round(r / v, 2), round(b / v, 2)))
+        # La luminosite varie, la TEINTE non : un seul rapport de canaux.
+        self.assertEqual(teintes, {(0.0, 0.0)})
+
+    def test_une_panne_hid_efface_l_alternance(self):
+        """Le rouge de panne doit etre lisible sans reflechir."""
+        self._regler(RGB_RESPIRATION=True, RGB_RESPIRATION_MS=4000)
+        import rgb
+        objet = self._rgb()
+        objet.profil((0, 160, 255), (0, 200, 140))
+        objet.etat("ERR")
+        for instant in range(0, 4001, 250):
+            objet.tick(instant)
+            r, v, b = objet.materiel.pixels[0]
+            # Ordre GRB : seul le canal rouge (position 1) est allume.
+            self.assertEqual((r, b), (0, 0))
 
     # --- l'appui doit se VOIR, meme au sommet de la respiration ----------
     def test_un_appui_se_voit_au_sommet_de_la_respiration(self):
@@ -3393,7 +3585,8 @@ class PageDeConfigurationIntacte(unittest.TestCase):
                                    ("key", "F5")])
         self.assertTrue(compile_actions(actions, C.KEYBOARD_LAYOUT))
         # Et la configuration complete reste acceptee par le firmware.
-        profils, ordre, titres, couleurs, combos, apps, repli = store.defauts()
+        (profils, ordre, titres, couleurs, couleurs2,
+         combos, apps, repli) = store.defauts()
         profils["CIVIL3D"][1][1]["long"] = actions
         self.assertEqual(store.verifier(profils, ordre, 6, combos), [])
 
@@ -3411,10 +3604,15 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         configuration = store.vers_json(6)
         vu = self._construire(configuration)
 
-        # Un carre de couleur par profil, dans l'en-tete de sa carte.
-        self.assertEqual(vu["couleurs"], 1)
+        # DEUX carres de couleur par profil : la couleur du profil, et
+        # celle qui alterne avec elle.
+        self.assertEqual(vu["couleurs"], 2)
         # La couleur choisie part bien avec le premier profil...
         self.assertEqual(vu["couleur1"], "#123456")
+        # ...et la seconde, celle qui ALTERNE avec elle, aussi.
+        # (vu["couleur2"] designe deja la couleur du deuxieme PROFIL :
+        #  deux notions differentes, deux noms differents.)
+        self.assertEqual(vu["alternance"], "#abcdef")
         # ...et le profil suivant garde la sienne.
         deuxieme = configuration["ordre"][1]
         self.assertEqual(vu["couleur2"],
@@ -3518,7 +3716,7 @@ class AncienFichierDeConfiguration(unittest.TestCase):
                 {"label": "", "type": "none", "valeur": ""},
             ]}},
         }
-        (profils, ordre, titres, couleurs, combos,
+        (profils, ordre, titres, couleurs, couleurs2, combos,
          apps, repli) = store.depuis_json(ancien, 6)
         touches = profils["CIVIL3D"]
 
@@ -3548,7 +3746,7 @@ class AncienFichierDeConfiguration(unittest.TestCase):
                  "court": {"type": "combo", "valeur": "CTRL+B"}},
             ]}},
         }
-        profils, _, _, _, _, _, _ = store.depuis_json(recent, 6)
+        profils, _, _, _, _, _, _, _ = store.depuis_json(recent, 6)
         self.assertEqual(profils["WORD"][0][1]["court"],
                          [("combo", ("CTRL", "B"))])
 

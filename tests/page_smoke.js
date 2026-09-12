@@ -106,9 +106,11 @@ function texte(noeud) {
 }
 function champs(noeud, sortie) {
   sortie = sortie || [];
-  // Le selecteur de couleur est mis a part : il n'a pas de position fixe
-  // dans la liste, et le compter decalerait tous les indices.
-  if (noeud.tag === 'input' && noeud.attrs.type !== 'color') {
+  // Les selecteurs de couleur et les cases a cocher sont mis a part : ils
+  // n'ont pas de position fixe dans la liste, et les compter decalerait
+  // tous les indices - ce qui est arrive en ajoutant la seconde couleur.
+  if (noeud.tag === 'input' && noeud.attrs.type !== 'color'
+      && noeud.attrs.type !== 'checkbox') {
     sortie.push(noeud);
   }
   noeud.children.forEach(function (e) { champs(e, sortie); });
@@ -182,6 +184,8 @@ setTimeout(function () {
     // ---- on change aussi la couleur des LED du profil ---------------
     const cc = couleurs(profs.children[0]);
     if (cc.length) { saisir(cc[0], '#123456'); }
+    // La SECONDE couleur, celle qui alterne avec la premiere.
+    if (cc.length > 1) { saisir(cc[1], '#abcdef'); }
 
     // ---- et dans le deuxieme logiciel de la table -------------------
     const ca = champs(registre.apps);
@@ -250,6 +254,7 @@ setTimeout(function () {
       vu.combos_profil_sans = (p0 && p0.combos) ? p0.combos.length : -1;
       vu.couleurs = cc.length;
       vu.couleur1 = p ? p.couleur : null;
+      vu.alternance = p ? p.couleur2 : null;
       const second = (envoye && envoye.ordre[1])
         ? envoye.profils[envoye.ordre[1]] : null;
       vu.couleur2 = second ? second.couleur : null;

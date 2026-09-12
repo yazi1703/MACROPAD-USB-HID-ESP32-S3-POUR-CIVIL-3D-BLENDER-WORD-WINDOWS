@@ -22,6 +22,8 @@ border-radius:7px;padding:7px 9px;font:13px/1.2 ui-monospace,monospace;
 width:100%}
 input[type=color]{width:42px;flex:0 0 42px;padding:2px;height:33px;
 cursor:pointer}
+input[type=color]:disabled{opacity:.3;cursor:default}
+input.alt{width:auto;flex:0 0 auto;margin:0 0 0 2px;cursor:pointer}
 .val{display:flex;gap:5px;align-items:center}
 .pile{display:flex;flex-direction:column;gap:5px}
 .pile select{flex:0 0 138px}
@@ -482,6 +484,20 @@ function render(){
   var t=inp(p.titre,16,function(v){p.titre=v;});t.className="grow";
   t.title="titre affiche sur l'ecran";head.appendChild(t);
   head.appendChild(col(p.couleur,function(v){p.couleur=v;}));
+  // La SECONDE couleur, celle qui alterne. Une case a cocher la met en
+  // service : sans elle, il n'y aurait aucun moyen de dire "je n'en veux
+  // pas" - un selecteur de couleur rend toujours une couleur.
+  var actif=!!p.couleur2;
+  var boite=el("input",{type:"checkbox"});
+  boite.checked=actif;boite.className="alt";
+  boite.title="faire alterner une seconde couleur";
+  var deux=col(p.couleur2||"#808080",function(v){p.couleur2=v;});
+  deux.title="seconde couleur, elle alterne avec la premiere";
+  if(!actif)deux.disabled=true;
+  boite.onchange=function(){
+   p.couleur2=boite.checked?(deux.value||"#808080"):"";render();};
+  head.appendChild(boite);
+  head.appendChild(deux);
   head.appendChild(el("button",{cls:"d s",onclick:function(){del(nom);}},
    ["Supprimer"]));
   var tb=el("table",{},[el("tr",{},[el("th",{},["#"]),el("th",{},["Geste"]),

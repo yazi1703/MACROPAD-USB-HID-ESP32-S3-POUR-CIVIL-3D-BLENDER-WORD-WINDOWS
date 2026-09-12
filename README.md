@@ -170,7 +170,9 @@ et comment en ajouter : [`docs/11`](docs/11-combinaisons.md).
 
 **Et si tu as des LED RGB** (`docs/10`) : **le pad prend la couleur du
 logiciel où tu travailles**, en respiration douce — bleu dans Civil 3D,
-orange dans Blender. La touche utilisée passe au blanc franc, une panne
+orange dans Blender. Chaque profil peut même porter **deux couleurs qui
+alternent**, la bascule se faisant dans le creux de la respiration pour
+qu'on ne la voie jamais. La touche utilisée passe au blanc franc, une panne
 HID met tout en rouge. Les couleurs se choisissent dans la page de
 configuration, une par profil.
 L'écran affiche les trois colonnes en permanence, et **saute sur la touche
@@ -263,7 +265,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   └── README.md                 comment les charger au démarrage
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             237 tests du firmware, exécutables sur PC
+│   ├── test_logic.py             250 tests du firmware, exécutables sur PC
 │   ├── test_pc.py                30 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
@@ -289,7 +291,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 267 tests ... OK
+→ Ran 280 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport

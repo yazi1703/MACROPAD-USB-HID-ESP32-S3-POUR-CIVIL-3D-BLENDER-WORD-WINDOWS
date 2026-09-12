@@ -107,6 +107,34 @@ def respiration(phase_ms):
     return plancher + (plafond - plancher) * onde ** 1.6
 
 
+def melange(phase_ms):
+    """Part de la SECONDE couleur a un instant du cycle, de 0.0 a 1.0.
+
+    Vaut 0 au sommet d'une respiration et 1 au sommet de la suivante : la
+    couleur bascule donc PENDANT LE CREUX, la ou le pad est le plus
+    sombre. On voit bien deux couleurs, jamais le changement - alors
+    qu'une bascule nette au creux se verrait quand meme, le creux valant
+    tout de meme un quart de la luminosite.
+
+    La courbe est aussi la plus LENTE aux sommets : chaque couleur
+    s'attarde a son maximum, exactement comme une respiration s'attarde
+    en bas. Fonction pure, donc testable sans la moindre LED.
+    """
+    periode = getattr(C, "RGB_RESPIRATION_MS", 4000)
+    # Decalage d'un demi-cycle : l'origine des phases est un creux, et on
+    # veut que le melange soit fixe aux SOMMETS.
+    ecart = (phase_ms - periode / 2.0) % (2.0 * periode)
+    return (1 - cos(pi * ecart / periode)) / 2
+
+
+def melanger(couleur, couleur2, part):
+    """Interpole deux couleurs. part = 0 donne la premiere, 1 la seconde."""
+    if not couleur2:
+        return couleur
+    return tuple(int(a + (b - a) * part)
+                 for a, b in zip(couleur, couleur2))
+
+
 class Rgb:
     """Pilote les LED RGB. Se desactive toute seule en cas de probleme."""
 
@@ -116,6 +144,7 @@ class Rgb:
         self.type = None
         self.nb = 0
         self.base = (0, 0, 0)          # couleur du profil courant
+        self.base2 = None              # sa seconde couleur, ou None
         self._erreur = False           # panne HID : tout passe au rouge
         # Une "energie" par touche : elle monte a chaque appui et redescend
         # toute seule. C'est ce qui fait qu'un appui se voit tout de suite
@@ -173,13 +202,19 @@ class Rgb:
     # ------------------------------------------------------------------
     # Ce que main.py appelle
     # ------------------------------------------------------------------
-    def profil(self, couleur):
+    def profil(self, couleur, couleur2=None):
         """Nouvelle couleur de fond : celle du logiciel qui vient d'etre pris.
 
-        C'est main.py qui choisit la couleur, a partir de la configuration :
-        rgb.py ne connait pas les noms de profils, seulement des couleurs.
+        C'est main.py qui choisit les couleurs, a partir de la
+        configuration : rgb.py ne connait pas les noms de profils,
+        seulement des couleurs.
+
+        couleur2 est facultative. Quand elle est donnee, le pad respire
+        alternativement dans l'une puis dans l'autre ; sinon il garde la
+        premiere, exactement comme avant.
         """
         self.base = tuple(couleur or C.RGB_COULEUR_DEFAUT)
+        self.base2 = tuple(couleur2) if couleur2 else None
         for index in range(len(self.niveaux)):
             self.niveaux[index] = 0.0
         self._a_redessiner = True
@@ -264,7 +299,14 @@ class Rgb:
         if self._eteint:
             self._peindre_tout((0, 0, 0))
             return
-        fond = tuple(C.RGB_COULEUR_ERREUR) if self._erreur else self.base
+        if self._erreur:
+            # Une panne HID efface tout : ni profil, ni alternance. Le
+            # rouge doit etre lisible sans reflechir.
+            fond = tuple(C.RGB_COULEUR_ERREUR)
+        elif self.base2 and getattr(C, "RGB_RESPIRATION", True):
+            fond = melanger(self.base, self.base2, melange(self._phase))
+        else:
+            fond = self.base
         # Le souffle de la respiration, entre son plancher et 1.0. Les
         # impulsions des touches s'AJOUTENT par-dessus : un appui monte
         # donc pareil, que la respiration soit en haut ou en bas de son
