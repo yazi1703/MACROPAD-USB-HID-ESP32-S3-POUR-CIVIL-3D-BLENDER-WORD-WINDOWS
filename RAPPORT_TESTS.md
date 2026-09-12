@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 228 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 234 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 228 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  203 pour le firmware, 25 pour le compagnon Windows.
+- 234 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  204 pour le firmware, 30 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -93,7 +93,7 @@ avait.
 
 **Ajouts V1.** Les six touches et leurs libellés ; la machine à états des trois gestes (appui court immédiat quand aucun double appui n'est défini, appui court retardé quand il y en a un, double appui, deux appuis trop espacés, appui long déclenché au seuil sans deuxième envoi au relâchement, touches indépendantes) ; l'aller-retour complet de la configuration par page web sans perte ; le refus d'une macro intapable et d'un libellé trop long ; le repli sur les valeurs d'usine pour un fichier corrompu ou incohérent ; **la relecture d'un `profils.json` de version 1**, dont la macro devient l'appui court ; le protocole série ligne par ligne, y compris une ligne coupée en deux envois, la lecture bornée par tour de boucle et une configuration trop volumineuse ; l'absence de séquence à deux actions dans les valeurs d'usine (que la page web tronquerait) ; **l'écran, qui ne doit jamais écrire hors des 128×64 pixels** — quatre profils, splash, surlignage de chaque touche, nom de fichier de 48 caractères en défilement, page WiFi.
 
-**Compagnon Windows** (`tests/test_pc.py`, 25 tests). Nettoyage du titre de fenêtre dans ses trois formes (tiret, crochets, chemin complet) ; troncature à ce que l'écran retient ; table de secours à deux ou trois champs, abrégé déduit et coupé à sept caractères, casse, commentaires, relecture à chaud, ligne incomplète ; priorité de la table lue sur la carte, repli sur le fichier quand la carte se tait ou n'annonce aucun logiciel, conservation de la dernière table connue ; le raccourci de démarrage automatique (chemin `shell:startup`, échappement PowerShell des apostrophes sans toucher aux antislash des chemins, script complet, refus propre hors Windows) ; le journal, y compris sans console utilisable.
+**Compagnon Windows** (`tests/test_pc.py`, 30 tests). D'abord la correction 13 : quand la page dit « macropad non connecte », elle doit dire POURQUOI. Les trois causes - aucun port Espressif, port deja pris par Thonny, pyserial absent - donnent trois messages distincts, le debranchement en cours de route est nomme lui aussi, et la raison survit au silence de la console : celle-ci ne se repete pas, mais la page la redemande a chaque rafraichissement. Puis le nettoyage du titre de fenêtre dans ses trois formes (tiret, crochets, chemin complet) ; troncature à ce que l'écran retient ; table de secours à deux ou trois champs, abrégé déduit et coupé à sept caractères, casse, commentaires, relecture à chaud, ligne incomplète ; priorité de la table lue sur la carte, repli sur le fichier quand la carte se tait ou n'annonce aucun logiciel, conservation de la dernière table connue ; le raccourci de démarrage automatique (chemin `shell:startup`, échappement PowerShell des apostrophes sans toucher aux antislash des chemins, script complet, refus propre hors Windows) ; le journal, y compris sans console utilisable.
 
 Les GPIO, l'horloge, le PWM et le transport USB sont simulés. Le test d'absence d'OLED exerce le chemin d'initialisation indisponible ; le test de déconnexion OLED injecte une OSError lors d'une écriture. Le test des octets HID appelle le sérialiseur officiel mais remplace la transmission USB.
 
@@ -370,7 +370,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 228 tests
+Ran 234 tests
 
 OK
 ```

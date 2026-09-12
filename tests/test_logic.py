@@ -2708,6 +2708,28 @@ class PageDeConfigurationIntacte(unittest.TestCase):
                          len(configuration["apps"]["liste"]) + 2)
         self.assertFalse(vu["texte_vide"])
 
+    def test_une_lecture_impossible_explique_quoi_verifier(self):
+        """Cas reel : la page n'affichait qu'une ligne rouge, sans piste.
+
+        charger() sortait avant render() quand l'API renvoyait une erreur,
+        si bien que la carte d'explication - qui dit exactement quoi
+        verifier - etait supprimee PILE au moment ou elle servait. Le
+        conseil existait, personne ne le voyait.
+        """
+        vu = self._construire(
+            {"erreur": "macropad non connecte : aucun port Espressif "
+                       "(VID 0x303A) trouve."})
+
+        # La raison exacte est affichee, pas un message generique.
+        self.assertIn("0x303A", vu["erreur_texte"])
+        # Et surtout, la carte d'explication est la.
+        self.assertEqual(vu["cartes"], 1)
+        self.assertIn("Aucun profil recu", vu["texte_profs"])
+        for piste in ("USB NATIF", "Thonny", "SAFE MODE"):
+            self.assertIn(piste, vu["texte_profs"], piste)
+        # Les deux pastilles de l'en-tete ne restent pas sur "...".
+        self.assertNotIn("...", vu["erreur_src"])
+
     def test_une_saisie_va_bien_sur_la_touche_ou_on_la_tape(self):
         """Le deuxieme bug reel : tout finissait sur la derniere touche.
 

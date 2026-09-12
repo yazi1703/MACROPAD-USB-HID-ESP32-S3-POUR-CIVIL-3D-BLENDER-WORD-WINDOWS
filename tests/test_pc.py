@@ -12,12 +12,110 @@ import os
 import pathlib
 import sys
 import tempfile
+import types
 import unittest
+import unittest.mock
 
 RACINE = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RACINE / "pc"))
 
 import macropad_auto as MA          # noqa: E402
+
+
+class PourquoiLeMacropadEstInjoignable(unittest.TestCase):
+    """La page web doit dire POURQUOI, pas seulement QUE.
+
+    Ne du cas reel : la page affichait "Lecture impossible : macropad non
+    connecte", point. Trois causes tres differentes se cachent derriere -
+    aucun port Espressif, port occupe par Thonny, pyserial absent - et la
+    seule qui soit vraie etait dans la console du compagnon, une fenetre
+    qu'on ne regarde pas quand on est dans le navigateur.
+    """
+
+    def _lien_sans_carte(self):
+        """Un Macropad construit sans toucher au port serie."""
+        import threading
+        lien = MA.Macropad.__new__(MA.Macropad)
+        lien.simuler = False
+        lien.serie = None
+        lien.port_demande = None
+        lien.port = None
+        lien.verrou = threading.Lock()
+        lien.generation = 0
+        lien._absence_signalee = False
+        lien.raison_absence = "pas encore de tentative de connexion"
+        return lien
+
+    @staticmethod
+    def _faux_serial(ouvrir=None):
+        """Un module serial factice : pyserial n'est pas installe ici.
+
+        Sans lui, assurer() s'arreterait a l'import et on ne testerait
+        jamais les branches suivantes.
+        """
+        faux = types.ModuleType("serial")
+        faux.Serial = ouvrir or (lambda *a, **k: None)
+        return faux
+
+    def test_aucun_port_espressif_le_dit(self):
+        lien = self._lien_sans_carte()
+        with unittest.mock.patch.dict(sys.modules,
+                                      {"serial": self._faux_serial()}):
+            with unittest.mock.patch.object(MA.Macropad, "trouver_port",
+                                            staticmethod(lambda: None)):
+                with self.assertRaises(IOError) as capture:
+                    lien.lire_config()
+        message = str(capture.exception)
+        self.assertIn("macropad non connecte", message)
+        self.assertIn("0x303A", message)
+
+    def test_port_occupe_le_dit_avec_le_nom_du_port(self):
+        """Le cas Thonny : le port existe, mais il est pris."""
+        lien = self._lien_sans_carte()
+        def refuser(port, vitesse, timeout=None):
+            raise OSError("Acces refuse")
+        with unittest.mock.patch.dict(
+                sys.modules, {"serial": self._faux_serial(refuser)}):
+            with unittest.mock.patch.object(MA.Macropad, "trouver_port",
+                                            staticmethod(lambda: "COM7")):
+                ok, raison = lien.ecrire_config({})
+        self.assertFalse(ok)
+        self.assertIn("COM7", raison)
+        self.assertIn("Acces refuse", raison)
+
+    def test_pyserial_absent_le_dit(self):
+        lien = self._lien_sans_carte()
+        vrai = sys.modules.pop("serial", None)
+        sys.modules["serial"] = None       # provoque l'ImportError
+        try:
+            with self.assertRaises(IOError) as capture:
+                lien.lire_config()
+        finally:
+            if vrai is not None:
+                sys.modules["serial"] = vrai
+            else:
+                sys.modules.pop("serial", None)
+        self.assertIn("pyserial", str(capture.exception))
+
+    def test_la_raison_survit_au_silence_de_la_console(self):
+        """La console ne se repete pas ; la page, elle, redemande a chaque fois."""
+        lien = self._lien_sans_carte()
+        with unittest.mock.patch.dict(sys.modules,
+                                      {"serial": self._faux_serial()}):
+            with unittest.mock.patch.object(MA.Macropad, "trouver_port",
+                                            staticmethod(lambda: None)):
+                for _ in range(3):
+                    lien.assurer()
+        # _signaler_absence n'a imprime qu'une fois, mais la raison est
+        # toujours disponible pour la page.
+        self.assertTrue(lien._absence_signalee)
+        self.assertIn("0x303A", lien._sans_carte())
+
+    def test_un_debranchement_en_cours_de_route_est_nomme(self):
+        lien = self._lien_sans_carte()
+        lien._perdu(OSError("device disconnected"))
+        self.assertIn("debranche", lien._sans_carte())
+        self.assertIn("device disconnected", lien._sans_carte())
 
 
 class NomDeDocument(unittest.TestCase):

@@ -251,8 +251,13 @@ function vide(){
    "n'est relie a aucune carte."]));
   c.appendChild(el("p",{},["Relance-le sans --simuler, macropad branche."]));
  }else{
-  c.appendChild(el("p",{},["Verifie qu'il est branche sur son port USB "+
-   "NATIF, et que Thonny n'occupe pas ce port."]));
+  c.appendChild(el("p",{},["1. Le macropad est-il branche sur son port "+
+   "USB NATIF (celui marque USB, pas COM/UART) ?"]));
+  c.appendChild(el("p",{},["2. Thonny est-il connecte a ce port ? Il le "+
+   "garde pour lui : clique sur STOP, ou ferme Thonny."]));
+  c.appendChild(el("p",{},["3. Le firmware tourne-t-il normalement ? En "+
+   "SAFE MODE (B1 au RESET) et en MODE CONFIG (B2 au RESET), la liaison "+
+   "serie n'existe pas."]));
   c.appendChild(el("p",{},["La console du compagnon dit ce qu'elle voit ; "+
    "avec --journal, tout est dans macropad_auto.log."]));
  }
@@ -496,7 +501,19 @@ function normaliser(d){
 
 function charger(){fetch("/api/profils").then(function(r){return r.json();})
  .then(function(d){
-  if(d.erreur)return say("Lecture impossible : "+d.erreur,0);
+  // La lecture a echoue. On affiche la raison ET la carte d'explication :
+  // avant, on sortait ici, si bien que la seule chose visible etait une
+  // ligne rouge sans la moindre piste - alors que vide() dit exactement
+  // quoi verifier. Le conseil existait, il etait juste supprime pile au
+  // moment ou il servait.
+  if(d.erreur){
+   say("Lecture impossible : "+d.erreur,0);
+   document.getElementById("src").textContent="source : aucune";
+   document.getElementById("cnt").textContent="macropad injoignable";
+   D={ordre:[],profils:{},apps:{repli:{profil:"WINDOWS",abrege:"Win"},
+    liste:[]}};
+   render();
+   return;}
   D=normaliser(d);N=d.touches||6;
   if(!D.apps)D.apps={repli:{profil:"WINDOWS",abrege:"Win"},liste:[]};
   document.getElementById("src").textContent="source : "+(d.origine||"?");

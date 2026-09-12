@@ -402,6 +402,66 @@ Enregistrer, puis inspecte **ce qui part réellement** vers le macropad :
 Exécuté contre la version d'avant, ce test échoue : il rapporte `MOVE` pour
 la touche 1, et `ZZZ` sur la touche 6. Le bug est donc bien attrapé.
 
+## Correction 13 — « Lecture impossible », et pas un mot de plus (trouvée à l'usage)
+
+**Le symptôme.** La page de configuration s'ouvre, tout le texte
+d'explication est là, les boutons répondent… et sous eux, une ligne rouge :
+
+```
+Lecture impossible : macropad non connecte
+```
+
+Rien d'autre. Pas de profil, deux pastilles restées sur `...` dans
+l'en-tête, et aucune piste sur ce qu'il faut faire.
+
+**Les deux causes, et la seconde est la pire.**
+
+**1. Le message ne disait pas laquelle des causes c'était.** Trois
+situations très différentes finissaient sur la même phrase :
+
+| Ce qui se passe vraiment | Ce qu'il faut faire |
+|---|---|
+| aucun port Espressif (VID 0x303A) | brancher le port USB **natif**, pas le port UART |
+| le port existe mais il est **occupé** | déconnecter Thonny (bouton STOP) |
+| pyserial n'est pas installé | `py -m pip install pyserial` |
+
+Le compagnon connaissait la bonne réponse : `_signaler_absence()` la
+calcule et l'imprime. Mais il l'imprime **dans sa console**, une fenêtre
+qu'on ne regarde pas quand on a le navigateur devant soi. La page, elle,
+recevait un `IOError("macropad non connecte")` sans détail.
+
+**2. Le conseil existait, et il était supprimé pile au moment où il
+servait.** La page a une carte d'explication, `vide()`, qui dit exactement
+quoi vérifier. Elle n'apparaissait jamais dans ce cas, à cause d'un `return`
+placé une ligne trop tôt :
+
+```js
+if (d.erreur) return say("Lecture impossible : " + d.erreur, 0);
+//            ^^^^^^ on sort AVANT render(), donc vide() n'est jamais dessinée
+```
+
+**La correction.**
+
+* `Macropad` mémorise la **raison** de l'absence (`raison_absence`) et la
+  renvoie à la page : `macropad non connecte : Port COM7 indisponible
+  (PermissionError(13, 'Acces refuse'))`. La console ne se répète pas, mais
+  la page redemande à chaque rafraîchissement — la raison devait donc
+  survivre au silence de la console.
+* Un débranchement en cours de route est nommé lui aussi, au lieu de
+  retomber sur le message générique.
+* `charger()` affiche la raison **puis appelle `render()`** : la carte
+  d'explication réapparaît, avec les trois pistes à vérifier dans l'ordre,
+  dont une qui manquait — le SAFE MODE et le MODE CONFIG n'ouvrent aucune
+  liaison série.
+
+**Les tests.** Cinq dans `tests/test_pc.py`, un par cause plus le
+débranchement et la survie de la raison au silence de la console ; un dans
+`tests/test_logic.py`, qui donne une erreur à la page hors navigateur et
+exige d'y retrouver la raison **et** les trois pistes. Retirer le `render()`
+fait échouer ce dernier.
+
+---
+
 ## Ce qui n'a PAS été touché
 
 - La structure `device/` et les quatre fichiers USB officiels recopiés :

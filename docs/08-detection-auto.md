@@ -325,8 +325,11 @@ le firmware normalement**, tu ne perds pas cette porte de sortie.
 
 | Symptôme | Cause probable |
 |---|---|
-| `Aucun port Espressif trouve` | le port **natif** n'est pas branché, ou Thonny le tient |
-| `could not open port` | Thonny est connecté au port natif — bascule-le sur le port UART |
+| `macropad non connecte : … aucun port Espressif (VID 0x303A)` | le port **natif** n'est pas branché — c'est le port marqué USB, pas COM/UART |
+| `macropad non connecte : Port COMx indisponible (Acces refuse)` | quelque chose tient déjà ce port : Thonny le plus souvent. Bouton STOP, ou bascule Thonny sur le port UART |
+| `macropad non connecte : pyserial n'est pas installe` | `py -m pip install pyserial` |
+| `macropad non connecte : cable debranche ou carte redemarree` | la carte a redémarré (RESET, ou téléversement). Elle est reprise toute seule dès son retour |
+| La page se charge mais ne montre aucun profil | la carte d'explication sous « PROFILS ET MACROS » liste les trois points à vérifier, dans l'ordre |
 | Le profil ne change pas | vérifie le nom de l'exécutable dans la table (Gestionnaire des tâches → Détails), et regarde quelle source la console annonce au démarrage |
 | Un logiciel ajouté dans `macropad_apps.txt` est ignoré | la carte a une table non vide : c'est elle qui décide. Ajoute le logiciel dans la page de configuration |
 | L'abrégé est tronqué | c'est normal au-delà de 7 caractères : c'est la place disponible sur l'écran |

@@ -146,6 +146,9 @@ setTimeout(function () {
   const nbTouches = donnees.touches || 6;
 
   const vu = {
+    erreur_texte: texte(registre.msg),
+    texte_profs: texte(profs),
+    erreur_src: registre.src.textContent,
     cartes: profs.children.length,
     lignes: compter(profs, 'tr'),
     listes: compter(profs, 'select'),
