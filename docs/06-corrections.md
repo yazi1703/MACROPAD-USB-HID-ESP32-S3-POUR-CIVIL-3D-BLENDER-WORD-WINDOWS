@@ -533,6 +533,23 @@ divergerait donnerait un pad au comportement différent selon l'âge du
 fichier, le pire des pièges. Remettre la lecture directe fait échouer le
 premier ; changer un repli fait échouer le second.
 
+**Le filet qui manquait.** Au-delà de ce cas précis, `main.py` attrape
+désormais toute panne de démarrage et l'**affiche** — sur l'écran OLED et
+dans le REPL — au lieu de laisser un macropad entièrement muet :
+
+```
+┌────────────────┐
+│PANNE DEMARRAGE │
+│                │
+│AttributeError  │
+│module 'config' │
+│has no attribut │
+│diag.controle() │
+└────────────────┘
+```
+
+Un écran absent n'aggrave rien : l'erreur d'origine remonte intacte.
+
 > **La leçon, pour la suite :** toute constante ajoutée à `config.py` doit
 > être lue par `reglage()` et inscrite dans `REGLAGES_NEUFS` (`main.py`) et
 > `REGLAGES_ATTENDUS` (`diag.py`). Sans ça, la prochaine mise à jour

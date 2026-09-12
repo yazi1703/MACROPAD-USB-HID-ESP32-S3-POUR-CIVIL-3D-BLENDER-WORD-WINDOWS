@@ -263,7 +263,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   └── README.md                 comment les charger au démarrage
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             213 tests du firmware, exécutables sur PC
+│   ├── test_logic.py             216 tests du firmware, exécutables sur PC
 │   ├── test_pc.py                30 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
@@ -289,7 +289,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 243 tests ... OK
+→ Ran 246 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport

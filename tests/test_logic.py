@@ -1939,6 +1939,76 @@ class ControleGeneral(unittest.TestCase):
         # Il a demarre, ET il a dit ce qui manquait plutot que de se taire.
         self.assertIn("GESTE_COMBO_MS", main._manquants)
 
+    def test_une_panne_de_demarrage_est_affichee_pas_avalee(self):
+        """Un firmware qui plante ne doit pas donner un pad muet.
+
+        Sans filet : ecran fige, LED eteintes, aucune touche, et le
+        compagnon qui dit "macropad non connecte". Trois symptomes, zero
+        indice. L'ecran doit nommer le coupable.
+        """
+        import main
+        affiche = []
+
+        class EcranEspion:
+            def __init__(self):
+                affiche.append(self)
+                self.lignes = []
+
+            def message(self, *lignes):
+                self.lignes = [str(l) for l in lignes]
+
+            def flush_startup(self):
+                pass
+
+        def exploser():
+            raise ValueError("config.py incomplet")
+
+        sortie = io.StringIO()
+        with patch.object(main, 'run', exploser), \
+             patch('display.Display', EcranEspion), \
+             patch('sys.stdout', sortie):
+            with self.assertRaises(ValueError):
+                main.demarrer()
+
+        texte = sortie.getvalue()
+        self.assertIn("N'A PAS PU DEMARRER", texte)
+        self.assertIn("diag.controle()", texte)
+        # Et l'ecran, lui aussi, dit quelque chose.
+        self.assertTrue(affiche, "aucun ecran n'a ete sollicite")
+        lignes = " ".join(affiche[0].lignes)
+        self.assertIn("PANNE", lignes)
+        self.assertIn("config.py", lignes)
+        self.assertIn("diag.controle()", lignes)
+
+    def test_un_ecran_absent_n_aggrave_pas_la_panne(self):
+        """Le filet ne doit jamais masquer l'erreur d'origine."""
+        import main
+
+        def exploser():
+            raise ValueError("la vraie cause")
+
+        def pas_d_ecran(*a, **kw):
+            raise OSError("pas d'ecran")
+
+        with patch.object(main, 'run', exploser), \
+             patch('display.Display', pas_d_ecran), \
+             patch('sys.stdout', io.StringIO()):
+            with self.assertRaises(ValueError) as capture:
+                main.demarrer()
+        self.assertIn("la vraie cause", str(capture.exception))
+
+    def test_un_ctrl_c_n_est_pas_une_panne(self):
+        import main
+
+        def arreter():
+            raise KeyboardInterrupt()
+
+        sortie = io.StringIO()
+        with patch.object(main, 'run', arreter), patch('sys.stdout', sortie):
+            with self.assertRaises(KeyboardInterrupt):
+                main.demarrer()
+        self.assertNotIn("N'A PAS PU DEMARRER", sortie.getvalue())
+
     def test_le_repli_vaut_la_valeur_du_depot(self):
         """Un repli qui differerait du depot ferait un pad au comportement
         different selon l'age du config.py : piege absolu."""

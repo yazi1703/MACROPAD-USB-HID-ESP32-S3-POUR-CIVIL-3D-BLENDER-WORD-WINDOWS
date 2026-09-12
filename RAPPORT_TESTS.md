@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 243 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 246 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 243 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  213 pour le firmware, 30 pour le compagnon Windows.
+- 246 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  216 pour le firmware, 30 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -42,7 +42,7 @@ La reaction a l'appui a ses propres tests, nes d'une latence constatee sur le ma
 
 Enfin, deux tests font tourner main.run() en entier avec RGB_ENABLED a True et un faux ruban horodate. Le second reproduit la latence d'origine : il appuie sur la touche 1, celle qui a un double appui et dont la macro ne part donc qu'apres GESTE_DOUBLE_MS, et exige que la LED ait deja reagi dans les 60 premieres millisecondes. Il echoue sur la version precedente : rien ne sert de savoir que rgb.py fonctionne seul si l'activer fait tomber la boucle principale. Il verifie que le ruban est rafraichi tout au long de la boucle, qu'il change de couleur au changement de profil, et qu'il est ETEINT a l'arret.
 
-**Le controle general** (`ControleGeneral`, 9 tests). Nes de la
+**Le controle general** (`ControleGeneral`, 12 tests). Trois d'entre eux gardent le filet de demarrage : un firmware qui plante doit AFFICHER la cause - sur l'ecran et dans le REPL - au lieu de laisser un pad muet ; un ecran absent ne doit pas masquer l'erreur d'origine ; et un Ctrl-C n'est pas une panne. Nes de la
 correction 14, ou une seule constante manquante dans un config.py conserve
 faisait planter main.py au demarrage - donc pas de clavier, pas de LED et
 pas de liaison PC, trois symptomes pour une cause. Deux tests ferment cette
@@ -382,7 +382,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 243 tests
+Ran 246 tests
 
 OK
 ```

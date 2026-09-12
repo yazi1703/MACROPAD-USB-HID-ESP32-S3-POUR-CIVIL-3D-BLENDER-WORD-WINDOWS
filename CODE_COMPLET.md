@@ -840,7 +840,7 @@ else:
 
 ## device/main.py
 
-`514 lignes - sha256 2f21fc8e6224e22c`
+`554 lignes - sha256 12bff3c28efb2d84`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1355,8 +1355,48 @@ def run():
         stats.enregistrer()
 
 
+def demarrer():
+    """Lance run(), et AFFICHE l'erreur au lieu de mourir en silence.
+
+    Sans ce filet, un firmware qui plante au demarrage donne un macropad
+    entierement muet : ecran fige, LED eteintes, aucune touche, et le
+    compagnon PC qui repond "macropad non connecte". Trois symptomes, zero
+    indice - sauf a avoir Thonny ouvert au bon moment pour lire la trace.
+
+    C'est exactement ce qui est arrive quand une constante ajoutee a
+    config.py manquait (voir docs/06, correction 14). Desormais l'ecran
+    nomme le coupable, et le REPL donne la trace complete.
+    """
+    try:
+        run()
+    except KeyboardInterrupt:
+        raise
+    except Exception as exc:
+        print("=" * 46)
+        print("LE MACROPAD N'A PAS PU DEMARRER")
+        print("=" * 46)
+        try:
+            import sys
+            sys.print_exception(exc)
+        except Exception:
+            print(repr(exc))
+        print("-" * 46)
+        print("Diagnostic : import diag  puis  diag.controle()")
+        print("-" * 46)
+        try:
+            from display import Display
+            ecran = Display()
+            ecran.message("PANNE DEMARRAGE", "",
+                          type(exc).__name__[:16], str(exc)[:16],
+                          str(exc)[16:32], "diag.controle()")
+            ecran.flush_startup()
+        except Exception:
+            pass                   # un ecran absent ne doit rien aggraver
+        raise
+
+
 if __name__ == "__main__":
-    run()
+    demarrer()
 ```
 
 ---
