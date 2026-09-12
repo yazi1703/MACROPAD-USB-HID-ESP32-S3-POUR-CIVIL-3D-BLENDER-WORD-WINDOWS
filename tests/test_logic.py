@@ -2695,6 +2695,73 @@ class LedsRgb(unittest.TestCase):
         # allumees apres un diagnostic.
         self.assertEqual(vues[-1], [(0, 0, 0)] * 4)
 
+    def test_diag_rgb_pin_n_essaie_que_des_broches_libres(self):
+        """Le balayage ne doit pas ecraser l'ecran ni la flash.
+
+        Il pilote des GPIO en SORTIE : taper sur le SDA de l'ecran ou sur
+        l'horloge de la flash pendant qu'on cherche un fil, ce serait
+        transformer un diagnostic en panne.
+        """
+        import diag
+        vues = []
+        module = sys.modules['neopixel']
+        original = module.NeoPixel.__init__
+
+        def espion(self, broche, nb):
+            vues.append(broche.n if hasattr(broche, "n") else broche)
+            original(self, broche, nb)
+        module.NeoPixel.__init__ = espion
+        try:
+            diag.rgb_pin(secondes=0, luminosite=5)
+        finally:
+            module.NeoPixel.__init__ = original
+
+        self.assertTrue(vues, "aucune broche essayee")
+        # La broche configuree passe en premier : c'est la plus probable.
+        self.assertEqual(vues[0], C.RGB_PIN)
+        prises = diag.broches_deja_prises()
+        for numero in vues:
+            self.assertEqual(diag.verifier_broche(numero)[0], "libre",
+                             "GPIO%d n'est pas libre" % numero)
+            role = prises.get(numero)
+            self.assertIn(role, (None, "donnees des LED RGB"),
+                          "GPIO%d sert deja a : %s" % (numero, role))
+
+    def test_diag_rgb_saute_decale_bien_le_ruban(self):
+        """Une premiere LED grillee ne transmet plus rien a ses voisines.
+
+        On pilote alors le ruban comme s'il en avait une de plus, et on
+        envoie du noir aux mortes. Le test verifie que la LED allumee est
+        bien DECALEE, et qu'aucune des ignorees ne s'allume jamais.
+        """
+        import diag
+        vues = []
+        module = sys.modules['neopixel']
+        original = module.NeoPixel.write
+
+        def espion(self):
+            vues.append(list(self.pixels))
+            original(self)
+        module.NeoPixel.write = espion
+        try:
+            diag.rgb_saute(2, nb=4, broche=16, luminosite=9)
+        finally:
+            module.NeoPixel.write = original
+
+        # Le ruban est pilote avec 2 + 4 LED.
+        self.assertTrue(all(len(image) == 6 for image in vues), vues)
+        # Les deux ignorees restent NOIRES a chaque envoi, sans exception.
+        for image in vues:
+            self.assertEqual(image[0], (0, 0, 0))
+            self.assertEqual(image[1], (0, 0, 0))
+        # Et chacune des quatre autres a bien ete allumee, seule.
+        for index in range(4):
+            attendu = [(0, 0, 0)] * 6
+            attendu[2 + index] = (9, 9, 9)
+            self.assertIn(attendu, vues, "LED %d non testee" % (index + 1))
+        # Tout est eteint en partant.
+        self.assertEqual(vues[-1], [(0, 0, 0)] * 6)
+
     def test_diag_rgb_respecte_l_ordre_des_octets(self):
         # Quand il annonce ROUGE, c'est bien l'octet rouge qui est mis a
         # l'endroit ou la puce l'attend - sinon le test induirait en

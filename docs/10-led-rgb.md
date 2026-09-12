@@ -28,6 +28,57 @@ touches. Impossible ici.
 
 ---
 
+## 10.1 bis Le ruban ne répond à rien — la panne la plus fréquente
+
+**Le symptôme typique :** la **première LED reste allumée** dès la mise
+sous tension, d'une couleur fixe, et **aucune** ne réagit au code. Les
+boucles de test défilent dans la console, le ruban ne bouge pas.
+
+Ce n'est presque jamais le code. Dans une chaîne WS2812, **chaque LED
+régénère le signal pour la suivante** : si la première ne décode rien,
+tout le ruban est mort derrière elle. Les causes, par ordre de fréquence :
+
+| Cause | Comment la reconnaître | Le test |
+|---|---|---|
+| **Le fil n'est pas sur la broche qu'on croit** | rien ne bouge, quelle que soit la couleur envoyée | `diag.rgb_pin()` balaie les broches plausibles |
+| **Le fil entre par DOUT au lieu de DIN** | idem. Regarde les **flèches** imprimées sur le ruban | inverse les deux extrémités du ruban |
+| **La première puce est grillée** | elle reste allumée, fixe, et bloque tout le reste | `diag.rgb_saute(1)` |
+| **GND non commun** | comportement erratique, ou rien | relie le GND du ruban à celui de la carte |
+| **Niveau logique 3,3 V sur un ruban en 5 V** | marche par intermittence, ou pas du tout | alimente le ruban en **3,3 V** pour vérifier, ou ajoute un level-shifter |
+
+> ### ⚠️ Ce qui tue la première LED
+>
+> **Alimenter un ruban WS2812 dont le GND n'est PAS relié** force le
+> courant de retour à passer par le **fil de données**. Ce fil n'est pas
+> fait pour ça : la première puce le prend en pleine figure, et le GPIO de
+> l'ESP32 en amont morfle aussi.
+>
+> Si tu as branché le +5 V avant le GND, ne cherche pas plus loin :
+> teste `diag.rgb_saute(1)`. Si le ruban se réveille à partir de la
+> deuxième LED, tu as ta réponse.
+>
+> **L'ordre de branchement est toujours le même : GND d'abord, données
+> ensuite, +5 V en dernier.** Au débranchement, l'inverse.
+
+### Le niveau logique, le piège discret
+
+La fiche technique du WS2812B demande un « 1 » logique à **0,7 × VDD**.
+Alimenté en 5 V, cela fait **3,5 V**. Or un GPIO d'ESP32 sort **3,3 V** au
+maximum : on est **en dessous du seuil**.
+
+En pratique ça marche sur beaucoup de rubans — mais pas sur tous, et
+jamais de façon garantie. Si le tien est capricieux, deux solutions
+simples avant d'acheter un level-shifter :
+
+* **alimente le ruban en 3,3 V** au lieu de 5 V : le seuil descend à
+  2,31 V et le GPIO le franchit largement. Les LED sont moins lumineuses,
+  ce qui n'est pas gênant ici — on travaille déjà à 40/255 ;
+* **sacrifie la première LED** : câble-la en 5 V comme les autres mais
+  utilise-la uniquement comme **répéteur de niveau**, et fais commencer
+  ton éclairage à la deuxième (`diag.rgb_saute(1)`).
+
+---
+
 ## 10.2 Le vrai danger : le courant
 
 Une WS2812 en **blanc à fond** tire **60 mA**. Six touches :

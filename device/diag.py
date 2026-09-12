@@ -30,6 +30,8 @@ Test par test :
     diag.keymap()               # vérifie l'AZERTY, sans matériel
     diag.keymap("_ISOLATEOBJECTS")
     diag.rgb()                  # câblage des LED RGB, une par une
+    diag.rgb_pin()              # sur QUELLE broche le fil est-il soudé ?
+    diag.rgb_saute(1)           # ignorer une première LED grillée
 
 Pour arrêter avant la fin : Ctrl-C, ou le bouton STOP de Thonny.
 """
@@ -465,6 +467,139 @@ def rgb(nb=None, broche=None, luminosite=12):
             tout((0, 0, 0))
         except Exception:
             pass
+
+
+def rgb_pin(broches=None, nb=None, luminosite=12, secondes=3):
+    """Sur QUELLE broche le fil de donnees est-il vraiment soude ?
+
+    Le ruban ne repond a rien et tu ne sais plus sur quelle broche il est
+    cable : cette fonction balaie les broches candidates une par une, en
+    annoncant chacune et en allumant TOUT le ruban en blanc pendant
+    quelques secondes.
+
+    Tu regardes le RUBAN, pas l'ecran : la broche annoncee au moment ou il
+    s'allume est la bonne. Note-la dans RGB_PIN.
+
+        diag.rgb_pin()              # les broches plausibles
+        diag.rgb_pin([16, 17])      # seulement celles-la
+
+    Ne balaie QUE des broches libres : celles qui portent deja les
+    touches, l'ecran ou le bouton ESC sont ecartees, et les broches
+    reservees par la flash, la PSRAM ou l'USB ne sont jamais touchees.
+    """
+    from machine import Pin
+    try:
+        from neopixel import NeoPixel
+    except ImportError:
+        print("neopixel absent de ce firmware MicroPython.")
+        return False
+
+    if nb is None:
+        nb = getattr(C, "RGB_COUNT", 6)
+    if broches is None:
+        # La broche configuree d'abord, puis ses voisines habituelles.
+        candidates = [getattr(C, "RGB_PIN", 16), 16, 17, 18, 21, 47, 48]
+        prises = broches_deja_prises()
+        role_rgb = "donnees des LED RGB"
+        broches = []
+        for numero in candidates:
+            if numero in broches:
+                continue
+            if verifier_broche(numero)[0] != "libre":
+                continue
+            if prises.get(numero, role_rgb) != role_rgb:
+                continue          # cette broche sert deja a autre chose
+            broches.append(numero)
+
+    print("-" * 46)
+    print("RECHERCHE DE LA BROCHE DES LED")
+    print("-" * 46)
+    print("REGARDE LE RUBAN, pas l'ecran.")
+    print("Il s'allume en blanc quand on tombe sur la bonne broche.")
+    print("%d broche(s) a essayer, %d s chacune." % (len(broches), secondes))
+    print("-" * 46)
+    try:
+        for numero in broches:
+            print("  -> GPIO%d" % numero)
+            bande = NeoPixel(Pin(numero, Pin.OUT), nb)
+            for index in range(nb):
+                bande[index] = (luminosite, luminosite, luminosite)
+            bande.write()
+            sleep_ms(int(secondes * 1000))
+            for index in range(nb):
+                bande[index] = (0, 0, 0)
+            bande.write()
+            sleep_ms(300)
+    except KeyboardInterrupt:
+        print("Arret demande.")
+    print("-" * 46)
+    print("Le ruban s'est allume sur une broche ? Mets-la dans RGB_PIN.")
+    print("Sur aucune ? Le probleme n'est alors pas la broche :")
+    print("  - le fil de donnees entre-t-il bien par DIN (sens des fleches) ?")
+    print("  - la premiere LED est-elle grillee ? essaie diag.rgb_saute(1)")
+    print("  - le GND du ruban et celui de la carte sont-ils relies ?")
+    print("-" * 46)
+    return True
+
+
+def rgb_saute(combien=1, nb=None, broche=None, luminosite=12):
+    """Teste le ruban en IGNORANT ses premieres LED.
+
+    Une WS2812 grillee ne transmet plus rien a ses voisines : tout le
+    ruban parait mort alors qu'une seule puce l'est. On envoie donc du
+    noir aux premieres, et de vraies couleurs ensuite.
+
+        diag.rgb_saute(1)      # la premiere LED est morte
+
+    Si le ruban se reveille a partir de la suivante, tu as ta reponse.
+
+    ATTENTION A CE QUI L'A TUEE : alimenter un ruban WS2812 dont le GND
+    n'est PAS relie force le courant de retour a passer par le fil de
+    donnees. C'est le meilleur moyen de griller la premiere puce, et
+    d'abimer le GPIO au passage.
+    """
+    from machine import Pin
+    try:
+        from neopixel import NeoPixel
+    except ImportError:
+        print("neopixel absent de ce firmware MicroPython.")
+        return False
+
+    if nb is None:
+        nb = getattr(C, "RGB_COUNT", 6)
+    if broche is None:
+        broche = getattr(C, "RGB_PIN", 16)
+    total = nb + combien
+    print("-" * 46)
+    print("TEST EN IGNORANT %d LED, sur GPIO%d" % (combien, broche))
+    print("Le ruban est pilote comme s'il avait %d LED : les %d premieres"
+          % (total, combien))
+    print("recoivent du noir, les %d suivantes s'allument une par une." % nb)
+    print("-" * 46)
+    bande = NeoPixel(Pin(broche, Pin.OUT), total)
+    try:
+        for index in range(nb):
+            for rang in range(total):
+                bande[rang] = (0, 0, 0)
+            bande[combien + index] = (luminosite, luminosite, luminosite)
+            bande.write()
+            print("   LED %d (la %d-eme du ruban)"
+                  % (index + 1, combien + index + 1))
+            sleep_ms(500)
+    except KeyboardInterrupt:
+        print("Arret demande.")
+    finally:
+        try:
+            for rang in range(total):
+                bande[rang] = (0, 0, 0)
+            bande.write()
+        except Exception:
+            pass
+    print("-" * 46)
+    print("Elles repondent ? Les %d premieres puces sont mortes." % combien)
+    print("Recable DIN sur la LED suivante, ou garde ce decalage.")
+    print("-" * 46)
+    return True
 
 
 def run(seconds=20, led_test=False):

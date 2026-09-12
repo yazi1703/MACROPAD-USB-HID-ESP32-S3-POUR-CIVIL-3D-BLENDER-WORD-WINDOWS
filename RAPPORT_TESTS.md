@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 246 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 248 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 246 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  216 pour le firmware, 30 pour le compagnon Windows.
+- 248 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  218 pour le firmware, 30 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -36,7 +36,7 @@ Ces tests sont nes du bug de la correction 11 : un antislash mal interprete cass
 
 La respiration est verifiee comme une fonction pure - douce aux deux extremites, jamais sous son plancher, periodique - puis sur le rendu : la couleur varie bien dans le temps, la TEINTE ne bouge pas (c'est la luminosite qui respire), la touche surlignee ne respire pas, et un tour de boucle anormalement long ne fait pas sauter la couleur a l'autre bout du cycle. Les couleurs elles-memes voyagent avec la configuration : conversion dans les deux sens, couleur illisible qui retombe sur celle d'usine sans faire perdre les macros, aller-retour par la page web, et ancien profils.json sans couleur qui reprend les valeurs d'usine.
 
-Le diagnostic de cablage `diag.rgb()`, qu'on lance dans le REPL avant meme d'activer les LED, est teste lui aussi : il allume bien chaque LED seule et dans l'ordre - c'est ce qui permet de COMPTER celles qui repondent -, il place l'octet rouge la ou la puce l'attend quand il annonce ROUGE (sinon il induirait en erreur celui qui regle justement RGB_ORDRE), il eteint tout en partant meme interrompu par Ctrl-C, et il se contente d'un message si le firmware n'embarque pas neopixel.
+Deux outils de depannage s'y ajoutent, nes d'un ruban qui ne repondait a rien : `diag.rgb_pin()` balaie les broches plausibles pour retrouver celle ou le fil est soude - le test verifie qu'il n'essaie QUE des broches libres, car piloter en sortie le SDA de l'ecran ou l'horloge de la flash transformerait un diagnostic en panne - et `diag.rgb_saute(n)` pilote le ruban comme s'il avait n LED de plus, pour contourner une premiere puce grillee : le test verifie que les LED ignorees restent noires a CHAQUE envoi et que l'allumage est bien decale. Le diagnostic de cablage `diag.rgb()`, qu'on lance dans le REPL avant meme d'activer les LED, est teste lui aussi : il allume bien chaque LED seule et dans l'ordre - c'est ce qui permet de COMPTER celles qui repondent -, il place l'octet rouge la ou la puce l'attend quand il annonce ROUGE (sinon il induirait en erreur celui qui regle justement RGB_ORDRE), il eteint tout en partant meme interrompu par Ctrl-C, et il se contente d'un message si le firmware n'embarque pas neopixel.
 
 La reaction a l'appui a ses propres tests, nes d'une latence constatee sur le materiel : la LED s'intensifie des le premier tour de boucle et seulement la sienne, deux appuis coup sur coup montent plus haut qu'un seul, la retombee passe par plus de cinq paliers sans jamais remonter et finit exactement sur la couleur du profil, l'empilement est plafonne, et - le test qui compte - vingt appuis empiles sur du blanc ne franchissent pas le plafond de courant. Un dernier verifie que l'impulsion s'AJOUTE a la respiration : le gain est le meme en haut et en bas du cycle.
 
@@ -382,7 +382,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 246 tests
+Ran 248 tests
 
 OK
 ```
