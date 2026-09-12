@@ -78,6 +78,9 @@ cursor:pointer}
 .pile .add{align-self:flex-start;padding:4px 9px;font-size:11px}
 .cap{flex:0 0 30px;padding:6px 0;font-size:14px;line-height:1}
 .cap.on{background:#3d7bfd;color:#fff}
+.rec{color:#f0a6b6}
+.rec.on{background:#6d2233;color:#fff}
+#msg.rec{background:#33131d;border:1px solid #7d2a3c;color:#f0a6b6}
 input:focus,select:focus{outline:0;border-color:#3d7bfd}
 table{width:100%;border-collapse:collapse}
 td,th{padding:3px 5px 3px 0;vertical-align:middle}
@@ -239,6 +242,106 @@ function capture(champ,cb){
   if(champ.focus)champ.focus();};
  return b;}
 
+// =====================================================================
+// L'ENREGISTREUR DE SEQUENCE
+// =====================================================================
+// Tu cliques sur Enregistrer, tu tapes ta sequence au clavier, et la page
+// la transforme en etapes. Beaucoup plus rapide que de choisir un type et
+// une valeur pour chaque frappe - et surtout, ca capture les PAUSES
+// REELLES, celles qu'on ne pense jamais a mesurer soi-meme.
+//
+// Trois regles, et elles suffisent a couvrir presque tout :
+//
+//   1. les caracteres ordinaires s'ACCUMULENT : "_PLINE" fait UNE etape
+//      de type texte, pas six etapes de type touche ;
+//   2. Entree juste apres du texte transforme l'etape en "texte + Entree",
+//      exactement l'idiome des commandes AutoCAD ;
+//   3. tout ce qui porte Ctrl, Alt ou Win, et toute touche speciale,
+//      ferme le texte en cours et devient sa propre etape.
+var REC = null;          // {k:objet, g:geste, texte:"", t:instant}
+var REC_PAUSE_MIN = 400; // en dessous, on ne note pas de pause
+var REC_PAUSE_MAX = 5000;// PAUSE_MAX_MS du firmware
+
+// etapes() recree un emplacement vide des que la liste l'est - c'est ce
+// qui affiche une ligne prete a remplir. Pendant un enregistrement, cet
+// emplacement deviendrait une etape "inactive" en tete de sequence : on
+// le retire a la premiere vraie frappe.
+function recListe(){
+ var liste=REC.k[REC.g];
+ while(liste.length&&liste[0].type=="none"&&!liste[0].valeur)liste.shift();
+ return liste;}
+
+function recVider(){
+ if(REC&&REC.texte){
+  recListe().push({type:"text",valeur:REC.texte});
+  REC.texte="";}}
+
+function recPause(maintenant){
+ if(!REC.t)return;
+ var ecart=maintenant-REC.t;
+ if(ecart<REC_PAUSE_MIN)return;
+ if(!recListe().length&&!REC.texte)return;    // rien avant : pas de pause
+ recVider();
+ var ms=Math.round(ecart/50)*50;
+ if(ms>REC_PAUSE_MAX)ms=REC_PAUSE_MAX;
+ recListe().push({type:"pause",valeur:String(ms)});}
+
+function recTouche(ev){
+ if(!REC)return true;
+ if(MODIFS[ev.code])return true;          // Ctrl seul : on attend la suite
+ if(ev.preventDefault)ev.preventDefault();
+ var seul=!ev.ctrlKey&&!ev.altKey&&!ev.metaKey;
+ if(ev.code=="Escape"&&seul){recStop();return false;}
+ var maintenant=Date.now();
+ recPause(maintenant);
+ if(seul&&ev.key&&ev.key.length==1){
+  REC.texte+=ev.key;                      // un caractere ordinaire
+ }else if(seul&&ev.code=="Enter"&&REC.texte){
+  recListe().push({type:"text_enter",valeur:REC.texte});
+  REC.texte="";
+ }else{
+  recVider();
+  var nom=nomTouche(ev);
+  if(!nom)return false;
+  recListe().push({type:nom.indexOf("+")>=0?"combo":"key",valeur:nom});}
+ REC.t=maintenant;
+ render();
+ return false;}
+
+function recDemarrer(k,g){
+ if(REC)recStop();
+ k[g]=[];                                 // on REMPLACE, on n'ajoute pas
+ REC={k:k,g:g,texte:"",t:0};
+ if(document.activeElement&&document.activeElement.blur)
+  document.activeElement.blur();
+ document.onkeydown=recTouche;
+ render();
+ say("Enregistrement : tape ta sequence au clavier. Echap ou le bouton "+
+  "Stop pour terminer. Les attentes de plus de 0,4 s deviennent des "+
+  "pauses. Rien n'est envoye au macropad avant Enregistrer.",1);
+ var boite=document.getElementById("msg");
+ if(boite)boite.className="rec";}
+
+function recStop(){
+ if(!REC)return;
+ recVider();
+ var combien=recListe().length;
+ document.onkeydown=null;
+ REC=null;
+ render();
+ say(combien?("Enregistre : "+combien+" etape(s). Verifie, puis clique "+
+  "sur Enregistrer pour l'appliquer au macropad."):
+  "Rien n'a ete enregistre.",1);}
+
+// Le meme bouton sert aux gestes et aux combinaisons : les deux rangent
+// leurs etapes dans la meme forme.
+function boutonEnr(k,g){
+ var actif=REC&&REC.k===k&&REC.g===g;
+ return el("button",{cls:actif?"s add rec on":"s add rec",
+  title:actif?"Terminer l'enregistrement":
+   "Enregistrer la sequence au clavier (remplace les etapes)"},
+  [actif?"\u25a0 Stop":"\u23fa Enregistrer"]);}
+
 function maxUse(){var m=1;for(var n in D.profils)
  (D.profils[n].touches||[]).forEach(function(t){if(t.usages>m)m=t.usages;});
  return m;}
@@ -311,6 +414,10 @@ function ligne(p,i,tb,mx){
   pile.appendChild(el("button",{cls:"s add",title:"enchainer une etape",
    onclick:function(){k[g].push({type:"none",valeur:""});render();}},
    ["+ etape"]));
+  var enr=boutonEnr(k,g);
+  enr.onclick=function(){
+   if(REC&&REC.k===k&&REC.g===g)recStop();else recDemarrer(k,g);};
+  pile.appendChild(enr);
   ca.appendChild(pile);
   tr.appendChild(ca);
   if(gi==0){
@@ -360,6 +467,10 @@ function ligneCombo(liste,ci,tb){
  pile.appendChild(el("button",{cls:"s add",title:"enchainer une etape",
   onclick:function(){c.actions.push({type:"none",valeur:""});render();}},
   ["+ etape"]));
+ var enr=boutonEnr(c,"actions");
+ enr.onclick=function(){
+  if(REC&&REC.k===c&&REC.g==="actions")recStop();else recDemarrer(c,"actions");};
+ pile.appendChild(enr);
  var c3=el("td",{},[]);c3.appendChild(pile);tr.appendChild(c3);
  tr.appendChild(el("td",{cls:"use"},[el("button",{cls:"d s",
   title:"supprimer cette combinaison",

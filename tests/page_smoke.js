@@ -60,6 +60,12 @@ function confirm() { return true; }
 const URL = { createObjectURL: function () { return 'blob:x'; } };
 function Blob() {}
 
+// Horloge simulee : l'enregistreur mesure les attentes entre les frappes
+// avec Date.now(). Sans la maitriser, le test ne pourrait pas verifier
+// qu'une pause reelle devient bien une etape de pause.
+let horloge = 1000000;
+Date.now = function () { return horloge; };
+
 let envoye = null;               // ce que la page a POSTE au macropad
 function fetch(url, options) {
   if (options && options.method === 'POST') {
@@ -77,6 +83,9 @@ new Function('document', 'window', 'fetch', 'URL', 'Blob', 'confirm',
              'location',
              script + '\n;globalThis.__page={D:function(){return D;},' +
                       'save:save,nomTouche:nomTouche,' +
+                      'recDemarrer:recDemarrer,recStop:recStop,' +
+                      'frapper:function(e){return recTouche(e);},' +
+                      'enCours:function(){return !!REC;},' +
                       'charger_sauvegarde:charger_sauvegarde};')(
   document, window, fetch, URL, Blob, confirm, location);
 
@@ -258,6 +267,36 @@ setTimeout(function () {
         echap: nom({ code: 'Escape' }),
         inconnu: nom({ code: 'Lang1' })
       };
+
+      // ---- l'enregistreur de sequence --------------------------------
+      // On rejoue au clavier ce qu'un utilisateur taperait vraiment :
+      // une commande, Entree, une attente, puis Ctrl+S.
+      const page = globalThis.__page;
+      const cible = D.profils[D.ordre[0]].touches[1];
+      page.recDemarrer(cible, 'long');
+      vu.rec_en_cours = page.enCours();
+      const frappe = function (e, saut) {
+        if (saut) { horloge += saut; }
+        page.frapper(e);
+      };
+      frappe({ code: 'Minus', key: '_' });
+      frappe({ code: 'KeyP', key: 'P' });
+      frappe({ code: 'KeyL', key: 'L' });
+      frappe({ code: 'Enter', key: 'Enter' });
+      frappe({ code: 'ControlLeft' });                  // modificateur seul
+      frappe({ code: 'KeyS', key: 's', ctrlKey: true }, 900);
+      frappe({ code: 'F5', key: 'F5' });
+      page.recStop();
+      vu.rec_termine = !page.enCours();
+      vu.rec_etapes = cible.long;
+      vu.rec_message = registre.msg.textContent;
+
+      // Echap doit ARRETER, pas s'enregistrer.
+      page.recDemarrer(cible, 'double');
+      frappe({ code: 'KeyA', key: 'a' });
+      frappe({ code: 'Escape', key: 'Escape' });
+      vu.rec_echap_arrete = !page.enCours();
+      vu.rec_echap_etapes = cible.double;
 
       // ---- restauration d'une sauvegarde -----------------------------
       // En dernier : elle remplace tout le contenu du formulaire.

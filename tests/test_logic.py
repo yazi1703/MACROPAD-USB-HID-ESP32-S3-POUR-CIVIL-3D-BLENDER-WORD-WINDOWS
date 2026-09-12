@@ -3264,6 +3264,56 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         # carte remettrait celles d'usine a chaque enregistrement.
         self.assertEqual(vu["combos_profil_sans"], 0)
 
+    def test_l_enregistreur_transforme_les_frappes_en_etapes(self):
+        """Tu tapes ta sequence, la page en fait des etapes.
+
+        Trois regles a verifier, et elles portent tout :
+          - les caracteres ordinaires s'ACCUMULENT en une seule etape ;
+          - Entree juste apres du texte donne "texte + Entree" ;
+          - une attente reelle devient une etape de pause.
+        """
+        import store
+        vu = self._construire(store.vers_json(6))
+
+        self.assertTrue(vu["rec_en_cours"], "l'enregistrement n'a pas demarre")
+        self.assertTrue(vu["rec_termine"], "l'enregistrement ne s'arrete pas")
+        self.assertEqual(vu["rec_etapes"], [
+            {"type": "text_enter", "valeur": "_PL"},   # 3 frappes, 1 etape
+            {"type": "pause", "valeur": "900"},        # l'attente reelle
+            {"type": "combo", "valeur": "CTRL+S"},     # Ctrl seul ignore
+            {"type": "key", "valeur": "F5"},
+        ])
+        self.assertIn("4 etape", vu["rec_message"])
+
+    def test_l_enregistreur_ne_produit_que_des_macros_valables(self):
+        """Le controle qui compte : ce qu'il fabrique doit etre TAPABLE.
+
+        Une sequence enregistree qui serait refusee a l'enregistrement -
+        ou pire, qui planterait le firmware - transformerait un raccourci
+        en piege. On la fait donc passer par le meme chemin que n'importe
+        quelle macro ecrite a la main.
+        """
+        import store
+        vu = self._construire(store.vers_json(6))
+        actions = store.actions_depuis_json(vu["rec_etapes"])
+        self.assertEqual(actions, [("text_enter", "_PL"),
+                                   ("pause", "900"),
+                                   ("combo", ("CTRL", "S")),
+                                   ("key", "F5")])
+        self.assertTrue(compile_actions(actions, C.KEYBOARD_LAYOUT))
+        # Et la configuration complete reste acceptee par le firmware.
+        profils, ordre, titres, couleurs, combos, apps, repli = store.defauts()
+        profils["CIVIL3D"][1][1]["long"] = actions
+        self.assertEqual(store.verifier(profils, ordre, 6, combos), [])
+
+    def test_echap_arrete_l_enregistrement_sans_s_enregistrer(self):
+        """Le reflexe de celui qui veut annuler ne doit pas produire d'ESC."""
+        import store
+        vu = self._construire(store.vers_json(6))
+        self.assertTrue(vu["rec_echap_arrete"])
+        self.assertEqual(vu["rec_echap_etapes"],
+                         [{"type": "text", "valeur": "a"}])
+
     def test_la_couleur_des_led_se_choisit_par_profil(self):
         """Un selecteur de couleur par profil, et il vise le bon profil."""
         import store

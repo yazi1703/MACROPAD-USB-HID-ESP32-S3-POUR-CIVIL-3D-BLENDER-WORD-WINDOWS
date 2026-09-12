@@ -100,6 +100,36 @@ Les deux durées se règlent dans `config.py` (`GESTE_LONG_MS`,
 dès le relâchement : tu ne paies l'attente que là où tu t'en sers.
 Voir le [chapitre 9](09-ecran-et-gestes.md) pour le détail.
 
+### L'enregistreur de séquence
+
+À côté de **`+ etape`**, un bouton **`⏺ Enregistrer`**. Tu cliques, tu
+tapes ta séquence **au clavier**, et la page en fait des étapes. Bien plus
+rapide que de choisir un type et une valeur pour chaque frappe — et
+surtout, ça capture les **pauses réelles**, celles qu'on ne pense jamais à
+mesurer soi-même.
+
+Trois règles, et elles couvrent presque tout :
+
+| Ce que tu tapes | Ce que ça produit |
+|---|---|
+| des caractères ordinaires | **une seule** étape `texte` — `_PLINE` fait une étape, pas six |
+| Entrée juste après du texte | l'étape devient **`texte + Entrée`**, l'idiome des commandes AutoCAD |
+| Ctrl+S, F5, Suppr… | une étape `combinaison` ou `touche` à part |
+| une attente de plus de 0,4 s | une étape **`pause`**, arrondie à 50 ms près |
+
+**Échap** termine l'enregistrement (il n'est pas enregistré lui-même), et
+le bouton repasse sur **`■ Stop`** pendant la prise. L'enregistrement
+**remplace** les étapes du geste : tu vois le résultat se construire au
+fur et à mesure, et **rien n'est envoyé au macropad** tant que tu n'as pas
+cliqué sur *Enregistrer*.
+
+> **Limite du navigateur :** quelques raccourcis sont réservés par Windows
+> ou par le navigateur et ne peuvent pas être interceptés — `Ctrl+W`,
+> `F11`, la touche Windows seule. Ajoute-les à la main avec le bouton ⌨.
+
+Le même bouton existe sur les **combinaisons** : elles rangent leurs
+étapes de la même façon.
+
 ### Les combinaisons
 
 Sous le tableau de chaque profil, un second tableau plus court :
