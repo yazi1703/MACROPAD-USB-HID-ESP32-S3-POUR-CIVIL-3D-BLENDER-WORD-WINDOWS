@@ -5458,7 +5458,7 @@ def limiter(couleur):
 
 ## device/diag.py
 
-`236 lignes - sha256 2cf878a374912173`
+`403 lignes - sha256 56c6eaa64c2d9316`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -5488,6 +5488,7 @@ avec la commande donne "SyntaxError: invalid syntax".
 
 Test par test :
 
+    diag.broches()              # AVANT DE SOUDER : les broches sont-elles libres ?
     diag.keymap()               # vérifie l'AZERTY, sans matériel
     diag.keymap("_ISOLATEOBJECTS")
     diag.rgb()                  # câblage des LED RGB, une par une
@@ -5498,6 +5499,172 @@ Pour arrêter avant la fin : Ctrl-C, ou le bouton STOP de Thonny.
 import sys
 from time import ticks_ms, ticks_diff, sleep_ms
 import config as C
+
+
+# =====================================================================
+# CE QU'ON PEUT ET NE PEUT PAS UTILISER SUR UN ESP32-S3
+# =====================================================================
+# Ces numéros ne sont pas une opinion : ils viennent du brochage du
+# module. Souder une touche sur l'un d'eux, c'est au mieux une touche qui
+# ne répond jamais, au pire une carte qui ne redémarre plus.
+BROCHES_INEXISTANTES = (22, 23, 24, 25)
+
+BROCHES_RESERVEES = {
+    19: "USB D- : sans elle le macropad ne peut pas etre un clavier",
+    20: "USB D+ : sans elle le macropad ne peut pas etre un clavier",
+    26: "flash SPI interne (SPICS1)",
+    27: "flash SPI interne (SPIHD)",
+    28: "flash SPI interne (SPIWP)",
+    29: "flash SPI interne (SPICS0)",
+    30: "flash SPI interne (SPICLK)",
+    31: "flash SPI interne (SPIQ)",
+    32: "flash SPI interne (SPID)",
+    33: "PSRAM octale, c'est le cas d'un N16R8 (SPIIO4)",
+    34: "PSRAM octale, c'est le cas d'un N16R8 (SPIIO5)",
+    35: "PSRAM octale, c'est le cas d'un N16R8 (SPIIO6)",
+    36: "PSRAM octale, c'est le cas d'un N16R8 (SPIIO7)",
+    37: "PSRAM octale, c'est le cas d'un N16R8 (SPIDQS)",
+}
+
+BROCHES_DECONSEILLEES = {
+    0:  "bouton BOOT : a 0 au demarrage, la carte attend un televersement",
+    3:  "strapping au demarrage (choix de la source JTAG)",
+    38: "LED RGB soudee sur la carte, sur beaucoup de DevKitC-1",
+    39: "JTAG MTCK : utilisable, mais tu perds le debogage materiel",
+    40: "JTAG MTDO : idem",
+    41: "JTAG MTDI : idem",
+    42: "JTAG MTMS : idem",
+    43: "UART0 TX : c'est la console serie de Thonny",
+    44: "UART0 RX : c'est la console serie de Thonny",
+    45: "strapping : tension du bus SPI",
+    46: "strapping, et en lecture seule apres le demarrage",
+}
+
+
+def verifier_broche(numero):
+    """(verdict, raison) pour une broche. Ne touche AUCUN materiel.
+
+    verdict vaut "libre", "deconseillee", "reservee" ou "inexistante".
+    Fonction pure, sans acces au materiel : c'est elle que les tests PC
+    verifient, et elle repond donc aussi depuis un PC.
+    """
+    try:
+        numero = int(numero)
+    except (TypeError, ValueError):
+        return "inexistante", "ce n'est pas un numero de broche"
+    if numero < 0 or numero > 48 or numero in BROCHES_INEXISTANTES:
+        return "inexistante", "ce numero n'existe pas sur un ESP32-S3"
+    if numero in BROCHES_RESERVEES:
+        return "reservee", BROCHES_RESERVEES[numero]
+    if numero in BROCHES_DECONSEILLEES:
+        return "deconseillee", BROCHES_DECONSEILLEES[numero]
+    return "libre", ""
+
+
+def broches_deja_prises():
+    """{numero: a quoi elle sert} pour tout ce que config.py declare deja."""
+    prises = {}
+
+    def poser(numero, role):
+        if numero is None:
+            return
+        prises.setdefault(int(numero), role)
+
+    for rang, numero in enumerate(C.BUTTON_PINS):
+        poser(numero, "touche B%d" % (rang + 1))
+    poser(C.ESC_PIN, "bouton ESC")
+    poser(getattr(C, "LED_PIN", None), "LED du bouton ESC")
+    poser(getattr(C, "TTP_PREVIOUS_PIN", None), "TTP profil precedent")
+    poser(getattr(C, "TTP_NEXT_PIN", None), "TTP profil suivant")
+    poser(getattr(C, "OLED_SDA", None), "OLED SDA")
+    poser(getattr(C, "OLED_SCL", None), "OLED SCL")
+    if getattr(C, "RGB_TYPE", "") == "WS2812":
+        poser(getattr(C, "RGB_PIN", None), "donnees des LED RGB")
+    else:
+        poser(getattr(C, "RGB_PIN_R", None), "LED RGB rouge")
+        poser(getattr(C, "RGB_PIN_V", None), "LED RGB verte")
+        poser(getattr(C, "RGB_PIN_B", None), "LED RGB bleue")
+    return prises
+
+
+def broches_libres():
+    """La liste des broches encore disponibles, dans l'ordre."""
+    prises = broches_deja_prises()
+    return [numero for numero in range(49)
+            if numero not in prises and verifier_broche(numero)[0] == "libre"]
+
+
+def broches(secondes=60):
+    """À FAIRE AVANT DE SOUDER. Chaque broche déclarée est-elle utilisable ?
+
+    D'abord la théorie : le brochage de l'ESP32-S3 dit si la broche est
+    libre, déconseillée ou réservée. Une broche réservée n'est même pas
+    LUE — créer un Pin sur une broche de la flash suffit à faire tomber la
+    carte.
+
+    Ensuite la pratique : l'état de chaque entrée est affiché en continu.
+    Relie la broche à GND avec un fil et son 1 doit passer à 0. Une broche
+    qui reste à 0 sans que tu y touches est tenue basse par quelque chose
+    sur la carte : elle ne pourra pas servir de touche.
+    """
+    from machine import Pin
+    print("-" * 46)
+    print("VERIFICATION DES BROCHES - a faire AVANT de souder")
+    print("-" * 46)
+
+    # (nom, numero, pull) : une touche relie sa broche a GND, donc pull-up.
+    # Un module TTP223 d'usine POUSSE sa sortie a 3,3 V, donc pull-down.
+    ttp_pull = Pin.PULL_DOWN if C.TTP_ACTIVE_HIGH else Pin.PULL_UP
+    attendues = [("B%d" % (rang + 1), numero, Pin.PULL_UP)
+                 for rang, numero in enumerate(C.BUTTON_PINS)]
+    attendues.append(("ESC", C.ESC_PIN, Pin.PULL_UP))
+    attendues.append(("PREV", C.TTP_PREVIOUS_PIN, ttp_pull))
+    attendues.append(("NEXT", C.TTP_NEXT_PIN, ttp_pull))
+
+    vues = {}
+    lisibles = []
+    refusees = 0
+    for nom, numero, pull in attendues:
+        verdict, raison = verifier_broche(numero)
+        if numero in vues:
+            print("  %-5s GPIO%-2d  DOUBLON : deja prise par %s"
+                  % (nom, numero, vues[numero]))
+            refusees += 1
+            continue
+        vues[numero] = nom
+        if verdict == "reservee" or verdict == "inexistante":
+            print("  %-5s GPIO%-2d  %s : %s" % (nom, numero, verdict.upper(), raison))
+            print("        NE SOUDE PAS ICI. Corrige config.py d'abord.")
+            refusees += 1
+            continue
+        if verdict == "deconseillee":
+            print("  %-5s GPIO%-2d  a eviter : %s" % (nom, numero, raison))
+        else:
+            print("  %-5s GPIO%-2d  libre" % (nom, numero))
+        lisibles.append((nom, Pin(numero, Pin.IN, pull)))
+
+    print("")
+    print("Broches encore disponibles :", broches_libres())
+    if refusees:
+        print("")
+        print("%d broche(s) a corriger dans config.py AVANT de souder." % refusees)
+    if not lisibles:
+        return False
+
+    print("")
+    print("Au repos, tout doit afficher le meme niveau.")
+    print("Touche une broche avec un fil relie a GND : son niveau change.")
+    print("Ctrl-C pour arreter (%d s sinon)." % secondes)
+    debut = ticks_ms()
+    try:
+        while ticks_diff(ticks_ms(), debut) < int(secondes * 1000):
+            print("  " + "  ".join("%s=%d" % (nom, broche.value())
+                                   for nom, broche in lisibles))
+            sleep_ms(400)
+    except KeyboardInterrupt:
+        print("Arret demande.")
+    print("-" * 46)
+    return refusees == 0
 
 
 def keymap(text="_MATCHPROP"):

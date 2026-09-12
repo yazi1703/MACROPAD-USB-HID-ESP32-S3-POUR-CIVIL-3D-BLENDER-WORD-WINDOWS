@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 220 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 228 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 220 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  195 pour le firmware, 25 pour le compagnon Windows.
+- 228 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  203 pour le firmware, 25 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -41,6 +41,19 @@ Le diagnostic de cablage `diag.rgb()`, qu'on lance dans le REPL avant meme d'act
 La reaction a l'appui a ses propres tests, nes d'une latence constatee sur le materiel : la LED s'intensifie des le premier tour de boucle et seulement la sienne, deux appuis coup sur coup montent plus haut qu'un seul, la retombee passe par plus de cinq paliers sans jamais remonter et finit exactement sur la couleur du profil, l'empilement est plafonne, et - le test qui compte - vingt appuis empiles sur du blanc ne franchissent pas le plafond de courant. Un dernier verifie que l'impulsion s'AJOUTE a la respiration : le gain est le meme en haut et en bas du cycle.
 
 Enfin, deux tests font tourner main.run() en entier avec RGB_ENABLED a True et un faux ruban horodate. Le second reproduit la latence d'origine : il appuie sur la touche 1, celle qui a un double appui et dont la macro ne part donc qu'apres GESTE_DOUBLE_MS, et exige que la LED ait deja reagi dans les 60 premieres millisecondes. Il echoue sur la version precedente : rien ne sert de savoir que rgb.py fonctionne seul si l'activer fait tomber la boucle principale. Il verifie que le ruban est rafraichi tout au long de la boucle, qu'il change de couleur au changement de profil, et qu'il est ETEINT a l'arret.
+
+**Le brochage, verifie AVANT le fer a souder** (`BrochesAvantDeSouder`,
+8 tests). Une soudure ne se defait pas d'un clic : ces tests verifient
+qu'aucune broche citee dans config.py n'est reservee par la flash SPI
+(GPIO26-32), par la PSRAM octale d'un N16R8 (GPIO33-37) ou par l'USB
+(GPIO19-20), qu'aucune n'est utilisee deux fois pour deux roles, et que
+les numeros qui n'existent pas sur un S3 (GPIO22-25) sont bien rejetes.
+
+Le test qui compte est le dernier : on declare volontairement une touche
+sur GPIO30 - l'horloge de la flash - et on verifie que `diag.broches()`
+la SIGNALE sans jamais construire le `Pin`, avec un faux Pin qui echoue si
+on l'appelle. Creer un Pin sur la flash suffit a faire tomber la carte :
+l'outil de diagnostic ne doit pas etre ce qui la fait tomber.
 
 **Les combinaisons de touches** (`CombinaisonsSimultanees`,
 `CombinaisonsDansLaBoucleReelle` et `CombinaisonsDansLaConfiguration`,
@@ -357,7 +370,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 220 tests
+Ran 228 tests
 
 OK
 ```

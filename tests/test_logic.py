@@ -1887,6 +1887,112 @@ class CouleursDesProfils(unittest.TestCase):
         self.assertEqual(couleurs["CIVIL3D"], tuple(C.RGB_COULEURS["CIVIL3D"]))
 
 
+class BrochesAvantDeSouder(unittest.TestCase):
+    """Le brochage de l'ESP32-S3, verifie AVANT le fer a souder.
+
+    Souder une touche sur une broche de la flash ou de la PSRAM, c'est au
+    mieux une touche muette, au pire une carte qui ne redemarre plus. Et
+    une soudure, ca ne se defait pas d'un clic.
+    """
+
+    def test_les_broches_declarees_sont_toutes_utilisables(self):
+        """Le controle qui compte : config.py ne cite aucune broche interdite."""
+        import diag
+        for numero in list(C.BUTTON_PINS) + [C.ESC_PIN, C.LED_PIN,
+                                             C.TTP_PREVIOUS_PIN, C.TTP_NEXT_PIN,
+                                             C.OLED_SDA, C.OLED_SCL, C.RGB_PIN]:
+            verdict, raison = diag.verifier_broche(numero)
+            self.assertEqual(verdict, "libre",
+                             "GPIO%d : %s" % (numero, raison))
+
+    def test_aucune_broche_n_est_utilisee_deux_fois(self):
+        """Deux roles sur la meme broche : personne ne le voit au montage."""
+        import diag
+        declarees = (list(C.BUTTON_PINS)
+                     + [C.ESC_PIN, C.LED_PIN, C.TTP_PREVIOUS_PIN, C.TTP_NEXT_PIN,
+                        C.OLED_SDA, C.OLED_SCL, C.RGB_PIN])
+        self.assertEqual(len(set(declarees)), len(declarees),
+                         "doublon dans le brochage : %s" % sorted(declarees))
+        # Et la table de diag voit bien tous ces roles.
+        self.assertEqual(len(diag.broches_deja_prises()), len(set(declarees)))
+
+    def test_usb_et_flash_sont_reservees(self):
+        import diag
+        # Les deux que tu m'as interdites des le depart.
+        self.assertEqual(diag.verifier_broche(19)[0], "reservee")
+        self.assertEqual(diag.verifier_broche(20)[0], "reservee")
+        # La flash SPI du module : y toucher fait tomber la carte.
+        for numero in range(26, 33):
+            self.assertEqual(diag.verifier_broche(numero)[0], "reservee",
+                             "GPIO%d" % numero)
+        # La PSRAM octale d'un N16R8.
+        for numero in range(33, 38):
+            self.assertEqual(diag.verifier_broche(numero)[0], "reservee",
+                             "GPIO%d" % numero)
+
+    def test_les_numeros_qui_n_existent_pas(self):
+        import diag
+        for numero in (22, 23, 24, 25, 49, -1):
+            self.assertEqual(diag.verifier_broche(numero)[0], "inexistante",
+                             "GPIO%s" % numero)
+
+    def test_la_console_serie_est_deconseillee_pas_interdite(self):
+        """GPIO43/44 marchent, mais on y perd le REPL de Thonny."""
+        import diag
+        self.assertEqual(diag.verifier_broche(43)[0], "deconseillee")
+        self.assertEqual(diag.verifier_broche(44)[0], "deconseillee")
+
+    def test_les_broches_libres_excluent_ce_qui_sert_deja(self):
+        import diag
+        libres = diag.broches_libres()
+        for numero in list(C.BUTTON_PINS) + [C.ESC_PIN, C.RGB_PIN]:
+            self.assertNotIn(numero, libres)
+        for numero in (19, 20, 26, 33, 43, 22):
+            self.assertNotIn(numero, libres)
+        self.assertTrue(libres, "aucune broche de repli : suspect")
+
+    def test_diag_ne_touche_JAMAIS_une_broche_reservee(self):
+        """Le vrai filet : creer un Pin sur la flash suffit a tout casser.
+
+        On declare volontairement une touche sur GPIO30 (SPICLK) et on
+        verifie que diag.broches() la signale SANS jamais construire le
+        Pin - avec un faux Pin qui explose si on l'appelle.
+        """
+        import diag
+        touchees = []
+        original = Pin.__init__
+
+        def espion(self, n, mode=None, pull=None, value=None):
+            if n in tuple(range(26, 38)) + (19, 20):
+                raise AssertionError("broche reservee GPIO%d touchee !" % n)
+            touchees.append(n)
+            original(self, n, mode, pull)
+
+        anciennes = C.BUTTON_PINS
+        C.BUTTON_PINS = (4, 5, 6, 30, 12, 13)      # GPIO30 = flash SPICLK
+        Pin.__init__ = espion
+        try:
+            diag.broches(secondes=0)
+        finally:
+            Pin.__init__ = original
+            C.BUTTON_PINS = anciennes
+
+        self.assertNotIn(30, touchees)
+        # Les cinq autres touches, elles, ont bien ete lues.
+        for numero in (4, 5, 6, 12, 13):
+            self.assertIn(numero, touchees)
+
+    def test_diag_broches_refuse_quand_une_broche_est_interdite(self):
+        import diag
+        anciennes = C.BUTTON_PINS
+        C.BUTTON_PINS = (4, 5, 6, 19, 12, 13)      # GPIO19 = USB D-
+        try:
+            self.assertFalse(diag.broches(secondes=0))
+        finally:
+            C.BUTTON_PINS = anciennes
+        self.assertTrue(diag.broches(secondes=0))
+
+
 class LedsRgb(unittest.TestCase):
     """Les LED RGB des touches, sans LED.
 

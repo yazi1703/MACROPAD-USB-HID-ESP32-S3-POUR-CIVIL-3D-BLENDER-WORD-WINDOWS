@@ -85,10 +85,12 @@ MicroPython**. Le port natif, lui, n'apparait que lorsque MicroPython tourne
 | OLED GND | GND | OLED GND | |
 | OLED SDA | GPIO8 | OLED SDA | I2C, 400 kHz |
 | OLED SCL | GPIO9 | OLED SCL | I2C, 400 kHz |
-| B1 | GPIO4 | switch -> GND | pull-up interne, actif BAS |
-| B2 | GPIO5 | switch -> GND | idem |
-| B3 | GPIO6 | switch -> GND | idem |
-| B4 | GPIO7 | switch -> GND | idem |
+| B1 | GPIO4 | switch -> GND | pull-up interne, actif BAS — **pouce** |
+| B2 | GPIO5 | switch -> GND | idem — **index** |
+| B3 | GPIO6 | switch -> GND | idem — **index**, 2e touche |
+| B4 | GPIO7 | switch -> GND | idem — **majeur** |
+| B5 | GPIO12 | switch -> GND | idem — **annulaire** |
+| B6 | GPIO13 | switch -> GND | idem — **auriculaire** |
 | TTP PRECEDENT VCC | 3V3 | TTP223 VCC | **3,3 V imperatif** |
 | TTP PRECEDENT GND | GND | TTP223 GND | |
 | TTP PRECEDENT OUT | GPIO10 | TTP223 OUT | actif HAUT |
@@ -99,6 +101,37 @@ MicroPython**. Le port natif, lui, n'apparait que lorsque MicroPython tourne
 | ESC LED | GPIO15 | 2,2 kOhm -> base BC547 | PWM 1 kHz |
 | ESC +5 V | 5V (VBUS) | 330 Ohm -> LED | alimentation de la LED |
 | ESC masse | GND | GND commun | **obligatoire** |
+
+### Quel doigt sur quelle broche — a ne pas melanger
+
+Le pad est sous la main **GAUCHE** : le pouce est a DROITE du groupe,
+l'auriculaire a GAUCHE. Vu d'au-dessus, du bord gauche vers le bord droit :
+
+```
+   gauche  <───────────── main GAUCHE ─────────────>  droite
+     B6          B5          B4        B3   B2       B1
+   GPIO13      GPIO12      GPIO7    GPIO6 GPIO5    GPIO4
+  auriculaire  annulaire   majeur      index       pouce
+```
+
+Ce n'est pas qu'une question d'ordre a l'ecran. Les **combinaisons** sont
+choisies sur cette geometrie : « deux doigts voisins » pour les vues,
+« on saute un doigt » pour les calques. Inverser deux fils rend ces
+raccourcis illogiques, et le firmware ne peut pas le deviner. Si tu soudes
+autrement, corrige `BUTTON_PINS` **et** `DOIGTS` dans `config.py` — les
+deux vont ensemble.
+
+> **Avant de souder, une verification de trente secondes.** Dans le REPL :
+>
+>     import diag
+>     diag.broches()
+>
+> Elle dit, pour chaque broche declaree, si elle est libre, deconseillee
+> ou **reservee** par la flash, la PSRAM ou l'USB — une broche reservee
+> n'est meme pas lue, car creer un `Pin` sur la flash suffit a faire
+> tomber la carte. Puis elle affiche l'etat des entrees en continu : tu
+> touches la broche avec un fil relie a GND, son niveau doit passer de 1 a
+> 0. Elle liste aussi les broches encore disponibles, en cas de conflit.
 
 **Les TTP223 doivent etre alimentes en 3,3 V** : leur sortie suit leur tension
 d'alimentation. En 5 V, la sortie monterait a 5 V sur un GPIO qui ne tolere pas
@@ -122,13 +155,17 @@ plus de 3,3 V et vous abimeriez le S3.
    | SCL     |---| GPIO9            | |
    +---------+   |                  | |
                  |                  | |
-   B1 o----------| GPIO4            | |
+   B1 o----------| GPIO4            | |   pouce
       |          |                  | |
-   B2 o----------| GPIO5            | |
+   B2 o----------| GPIO5            | |   index
       |          |                  | |
-   B3 o----------| GPIO6            | |
+   B3 o----------| GPIO6            | |   index (2e touche)
       |          |                  | |
-   B4 o----------| GPIO7            | |
+   B4 o----------| GPIO7            | |   majeur
+      |          |                  | |
+   B5 o----------| GPIO12           | |   annulaire
+      |          |                  | |
+   B6 o----------| GPIO13           | |   auriculaire
       |          |                  | |
       +----------+------------------+ |   (toutes les touches vers GND)
                  |                    |

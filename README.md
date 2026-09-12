@@ -18,6 +18,7 @@ ouvert, compte les appuis, et se configure entièrement depuis une page web
 |---|---|
 | **monter et faire fonctionner le macropad** | [`GUIDE_FR.md`](GUIDE_FR.md), du début à la fin |
 | **câbler sans rien détruire** | [`docs/05-electronique.md`](docs/05-electronique.md) — **à lire avant de souder** |
+| **savoir si une broche est libre, AVANT de souder** | `import diag` puis `diag.broches()` — voir [`docs/02`](docs/02-cablage.md) |
 | tester étape par étape, en détail | [`docs/03-tests-progressifs.md`](docs/03-tests-progressifs.md) |
 | savoir si USB HID marche vraiment en MicroPython | [`docs/01-recherche-usb-hid.md`](docs/01-recherche-usb-hid.md) |
 | vérifier le brochage broche par broche | [`docs/02-cablage.md`](docs/02-cablage.md) |
@@ -261,7 +262,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   └── README.md                 comment les charger au démarrage
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             195 tests du firmware, exécutables sur PC
+│   ├── test_logic.py             203 tests du firmware, exécutables sur PC
 │   ├── test_pc.py                25 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
@@ -287,7 +288,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 220 tests ... OK
+→ Ran 228 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport

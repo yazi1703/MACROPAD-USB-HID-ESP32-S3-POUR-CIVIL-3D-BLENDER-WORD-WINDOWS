@@ -90,6 +90,18 @@ Suis l'ordre : chaque bloc suppose le précédent validé.
 [ ] aucune touche modificatrice ne reste bloquée après une macro
 ```
 
+## Avant de souder
+
+```
+[ ] import diag ; diag.broches() : aucune broche RESERVEE dans la liste
+[ ] chaque broche passe de 1 a 0 quand un fil la relie a GND
+[ ] aucune broche a 0 au repos, sans que tu y touches
+[ ] BUTTON_PINS : B1 GPIO4, B2 GPIO5, B3 GPIO6, B4 GPIO7, B5 GPIO12, B6 GPIO13
+[ ] DOIGTS correspond a la main : pouce, index, index, majeur, annulaire, auriculaire
+[ ] rien sur GPIO19 ni GPIO20 (USB) - jamais
+[ ] rien sur GPIO26 a GPIO37 (flash et PSRAM du N16R8)
+```
+
 ## Disposition clavier
 
 ```
