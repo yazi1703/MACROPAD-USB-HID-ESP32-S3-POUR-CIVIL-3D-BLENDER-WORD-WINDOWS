@@ -66,6 +66,7 @@ NB_TOUCHES = len(C.BUTTON_PINS)
 REGLAGES_NEUFS = (
     ("GESTE_COMBO_MS", 50),
     ("COMBO_FLASH_MS", 1200),
+    ("RGB_RESPIRATION_MAX", 0.55),
 )
 _manquants = []
 

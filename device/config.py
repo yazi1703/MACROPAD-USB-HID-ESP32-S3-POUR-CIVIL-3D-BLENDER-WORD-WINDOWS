@@ -245,16 +245,38 @@ RGB_COULEUR_ERREUR = (255, 0, 0)       # panne HID : visible sans lire
 # cycle : a 0.35, il reste toujours un tiers de luminosite.
 RGB_RESPIRATION = True
 RGB_RESPIRATION_MS = 4000   # duree d'un cycle complet
-RGB_RESPIRATION_MIN = 0.35  # luminosite au creux de la respiration
+RGB_RESPIRATION_MIN = 0.25  # luminosite au creux de la respiration
+# ET SURTOUT LE PLAFOND. Au repos, la respiration ne monte pas plus haut
+# que ca : tout ce qui reste au-dessus est RESERVE a l'appui.
+#
+# Pourquoi ce n'etait pas 1.0 : une couleur dont un canal vaut 255 - le
+# bleu de CIVIL3D - atteignait deja le plafond de courant au sommet du
+# cycle. L'appui ne pouvait plus l'eclaircir, il delavait seulement les
+# autres canaux : +23 % de lumiere, et un changement de TEINTE plutot que
+# de clarte. On ne voyait plus quelle touche on venait d'utiliser.
+#
+# Monte-le si tu veux un pad plus lumineux au repos, mais tu reprends
+# d'autant la place de l'appui. 1.0 rend le probleme d'origine.
+RGB_RESPIRATION_MAX = 0.55
 
 # --- reaction a l'appui ------------------------------------------------
 # Un appui fait monter la LED de la touche, et elle redescend toute seule.
 # L'impulsion S'AJOUTE a ce qui reste : deux appuis coup sur coup montent
 # deux fois plus haut. Le plafond du courant reste RGB_LUMINOSITE, quoi
 # qu'il arrive.
-RGB_IMPULSION = 1.0         # ce qu'un appui ajoute (1.0 = double la clarte)
-RGB_IMPULSION_MAX = 3.0     # au-dela, ca ne monte plus
-RGB_RETOMBEE_MS = 700       # duree du retour au calme, PAR unite
+# 0.45 n'est pas un chiffre au hasard : 0.55 (le sommet de la
+# respiration) + 0.45 = 1.00, c'est-a-dire la couleur PLEINE du profil.
+# Un appui amene donc la touche exactement a sa couleur nominale, quel
+# que soit l'endroit du cycle - et de la pointe de la respiration, cela
+# fait +82 % de lumiere, sans toucher a la teinte.
+RGB_IMPULSION = 0.45
+RGB_IMPULSION_MAX = 1.35    # trois appuis empiles ; au-dela ca ne monte plus
+# 1600 et non 700 : cette duree est comptee PAR UNITE d'impulsion, et
+# l'impulsion est passee de 1.0 a 0.45 pour laisser la reserve ci-dessus.
+# A 700, un appui se serait efface en 315 ms au lieu de 700 - deux fois
+# plus vite qu'avant, alors que rien ne le demandait. 0,45 x 1600 = 720 ms
+# redonne exactement le rythme d'origine.
+RGB_RETOMBEE_MS = 1600      # duree du retour au calme, PAR unite
 
 RGB_MS = 16                 # un envoi au plus toutes les 16 ms (~60 par
                             # seconde) : c'est ce qui rend la retombee

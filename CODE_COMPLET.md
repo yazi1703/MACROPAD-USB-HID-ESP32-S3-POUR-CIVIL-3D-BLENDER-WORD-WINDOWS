@@ -40,7 +40,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`363 lignes - sha256 6a1103d3c30c5262`
+`385 lignes - sha256 b7095a375bc943d3`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -290,16 +290,38 @@ RGB_COULEUR_ERREUR = (255, 0, 0)       # panne HID : visible sans lire
 # cycle : a 0.35, il reste toujours un tiers de luminosite.
 RGB_RESPIRATION = True
 RGB_RESPIRATION_MS = 4000   # duree d'un cycle complet
-RGB_RESPIRATION_MIN = 0.35  # luminosite au creux de la respiration
+RGB_RESPIRATION_MIN = 0.25  # luminosite au creux de la respiration
+# ET SURTOUT LE PLAFOND. Au repos, la respiration ne monte pas plus haut
+# que ca : tout ce qui reste au-dessus est RESERVE a l'appui.
+#
+# Pourquoi ce n'etait pas 1.0 : une couleur dont un canal vaut 255 - le
+# bleu de CIVIL3D - atteignait deja le plafond de courant au sommet du
+# cycle. L'appui ne pouvait plus l'eclaircir, il delavait seulement les
+# autres canaux : +23 % de lumiere, et un changement de TEINTE plutot que
+# de clarte. On ne voyait plus quelle touche on venait d'utiliser.
+#
+# Monte-le si tu veux un pad plus lumineux au repos, mais tu reprends
+# d'autant la place de l'appui. 1.0 rend le probleme d'origine.
+RGB_RESPIRATION_MAX = 0.55
 
 # --- reaction a l'appui ------------------------------------------------
 # Un appui fait monter la LED de la touche, et elle redescend toute seule.
 # L'impulsion S'AJOUTE a ce qui reste : deux appuis coup sur coup montent
 # deux fois plus haut. Le plafond du courant reste RGB_LUMINOSITE, quoi
 # qu'il arrive.
-RGB_IMPULSION = 1.0         # ce qu'un appui ajoute (1.0 = double la clarte)
-RGB_IMPULSION_MAX = 3.0     # au-dela, ca ne monte plus
-RGB_RETOMBEE_MS = 700       # duree du retour au calme, PAR unite
+# 0.45 n'est pas un chiffre au hasard : 0.55 (le sommet de la
+# respiration) + 0.45 = 1.00, c'est-a-dire la couleur PLEINE du profil.
+# Un appui amene donc la touche exactement a sa couleur nominale, quel
+# que soit l'endroit du cycle - et de la pointe de la respiration, cela
+# fait +82 % de lumiere, sans toucher a la teinte.
+RGB_IMPULSION = 0.45
+RGB_IMPULSION_MAX = 1.35    # trois appuis empiles ; au-dela ca ne monte plus
+# 1600 et non 700 : cette duree est comptee PAR UNITE d'impulsion, et
+# l'impulsion est passee de 1.0 a 0.45 pour laisser la reserve ci-dessus.
+# A 700, un appui se serait efface en 315 ms au lieu de 700 - deux fois
+# plus vite qu'avant, alors que rien ne le demandait. 0,45 x 1600 = 720 ms
+# redonne exactement le rythme d'origine.
+RGB_RETOMBEE_MS = 1600      # duree du retour au calme, PAR unite
 
 RGB_MS = 16                 # un envoi au plus toutes les 16 ms (~60 par
                             # seconde) : c'est ce qui rend la retombee
@@ -845,7 +867,7 @@ else:
 
 ## device/main.py
 
-`600 lignes - sha256 d4a4871cc7c21554`
+`601 lignes - sha256 fa91922c71d7695f`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -916,6 +938,7 @@ NB_TOUCHES = len(C.BUTTON_PINS)
 REGLAGES_NEUFS = (
     ("GESTE_COMBO_MS", 50),
     ("COMBO_FLASH_MS", 1200),
+    ("RGB_RESPIRATION_MAX", 0.55),
 )
 _manquants = []
 
@@ -5271,7 +5294,7 @@ class Led:
 
 ## device/rgb.py
 
-`344 lignes - sha256 0e4d187687de6545`
+`357 lignes - sha256 be86893ec81bae1b`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -5365,13 +5388,22 @@ def respiration(phase_ms):
     ne fait que passer par le maximum - c'est ce qui donne une
     respiration plutot qu'un clignotement.
 
+    LE PLAFOND N'EST PAS 1.0, ET C'EST VOLONTAIRE. Au repos la couleur
+    monte au plus a RGB_RESPIRATION_MAX, ce qui laisse de la place
+    au-dessus pour l'appui. Sans cette reserve, une couleur dont un canal
+    vaut 255 - le bleu de CIVIL3D, par exemple - touchait deja le plafond
+    de courant au sommet du cycle : l'appui ne pouvait plus l'eclaircir,
+    il ne faisait que DELAVER les autres canaux. Sur un bleu pur, il
+    n'aurait rien fait du tout.
+
     Fonction pure : elle ne depend que de son argument, donc elle se teste
     sans la moindre LED.
     """
     periode = getattr(C, "RGB_RESPIRATION_MS", 4000)
-    plancher = getattr(C, "RGB_RESPIRATION_MIN", 0.35)
+    plancher = getattr(C, "RGB_RESPIRATION_MIN", 0.25)
+    plafond = getattr(C, "RGB_RESPIRATION_MAX", 0.55)
     onde = (1 - cos(2 * pi * (phase_ms % periode) / periode)) / 2
-    return plancher + (1.0 - plancher) * onde ** 1.6
+    return plancher + (plafond - plancher) * onde ** 1.6
 
 
 class Rgb:
@@ -5536,7 +5568,11 @@ class Rgb:
         # impulsions des touches s'AJOUTENT par-dessus : un appui monte
         # donc pareil, que la respiration soit en haut ou en bas de son
         # cycle. C'est ce qu'on attend d'un retour visuel.
-        souffle = 1.0
+        # Le niveau de REPOS, respiration ou pas. Il ne vaut jamais 1.0 :
+        # tout ce qui reste au-dessus appartient a l'appui. Une couleur
+        # figee a 1.0 rendrait exactement le defaut d'origine - la touche
+        # appuyee ne se distinguerait plus des autres.
+        souffle = getattr(C, "RGB_RESPIRATION_MAX", 0.55)
         if getattr(C, "RGB_RESPIRATION", True):
             souffle = respiration(self._phase)
 
@@ -5624,7 +5660,7 @@ def limiter(couleur):
 
 ## device/diag.py
 
-`736 lignes - sha256 20cbb5d7ae495a7d`
+`737 lignes - sha256 d2772b323104f886`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -5689,6 +5725,7 @@ REGLAGES_ATTENDUS = (
     ("config", "GESTE_COMBO_MS"),
     ("config", "COMBO_FLASH_MS"),
     ("config", "DOIGTS"),
+    ("config", "RGB_RESPIRATION_MAX"),
     ("profiles", "COMBO_LABEL_MAX"),
     ("profiles", "COMBOS"),
 )

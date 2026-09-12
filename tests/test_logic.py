@@ -2422,8 +2422,7 @@ class LedsRgb(unittest.TestCase):
         objet.profil(C.RGB_COULEURS["CIVIL3D"])
         objet.tick(100)
         attendu = tuple(C.RGB_COULEURS["CIVIL3D"])
-        import rgb
-        r, v, b = rgb.limiter(attendu)
+        r, v, b = self._repos(attendu)
         # Les WS2812 attendent VERT, ROUGE, BLEU.
         for pixel in objet.materiel.pixels:
             self.assertEqual(pixel, (v, r, b))
@@ -2433,17 +2432,26 @@ class LedsRgb(unittest.TestCase):
         objet = self._rgb()
         objet.profil(C.RGB_COULEURS["CIVIL3D"])
         objet.tick(100)
-        import rgb
-        r, v, b = rgb.limiter(C.RGB_COULEURS["CIVIL3D"])
+        r, v, b = self._repos(C.RGB_COULEURS["CIVIL3D"])
         self.assertEqual(objet.materiel.pixels[0], (r, v, b))
 
     def test_profil_inconnu_prend_la_couleur_par_defaut(self):
         objet = self._rgb()
         objet.profil(None)
         objet.tick(100)
-        import rgb
-        r, v, b = rgb.limiter(C.RGB_COULEUR_DEFAUT)
+        r, v, b = self._repos(C.RGB_COULEUR_DEFAUT)
         self.assertEqual(objet.materiel.pixels[0], (v, r, b))
+
+    def _repos(self, couleur):
+        """La couleur AU REPOS : le profil attenue par la reserve d'appui.
+
+        Ce n'est pas la couleur pleine. RGB_RESPIRATION_MAX garde de la
+        place au-dessus, sans quoi un appui sur une couleur dont un canal
+        vaut 255 ne pourrait plus rien eclaircir.
+        """
+        import rgb
+        return rgb.limiter(rgb._attenuer(
+            couleur, getattr(C, "RGB_RESPIRATION_MAX", 0.55)))
 
     def _clarte(self, objet, index):
         return sum(objet.materiel.pixels[index])
@@ -2525,12 +2533,11 @@ class LedsRgb(unittest.TestCase):
         objet.tick(100)
         objet.etat("ERR")
         objet.tick(200)
-        import rgb
-        r, v, b = rgb.limiter(C.RGB_COULEUR_ERREUR)
+        r, v, b = self._repos(C.RGB_COULEUR_ERREUR)
         self.assertEqual(objet.materiel.pixels[0], (v, r, b))
         objet.etat("HID")
         objet.tick(300)
-        r, v, b = rgb.limiter(C.RGB_COULEURS["BLENDER"])
+        r, v, b = self._repos(C.RGB_COULEURS["BLENDER"])
         self.assertEqual(objet.materiel.pixels[0], (v, r, b))
 
     # --- veille et cadence ---------------------------------------------
@@ -2575,11 +2582,14 @@ class LedsRgb(unittest.TestCase):
     def test_la_courbe_de_respiration(self):
         """Meme courbe que la LED du bouton ESC : douce aux extremites."""
         import rgb
-        self._regler(RGB_RESPIRATION_MS=4000, RGB_RESPIRATION_MIN=0.35)
+        self._regler(RGB_RESPIRATION_MS=4000, RGB_RESPIRATION_MIN=0.35,
+                     RGB_RESPIRATION_MAX=0.80)
         creux = rgb.respiration(0)
         milieu = rgb.respiration(2000)
         self.assertAlmostEqual(creux, 0.35, places=3)
-        self.assertAlmostEqual(milieu, 1.0, places=3)
+        # Le sommet est le PLAFOND, pas 1.0 : le reste est la reserve de
+        # l'appui, sans laquelle on ne voit plus quelle touche a servi.
+        self.assertAlmostEqual(milieu, 0.80, places=3)
         # Elle monte sans a-coup, et repart au creux au cycle suivant.
         precedent = creux
         for phase in range(0, 2001, 100):
@@ -2763,6 +2773,87 @@ class LedsRgb(unittest.TestCase):
             any(sum(image[0]) > sum(image[1]) for image in tot),
             "la LED n'a pas reagi avant %d ms" % (macro - appui))
 
+    # --- l'appui doit se VOIR, meme au sommet de la respiration ----------
+    def test_un_appui_se_voit_au_sommet_de_la_respiration(self):
+        """Defaut signale a l'usage : au maximum de la respiration, on ne
+        voyait plus quelle touche on venait d'appuyer.
+
+        La cause n'etait PAS "pas assez lumineux". Une couleur dont un
+        canal vaut 255 - le bleu de CIVIL3D - touchait deja le plafond de
+        courant au sommet du cycle : l'appui ne pouvait plus l'eclaircir,
+        il ne faisait que DELAVER les autres canaux. Sur un bleu pur, il
+        n'aurait rien fait du tout.
+        """
+        import rgb
+        sommet = C.RGB_RESPIRATION_MAX
+        for nom, couleur in C.RGB_COULEURS.items():
+            repos = rgb.limiter(rgb._attenuer(couleur, sommet))
+            appui = rgb.limiter(rgb._attenuer(couleur,
+                                              sommet + C.RGB_IMPULSION))
+            for canal in range(3):
+                if couleur[canal] == 0:
+                    self.assertEqual(appui[canal], 0, nom)
+                else:
+                    self.assertGreater(appui[canal], repos[canal],
+                                       "%s : canal %d ne monte pas"
+                                       % (nom, canal))
+            # Et le gain est franc, pas marginal : au moins +60 %.
+            self.assertGreater(sum(appui), sum(repos) * 1.6, nom)
+
+    def test_un_appui_amene_la_touche_a_sa_couleur_pleine(self):
+        """0.55 + 0.45 = 1.00, et ce n'est pas un hasard.
+
+        Le sommet de la respiration plus l'impulsion donnent exactement la
+        couleur nominale du profil : l'appui est donc previsible, et la
+        TEINTE ne bouge pas - c'est de la clarte qu'on ajoute, pas du
+        blanc.
+        """
+        import rgb
+        self.assertAlmostEqual(C.RGB_RESPIRATION_MAX + C.RGB_IMPULSION, 1.0,
+                               places=9)
+        for nom, couleur in C.RGB_COULEURS.items():
+            appui = rgb.limiter(rgb._attenuer(
+                couleur, C.RGB_RESPIRATION_MAX + C.RGB_IMPULSION))
+            self.assertEqual(appui, rgb.limiter(couleur), nom)
+
+    def test_une_couleur_pure_reagit_aussi(self):
+        """Le pire cas : un bleu pur (0, 0, 255), un seul canal a fond.
+
+        C'est celui qui ne reagissait pas du tout a l'appui - et celui
+        qu'un utilisateur choisit tres naturellement dans le selecteur de
+        couleur de la page web.
+        """
+        import rgb
+        for couleur in ((0, 0, 255), (255, 0, 0), (0, 255, 0),
+                        (255, 255, 255)):
+            repos = rgb.limiter(rgb._attenuer(couleur, C.RGB_RESPIRATION_MAX))
+            appui = rgb.limiter(rgb._attenuer(
+                couleur, C.RGB_RESPIRATION_MAX + C.RGB_IMPULSION))
+            self.assertGreater(sum(appui), sum(repos) * 1.6, str(couleur))
+
+    def test_la_respiration_reste_entre_son_plancher_et_son_plafond(self):
+        import rgb
+        vus = []
+        for phase in range(0, C.RGB_RESPIRATION_MS * 2, 13):
+            facteur = rgb.respiration(phase)
+            self.assertGreaterEqual(facteur, C.RGB_RESPIRATION_MIN - 1e-9)
+            self.assertLessEqual(facteur, C.RGB_RESPIRATION_MAX + 1e-9,
+                                 "la respiration mange la reserve de l'appui")
+            vus.append(facteur)
+        # Elle parcourt bien toute sa plage, elle ne reste pas plate.
+        self.assertLess(min(vus), C.RGB_RESPIRATION_MIN + 0.01)
+        self.assertGreater(max(vus), C.RGB_RESPIRATION_MAX - 0.01)
+
+    def test_la_reserve_de_l_appui_ne_depasse_pas_le_plafond_de_courant(self):
+        """La securite d'origine tient toujours : six LED en blanc, appui
+        compris, ne doivent pas approcher les 500 mA du port USB."""
+        import rgb
+        pire = rgb.limiter(rgb._attenuer(
+            (255, 255, 255), C.RGB_RESPIRATION_MAX + C.RGB_IMPULSION_MAX))
+        # 20 mA par canal a fond, trois canaux, six LED.
+        courant = sum(pire) / 255.0 * 20 * C.RGB_COUNT
+        self.assertLess(courant, 200, "%d mA pour les LED seules" % courant)
+
     # --- le test de cablage du REPL --------------------------------------
     def test_diag_rgb_parcourt_toutes_les_led(self):
         """diag.rgb() sert a compter les LED qui repondent vraiment."""
@@ -2909,8 +3000,7 @@ class LedsRgb(unittest.TestCase):
         objet = self._rgb()
         objet.profil(C.RGB_COULEURS["CIVIL3D"])
         objet.tick(100)
-        import rgb
-        r, v, b = rgb.limiter(C.RGB_COULEURS["CIVIL3D"])
+        r, v, b = self._repos(C.RGB_COULEURS["CIVIL3D"])
         # Anode commune : le GPIO tire vers le bas, donc c'est inverse.
         self.assertEqual(objet.materiel[0].values[-1], 65535 - r * 257)
         self.assertEqual(objet.materiel[1].values[-1], 65535 - v * 257)

@@ -89,13 +89,22 @@ def respiration(phase_ms):
     ne fait que passer par le maximum - c'est ce qui donne une
     respiration plutot qu'un clignotement.
 
+    LE PLAFOND N'EST PAS 1.0, ET C'EST VOLONTAIRE. Au repos la couleur
+    monte au plus a RGB_RESPIRATION_MAX, ce qui laisse de la place
+    au-dessus pour l'appui. Sans cette reserve, une couleur dont un canal
+    vaut 255 - le bleu de CIVIL3D, par exemple - touchait deja le plafond
+    de courant au sommet du cycle : l'appui ne pouvait plus l'eclaircir,
+    il ne faisait que DELAVER les autres canaux. Sur un bleu pur, il
+    n'aurait rien fait du tout.
+
     Fonction pure : elle ne depend que de son argument, donc elle se teste
     sans la moindre LED.
     """
     periode = getattr(C, "RGB_RESPIRATION_MS", 4000)
-    plancher = getattr(C, "RGB_RESPIRATION_MIN", 0.35)
+    plancher = getattr(C, "RGB_RESPIRATION_MIN", 0.25)
+    plafond = getattr(C, "RGB_RESPIRATION_MAX", 0.55)
     onde = (1 - cos(2 * pi * (phase_ms % periode) / periode)) / 2
-    return plancher + (1.0 - plancher) * onde ** 1.6
+    return plancher + (plafond - plancher) * onde ** 1.6
 
 
 class Rgb:
@@ -260,7 +269,11 @@ class Rgb:
         # impulsions des touches s'AJOUTENT par-dessus : un appui monte
         # donc pareil, que la respiration soit en haut ou en bas de son
         # cycle. C'est ce qu'on attend d'un retour visuel.
-        souffle = 1.0
+        # Le niveau de REPOS, respiration ou pas. Il ne vaut jamais 1.0 :
+        # tout ce qui reste au-dessus appartient a l'appui. Une couleur
+        # figee a 1.0 rendrait exactement le defaut d'origine - la touche
+        # appuyee ne se distinguerait plus des autres.
+        souffle = getattr(C, "RGB_RESPIRATION_MAX", 0.55)
         if getattr(C, "RGB_RESPIRATION", True):
             souffle = respiration(self._phase)
 

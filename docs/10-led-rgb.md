@@ -79,6 +79,50 @@ simples avant d'acheter un level-shifter :
 
 ---
 
+## 10.1 ter La réserve d'appui — pourquoi la respiration ne monte pas à fond
+
+Au repos, la couleur monte au plus à **`RGB_RESPIRATION_MAX` (0,55)**.
+Tout ce qui reste au-dessus est **réservé à l'appui**.
+
+Ce n'est pas de la coquetterie. Le plafond de courant s'applique **canal
+par canal** : une couleur dont un canal vaut déjà 255 — le bleu de
+CIVIL3D, par exemple — **touchait le plafond au sommet de la
+respiration**. L'appui ne pouvait plus l'éclaircir ; il ne faisait que
+monter les *autres* canaux, c'est-à-dire **délaver la couleur** au lieu de
+l'éclairer.
+
+| | Avant | Après |
+|---|---|---|
+| repos, sommet du cycle | `(0, 25, 40)` | `(0, 13, 21)` |
+| appui | `(0, 40, 40)` | `(0, 25, 40)` |
+| gain de lumière | **+23 %**, teinte délavée | **+91 %**, teinte inchangée |
+
+Sur un **bleu pur** `(0, 0, 255)` — que le sélecteur de couleur de la page
+web rend très facile à choisir — l'appui ne faisait **rien du tout**.
+
+Les trois réglages vont ensemble :
+
+```python
+RGB_RESPIRATION_MIN = 0.25   # creux de la respiration
+RGB_RESPIRATION_MAX = 0.55   # sommet AU REPOS ; le reste est la réserve
+RGB_IMPULSION       = 0.45   # 0,55 + 0,45 = 1,00 : la couleur PLEINE
+```
+
+Un appui amène donc la touche **exactement à la couleur nominale du
+profil**, où qu'on en soit dans le cycle. Prévisible, et sans changement
+de teinte.
+
+> **Si tu veux un pad plus lumineux au repos**, monte `RGB_RESPIRATION_MAX`
+> — mais tu reprends d'autant la réserve de l'appui, et à `1.0` tu
+> retrouves le défaut d'origine. Monte plutôt `RGB_LUMINOSITE`, en
+> surveillant le courant (section 10.2).
+
+La réserve existe **aussi quand `RGB_RESPIRATION = False`** : une couleur
+figée se pose à `RGB_RESPIRATION_MAX`, pas à 1,0. Sans quoi couper la
+respiration ramènerait exactement le même problème.
+
+---
+
 ## 10.2 Le vrai danger : le courant
 
 Une WS2812 en **blanc à fond** tire **60 mA**. Six touches :
