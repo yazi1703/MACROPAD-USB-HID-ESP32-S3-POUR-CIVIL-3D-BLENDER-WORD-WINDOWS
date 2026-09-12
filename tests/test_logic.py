@@ -2085,6 +2085,77 @@ class ControleGeneral(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("combos", texte)
 
+    def test_controle_signale_un_clavier_jamais_ouvert(self):
+        """Le cas reel : les touches repondent, mais rien n'est tape.
+
+        "interface non prete" a chaque appui est exact et inutilisable.
+        Le controle doit nommer la cause : le mauvais port USB-C.
+        """
+        import runtime
+
+        class InterfaceFermee:
+            def is_open(self):
+                return False
+
+        with patch.object(runtime, 'safe_mode', False), \
+             patch.object(runtime, 'config_mode', False), \
+             patch.object(runtime, 'interface', InterfaceFermee()):
+            ok, texte = self._controle()
+        self.assertFalse(ok)
+        self.assertIn("NE L'A PAS OUVERT", texte)
+        self.assertIn("port USB-C", texte)
+
+    def test_controle_accepte_un_clavier_ouvert(self):
+        import runtime
+
+        class InterfaceOuverte:
+            def is_open(self):
+                return True
+
+        with patch.object(runtime, 'safe_mode', False), \
+             patch.object(runtime, 'config_mode', False), \
+             patch.object(runtime, 'interface', InterfaceOuverte()):
+            _ok, texte = self._controle()
+        self.assertIn("OUVERT par Windows", texte)
+
+    def test_l_ecran_affiche_USB_quand_le_clavier_n_est_pas_ouvert(self):
+        """Un « ... » ne disait rien. « USB? » envoie regarder le cable."""
+        import main, runtime
+        transport = Transport()
+        transport.open = False          # Windows n'ouvre jamais l'interface
+        etats = []
+
+        def sleep_simule(ms):
+            clock[0] += ms
+            if clock[0] >= 7000:
+                raise KeyboardInterrupt()
+
+        import display as _display
+        original = _display.Display.set_etat
+
+        def espion(self, etat):
+            etats.append(etat)
+            original(self, etat)
+        _display.Display.set_etat = espion
+        sortie = io.StringIO()
+        try:
+            with patch.object(runtime, 'interface', transport), \
+                 patch.object(runtime, 'safe_mode', False), \
+                 patch.object(runtime, 'config_mode', False), \
+                 patch.object(main, 'sleep_ms', sleep_simule), \
+                 patch('sys.stdout', sortie):
+                with self.assertRaises(KeyboardInterrupt):
+                    main.run()
+        finally:
+            _display.Display.set_etat = original
+
+        self.assertIn("USB?", etats, etats)
+        # Et le REPL explique la cause, UNE seule fois.
+        texte = sortie.getvalue()
+        self.assertEqual(texte.count("N'A PAS OUVERT LE CLAVIER USB"), 1)
+        self.assertIn("port USB-C", texte)
+        self.assertIn("ESP-ROM:", texte)
+
     def test_controle_signale_deux_roles_sur_une_meme_broche(self):
         """L'erreur qu'on fait en corrigeant un numero a la main.
 

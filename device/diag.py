@@ -174,7 +174,21 @@ def controle():
           "   (B1 maintenu au RESET : aucun clavier, aucune liaison)")
     print("   MODE CONFIG :", runtime.config_mode,
           "   (B2 maintenu au RESET : WiFi, aucune liaison serie)")
-    print("   clavier USB :", "cree" if runtime.interface else "ABSENT")
+    if runtime.interface is None:
+        print("   clavier USB : ABSENT (non cree au demarrage)")
+    else:
+        try:
+            ouvert = runtime.interface.is_open()
+        except Exception as exc:
+            ouvert = None
+            print("   clavier USB : cree, etat illisible (%s)" % exc)
+        if ouvert is True:
+            print("   clavier USB : cree et OUVERT par Windows")
+        elif ouvert is False:
+            print("   clavier USB : cree mais Windows NE L'A PAS OUVERT")
+            soucis.append("Windows n'a pas ouvert le clavier USB : c'est "
+                          "presque toujours le mauvais port USB-C (il faut "
+                          "le port NATIF, pas le port UART/COM)")
     if runtime.hid_error:
         soucis.append("erreur HID au demarrage : %s" % runtime.hid_error)
         print("   erreur HID :", runtime.hid_error)

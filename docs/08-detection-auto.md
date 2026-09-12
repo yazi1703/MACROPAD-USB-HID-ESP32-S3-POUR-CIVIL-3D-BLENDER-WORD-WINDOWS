@@ -326,6 +326,8 @@ le firmware normalement**, tu ne perds pas cette porte de sortie.
 | Symptôme | Cause probable |
 |---|---|
 | **Les LED sont éteintes ET le compagnon ne voit rien** | une seule cause en amont, pas deux pannes : lance `import diag` puis `diag.controle()` |
+| **`HID : action ignoree, interface non prete`** | Windows n'a pas ouvert le clavier. Le port **UART/COM** donne un REPL parfait dans Thonny et **rien d'autre** : il faut le port **NATIF**. L'indice qui tranche : des lignes `ESP-ROM:` au démarrage = tu es sur le port UART |
+| **L'écran ne suit pas le logiciel, mais le compagnon l'affiche bien** | le compagnon lit la fenêtre active **localement** — ça marche sans la carte. C'est l'**envoi** qui échoue : même cause que « macropad non connecte » |
 | `macropad non connecte : … aucun port Espressif (VID 0x303A)` | le port **natif** n'est pas branché — c'est le port marqué USB, pas COM/UART |
 | `macropad non connecte : Port COMx indisponible (Acces refuse)` | quelque chose tient déjà ce port : Thonny le plus souvent. Bouton STOP, ou bascule Thonny sur le port UART |
 | `macropad non connecte : pyserial n'est pas installe` | `py -m pip install pyserial` |

@@ -291,6 +291,9 @@ Toutes les animations sont pilotées par comparaison de dates dans
 | Le double appui n'est jamais reconnu | tu appuies trop lentement : augmente `GESTE_DOUBLE_MS` |
 | L'appui long part alors que je voulais un court | tu restes appuyé plus de 400 ms : augmente `GESTE_LONG_MS` |
 | Le tableau ne défile pas | le profil tient sur quatre lignes : normal |
+| En haut à droite : `USB?` | Windows n'a pas ouvert le clavier — presque toujours le **mauvais port USB-C** (il faut le port NATIF, pas UART/COM) |
+| En haut à droite : `LOCK` | tu as verrouillé le profil : le PC ne peut plus le changer. Touche les deux TTP223 **ensemble** pour libérer |
+| En haut à droite : `HID` au lieu de `AUTO` | le compagnon PC n'atteint pas la carte : Thonny tient le port, ou mauvais port USB-C |
 | L'écran est très pâle | économiseur : plus de 3 minutes sans appui. Appuie sur une touche |
 | L'écran est noir | plus de 15 minutes sans appui. Un appui le rallume |
 | La colonne du milieu affiche `-` partout | aucune macro longue définie dans ce profil |

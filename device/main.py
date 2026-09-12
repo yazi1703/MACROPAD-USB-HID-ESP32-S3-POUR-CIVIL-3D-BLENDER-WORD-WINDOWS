@@ -92,6 +92,39 @@ def reglage(nom, defaut):
     return defaut
 
 
+def expliquer_usb_muet():
+    """Windows n'a pas ouvert le clavier : dire POURQUOI, une seule fois.
+
+    Le firmware affichait "HID : action ignoree, interface non prete" a
+    chaque appui. C'est exact, et c'est inutilisable : ca ne dit pas que
+    la cause est presque toujours le CHOIX DU PORT USB-C.
+
+    La carte en a deux, et ils ne font pas la meme chose. Seul le port
+    NATIF est relie au S3 : c'est le seul qui puisse presenter un clavier
+    a Windows, et le seul que le compagnon PC sache trouver. Branche sur
+    le port UART, on a un REPL parfaitement fonctionnel dans Thonny... et
+    rien d'autre. Tout marche sauf l'essentiel.
+    """
+    print("=" * 46)
+    print(" WINDOWS N'A PAS OUVERT LE CLAVIER USB")
+    print("=" * 46)
+    print("Les touches sont bien lues - tu vois leur nom ci-dessus - mais")
+    print("rien ne peut etre tape tant que Windows n'a pas ouvert le")
+    print("clavier. Le macropad n'y peut rien tout seul.")
+    print("")
+    print("CAUSE HABITUELLE : le mauvais port USB-C. La carte en a deux.")
+    print("   port USB NATIF (relie au S3) : clavier + compagnon PC")
+    print("   port UART / COM (pont serie) : Thonny, et rien d'autre")
+    print("")
+    print("L'INDICE QUI TRANCHE : si le demarrage affiche des lignes")
+    print("'ESP-ROM:' et 'mode:DIO', tu es sur le port UART. Le port natif,")
+    print("lui, ne montre jamais ces lignes.")
+    print("")
+    print("Rebranche le cable sur l'AUTRE port USB-C, puis RESET.")
+    print("L'ecran affiche USB? tant que le clavier n'est pas ouvert.")
+    print("=" * 46)
+
+
 def annoncer_etat():
     """Les interrupteurs qui expliquent 'rien ne marche', d'un coup d'oeil."""
     print("-" * 46)
@@ -344,6 +377,7 @@ def run():
         display.message("HID ERROR", "VOIR REPL")
 
     demarre = ticks_ms()
+    prevenu_usb = False
     arme = False
     etait_pret = False
     etat_affiche = None
@@ -462,6 +496,14 @@ def run():
                     controls.disarm_held()
                 etait_pret = pret
 
+            # Windows a largement le temps d'ouvrir le clavier en 5 s. Au
+            # dela, ce n'est plus de l'attente : c'est une panne, et elle
+            # merite une explication plutot qu'une ligne par appui.
+            if (keyboard and not prevenu_usb and not keyboard.opened
+                    and ticks_diff(now, demarre) > 5000):
+                prevenu_usb = True
+                expliquer_usb_muet()
+
             if ticks_diff(now, dernier_controle) >= 250:
                 dernier_controle = now
                 auto = (dernier_auto is not None
@@ -472,6 +514,10 @@ def run():
                     etat = "OFF"
                 elif keyboard.fault:
                     etat = "ERR"
+                elif not keyboard.opened:
+                    # Windows n'a pas ouvert le clavier. Un "..." ne disait
+                    # rien ; "USB?" envoie regarder le cable.
+                    etat = "USB?"
                 elif not keyboard.ready():
                     etat = "..."
                 elif auto:
