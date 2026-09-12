@@ -347,6 +347,158 @@ class Corrections(unittest.TestCase):
 
 
 
+class BugRechargementPendantUneMacro(unittest.TestCase):
+    """Panne constatee a l'usage : ecran ERR, plus une seule touche.
+
+    Survenue en pleine configuration - enregistrer depuis la page web,
+    puis appuyer sur quelques touches. Le garde-fou HID coupe tout quand
+    rien n'avance pendant HID_TIMEOUT_MS. Il mesure une duree : encore
+    faut-il que cette duree soit passee A ESSAYER D'ENVOYER.
+
+    Quand la boucle principale s'absente une seconde - relecture de
+    profils.json apres un enregistrement, ecriture des compteurs sur la
+    flash - ce temps-la n'a RIEN a voir avec l'USB. Le faire compter
+    declenchait une panne imaginaire, definitive jusqu'au RESET.
+
+    C'est la meme famille que le bug du changement de profil ci-dessous,
+    mais par un autre chemin : celui-la resettait progress dans cancel(),
+    le rechargement n'appelait pas cancel() du tout.
+    """
+
+    def setUp(self):
+        clock[0] = 0
+        Pin.levels = {}
+        try:
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    def test_une_absence_de_la_boucle_ne_declenche_pas_de_panne(self):
+        """Le coeur du defaut, au niveau du clavier seul."""
+        t = Transport()
+        k = HIDKeyboard(t)
+        k.tick(0)
+        k.submit([('text', 'abcdef')])
+        pump(k, 2, 20)                   # la macro demarre
+        self.assertNotEqual(k.phase, "idle")
+        # La boucle principale part relire profils.json : 1,5 s sans un
+        # seul passage ici. L'USB, lui, va parfaitement bien.
+        k.tick(1600)
+        self.assertFalse(k.fault, "panne imaginaire : la boucle etait ailleurs")
+        # Et la macro reprend son cours.
+        pump(k, 1602, 400)
+        self.assertTrue(k.idle())
+
+    def test_un_vrai_blocage_usb_reste_detecte(self):
+        """La correction ne doit pas avoir desarme le garde-fou.
+
+        Difference decisive avec le test precedent : ici tick() est appele
+        SANS ARRET. Le temps passe l'est bien a essayer d'envoyer.
+        """
+        t = Transport()
+        k = HIDKeyboard(t)
+        k.tick(0)
+        k.submit([('text', 'abc')])
+        t.blocked = True
+        pump(k, 2, 3000)
+        self.assertTrue(k.fault)
+
+    def _boucle_avec_rechargement(self, duree_rechargement, tenir_b1=False):
+        """Fait tourner main.run() avec un rechargement lent en plein vol.
+
+        tenir_b1 garde le POUCE - la touche modificatrice - enfonce
+        pendant tout le rechargement.
+        """
+        import main, runtime, store, link
+        transport = Transport()
+        vu = {}
+        demarre = [False]
+
+        def sleep_simule(ms):
+            clock[0] += ms
+            # B4 : un appui court, donc une macro qui se deroule.
+            Pin.levels[7] = 0 if 2600 <= clock[0] < 2700 else 1
+            if tenir_b1:
+                # B1 (GPIO4) tenu tout au long du rechargement, et relache
+                # apres : c'est le pire moment pour changer la table des
+                # touches sous les doigts.
+                Pin.levels[4] = 0 if 2700 <= clock[0] < 3500 else 1
+            # Instantane PENDANT la boucle : le bloc finally de main.run()
+            # appelle close(), qui relache tout. Constater apres coup ne
+            # prouverait donc rien.
+            if clock[0] >= 4000 and 'tenus' not in vu and vu.get('clavier'):
+                vu['tenus'] = vu['clavier'].tenus
+            if clock[0] >= 6000:
+                raise KeyboardInterrupt()
+
+        vrai_charger = store.charger
+
+        def charger_lent(nb):
+            # Le chargement du DEMARRAGE reste instantane ; seul celui du
+            # rechargement prend du temps.
+            if demarre[0]:
+                clock[0] += duree_rechargement
+            return vrai_charger(nb)
+
+        def faux_service(self):
+            demarre[0] = True
+            if 2800 <= clock[0] < 2810:
+                return [(link.EVT_RECHARGER, None)]
+            return []
+
+        origine = main.HIDKeyboard.__init__
+
+        def espion(self, interface):
+            origine(self, interface)
+            vu['clavier'] = self
+        main.HIDKeyboard.__init__ = espion
+        try:
+            with patch.object(runtime, 'interface', transport), \
+                 patch.object(runtime, 'safe_mode', False), \
+                 patch.object(runtime, 'config_mode', False), \
+                 patch.object(main, 'sleep_ms', sleep_simule), \
+                 patch.object(store, 'charger', charger_lent), \
+                 patch.object(link.Link, 'service', faux_service):
+                with self.assertRaises(KeyboardInterrupt):
+                    main.run()
+        finally:
+            main.HIDKeyboard.__init__ = origine
+        return vu
+
+    def test_le_rechargement_lent_ne_coupe_plus_le_clavier(self):
+        """Le scenario reel, dans la VRAIE boucle de main.py.
+
+        Sans la correction, ce test affiche "ERREUR CRITIQUE HID :
+        transfert sans progression" et le clavier reste mort.
+        """
+        self.assertFalse(self._boucle_avec_rechargement(1200)['clavier'].fault)
+        # Meme un rechargement absurde de cinq secondes ne doit rien casser.
+        self.assertFalse(self._boucle_avec_rechargement(5000)['clavier'].fault)
+
+    def test_un_rechargement_instantane_ne_changeait_deja_rien(self):
+        """Temoin : sans lenteur, il n'y avait jamais de panne."""
+        self.assertFalse(self._boucle_avec_rechargement(0)['clavier'].fault)
+
+    def test_le_rechargement_relache_le_modificateur_tenu(self):
+        """Un Ctrl tenu pendant un rechargement resterait enfonce.
+
+        gestes.configurer() remet toutes les touches au repos : le
+        relachement du pouce ne produit alors plus AUCUN geste, donc plus
+        aucun relacher_maintien(). Sans le cancel() de recharger_profils(),
+        Ctrl restait enfonce cote Windows - la pire panne possible, et
+        silencieuse.
+
+        On le verifie dans la vraie boucle, pas sur cancel() isole : c'est
+        justement l'APPEL qui manquait.
+        """
+        vu = self._boucle_avec_rechargement(0, tenir_b1=True)
+        self.assertFalse(vu['clavier'].fault)
+        self.assertEqual(vu.get('tenus'), (),
+                         "un modificateur est reste enfonce cote Windows")
+
+
 class BugChangementDeProfil(unittest.TestCase):
     """Panne constatee sur le materiel : un changement de profil apres un
     moment de repos declenchait « transfert sans progression » et bloquait

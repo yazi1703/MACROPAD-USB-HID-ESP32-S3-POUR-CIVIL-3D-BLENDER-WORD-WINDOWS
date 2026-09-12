@@ -68,6 +68,7 @@ REGLAGES_NEUFS = (
     ("COMBO_FLASH_MS", 1200),
     ("RGB_RESPIRATION_MAX", 0.55),
     ("ESC_MAINTIEN_MS", 700),
+    ("HID_HORS_BOUCLE_MS", 100),
 )
 _manquants = []
 
@@ -296,6 +297,13 @@ def run():
         except Exception as exc:
             print("[main] configuration refusee, on garde l'ancienne :", exc)
             return
+        if keyboard:
+            # Meme raison qu'au changement de profil : la macro en cours a
+            # ete compilee avec l'ANCIENNE configuration, et un Ctrl tenu
+            # par une touche qui vient de changer de role ne serait jamais
+            # relache. cancel() remet aussi le chronometre du garde-fou a
+            # zero, ce qui est bienvenu apres une relecture de fichier.
+            keyboard.cancel()
         manager, titres, ordre = nouveau, titres_neufs, ordre_neuf
         couleurs = couleurs_neuves
         couleurs2 = secondes_neuves

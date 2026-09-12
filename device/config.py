@@ -366,6 +366,14 @@ KEY_GAP_MS = 12
 PAUSE_MAX_MS = 5000
 
 HID_TIMEOUT_MS = 1000
+# Au-dela de ce silence ENTRE DEUX PASSAGES dans hid_keyboard.tick(), on
+# considere que la boucle principale etait occupee ailleurs (relecture de
+# profils.json, ecriture des compteurs) et non que l'USB est bloque : le
+# chronometre du garde-fou ci-dessus avance d'autant.
+#
+# La boucle tourne toutes les 2 ms : 100 ms sont deja enormes pour elle,
+# et minuscules pour un vrai blocage USB, qui appelle tick() sans arret.
+HID_HORS_BOUCLE_MS = 100
 
 # Nombre maximal de macros en attente. Au-delà, les appuis sont ignorés
 # plutôt que mémorisés : mieux vaut perdre un appui que voir dix commandes

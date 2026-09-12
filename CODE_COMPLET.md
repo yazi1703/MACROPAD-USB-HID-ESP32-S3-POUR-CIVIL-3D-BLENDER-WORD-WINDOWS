@@ -40,7 +40,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`413 lignes - sha256 0098603114ad97a9`
+`421 lignes - sha256 6cc5a20c29cf29c5`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -411,6 +411,14 @@ KEY_GAP_MS = 12
 PAUSE_MAX_MS = 5000
 
 HID_TIMEOUT_MS = 1000
+# Au-dela de ce silence ENTRE DEUX PASSAGES dans hid_keyboard.tick(), on
+# considere que la boucle principale etait occupee ailleurs (relecture de
+# profils.json, ecriture des compteurs) et non que l'USB est bloque : le
+# chronometre du garde-fou ci-dessus avance d'autant.
+#
+# La boucle tourne toutes les 2 ms : 100 ms sont deja enormes pour elle,
+# et minuscules pour un vrai blocage USB, qui appelle tick() sans arret.
+HID_HORS_BOUCLE_MS = 100
 
 # Nombre maximal de macros en attente. Au-delà, les appuis sont ignorés
 # plutôt que mémorisés : mieux vaut perdre un appui que voir dix commandes
@@ -947,7 +955,7 @@ else:
 
 ## device/main.py
 
-`627 lignes - sha256 e7909f7d23f7ba15`
+`635 lignes - sha256 1269b00e984a9292`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1020,6 +1028,7 @@ REGLAGES_NEUFS = (
     ("COMBO_FLASH_MS", 1200),
     ("RGB_RESPIRATION_MAX", 0.55),
     ("ESC_MAINTIEN_MS", 700),
+    ("HID_HORS_BOUCLE_MS", 100),
 )
 _manquants = []
 
@@ -1248,6 +1257,13 @@ def run():
         except Exception as exc:
             print("[main] configuration refusee, on garde l'ancienne :", exc)
             return
+        if keyboard:
+            # Meme raison qu'au changement de profil : la macro en cours a
+            # ete compilee avec l'ANCIENNE configuration, et un Ctrl tenu
+            # par une touche qui vient de changer de role ne serait jamais
+            # relache. cancel() remet aussi le chronometre du garde-fou a
+            # zero, ce qui est bienvenu apres une relecture de fichier.
+            keyboard.cancel()
         manager, titres, ordre = nouveau, titres_neufs, ordre_neuf
         couleurs = couleurs_neuves
         couleurs2 = secondes_neuves
@@ -4524,7 +4540,7 @@ class Link:
 
 ## device/hid_keyboard.py
 
-`410 lignes - sha256 13031ed1b417628f`
+`435 lignes - sha256 ed6650910bd594a5`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -4599,6 +4615,10 @@ class HIDKeyboard:
         self.phase = "idle"
         self.due = ticks_ms()
         self.progress = self.due
+        # Instant du dernier passage dans tick(). Sert a distinguer "l'USB
+        # ne repond plus" de "la boucle principale etait occupee ailleurs" :
+        # voir le garde-fou dans tick().
+        self.dernier_tick = self.due
         self.opened = False            # Windows a-t-il configuré le clavier ?
         self.release_needed = True     # par sécurité on commence par tout relâcher
         self.keys_down = False         # des touches sont-elles enfoncées côté PC ?
@@ -4766,6 +4786,27 @@ class HIDKeyboard:
     # ------------------------------------------------------------------
     def tick(self, now):
         try:
+            # LE TEMPS PASSE HORS D'ICI N'EST PAS IMPUTABLE A L'USB.
+            #
+            # Le garde-fou plus bas coupe tout quand rien n'avance pendant
+            # HID_TIMEOUT_MS. Il mesure une duree : encore faut-il que
+            # cette duree soit passee A ESSAYER D'ENVOYER. Si la boucle
+            # principale s'absente une seconde - relecture de profils.json
+            # apres un enregistrement depuis la page web, ecriture des
+            # compteurs sur la flash - ce temps-la n'a RIEN a voir avec
+            # l'USB, et le faire compter declenchait une panne imaginaire :
+            # ecran ERR, plus une touche, RESET obligatoire. Panne
+            # constatee a l'usage, en pleine configuration.
+            #
+            # On avance donc l'horloge du garde-fou du meme ecart. Un vrai
+            # blocage USB, lui, appelle tick() toutes les 2 ms sans jamais
+            # progresser : l'ecart reste minuscule et le garde-fou joue
+            # toujours son role.
+            absence = ticks_diff(now, self.dernier_tick)
+            self.dernier_tick = now
+            if absence > getattr(C, "HID_HORS_BOUCLE_MS", 100):
+                self.progress = ticks_add(self.progress, absence)
+
             opened = self.interface.is_open()
 
             if not opened:
@@ -6023,7 +6064,7 @@ def limiter(couleur):
 
 ## device/diag.py
 
-`738 lignes - sha256 50aa712ffbe026c4`
+`739 lignes - sha256 ba3118177db84e29`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -6090,6 +6131,7 @@ REGLAGES_ATTENDUS = (
     ("config", "DOIGTS"),
     ("config", "RGB_RESPIRATION_MAX"),
     ("config", "RGB_COULEURS2"),
+    ("config", "HID_HORS_BOUCLE_MS"),
     ("profiles", "COMBO_LABEL_MAX"),
     ("profiles", "COMBOS"),
 )

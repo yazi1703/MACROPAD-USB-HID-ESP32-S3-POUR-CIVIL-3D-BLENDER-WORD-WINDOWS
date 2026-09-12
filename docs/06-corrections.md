@@ -580,6 +580,71 @@ diagnosticable en une seconde au lieu d'une heure.
 
 ---
 
+## Correction 15 — `ERR` à l'écran, plus une seule touche (trouvée à l'usage)
+
+**Le symptôme.** En pleine configuration : enregistrer depuis la page web,
+appuyer sur quelques touches — la première passe, puis l'écran affiche
+`ERR` et **plus rien ne répond**. Jusqu'au RESET.
+
+**La cause.** Le garde-fou HID coupe tout quand rien n'avance pendant
+`HID_TIMEOUT_MS` (1 s), pour ne jamais laisser une touche enfoncée si
+l'USB se bloque. Il mesure une **durée**. Encore faut-il que cette durée
+ait été passée **à essayer d'envoyer**.
+
+Or la boucle principale s'absente parfois une seconde entière — et pour
+d'excellentes raisons :
+
+| Ce qui bloque la boucle | Quand |
+|---|---|
+| relire et analyser `profils.json` | après chaque enregistrement depuis la page |
+| écrire les compteurs sur la flash | tous les 25 appuis |
+
+Ce temps-là n'a **rien** à voir avec l'USB. Le faire compter déclenchait
+une panne **imaginaire**, et définitive.
+
+```
+ERREUR CRITIQUE HID : transfert sans progression - macros arretees, RESET requis
+```
+
+C'est la même famille que la **correction 10** (un changement de profil
+après un moment de repos déclenchait la même panne). Là, le correctif
+avait été de remettre le chronomètre à zéro dans `cancel()`. Mais le
+chemin du **rechargement n'appelait pas `cancel()` du tout** — et il
+restait tous les autres blocages possibles.
+
+**La correction, cette fois générale.** `tick()` mesure désormais le temps
+écoulé **depuis son propre appel précédent**. Au-delà de
+`HID_HORS_BOUCLE_MS` (100 ms), c'est que la boucle principale était
+ailleurs : le chronomètre du garde-fou avance d'autant.
+
+```python
+absence = ticks_diff(now, self.dernier_tick)
+self.dernier_tick = now
+if absence > C.HID_HORS_BOUCLE_MS:
+    self.progress = ticks_add(self.progress, absence)
+```
+
+Un **vrai** blocage USB, lui, appelle `tick()` toutes les 2 ms sans jamais
+progresser : l'écart reste minuscule, aucun pardon, le garde-fou joue
+toujours son rôle. C'est ce qui rend la correction sûre, et deux tests
+l'encadrent dans les deux sens.
+
+**Et une seconde panne, silencieuse celle-là.** `recharger_profils()`
+n'appelait pas `keyboard.cancel()`. Or il remet toutes les touches au
+repos : si tu **tenais** la touche modificatrice à cet instant, son
+relâchement ne produisait plus aucun geste — donc plus aucun
+`relacher_maintien()`. **Ctrl restait enfoncé côté Windows**, sans rien
+pour le signaler. Corrigé du même coup.
+
+**Les tests.** Cinq, dont trois qui font tourner la **vraie boucle** de
+`main.py` avec un rechargement lent en plein vol. Trois mutations ont été
+vérifiées : recompter le temps hors boucle, tout pardonner (y compris un
+vrai blocage), et retirer le `cancel()` — chacune fait échouer un test
+différent. Le dernier échoue avec `(-1,) != ()` : le code du Ctrl resté
+enfoncé.
+
+---
+
 ## Ce qui n'a PAS été touché
 
 - La structure `device/` et les quatre fichiers USB officiels recopiés :

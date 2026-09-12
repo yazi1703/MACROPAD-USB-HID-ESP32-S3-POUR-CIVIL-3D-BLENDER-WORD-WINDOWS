@@ -70,6 +70,10 @@ class HIDKeyboard:
         self.phase = "idle"
         self.due = ticks_ms()
         self.progress = self.due
+        # Instant du dernier passage dans tick(). Sert a distinguer "l'USB
+        # ne repond plus" de "la boucle principale etait occupee ailleurs" :
+        # voir le garde-fou dans tick().
+        self.dernier_tick = self.due
         self.opened = False            # Windows a-t-il configuré le clavier ?
         self.release_needed = True     # par sécurité on commence par tout relâcher
         self.keys_down = False         # des touches sont-elles enfoncées côté PC ?
@@ -237,6 +241,27 @@ class HIDKeyboard:
     # ------------------------------------------------------------------
     def tick(self, now):
         try:
+            # LE TEMPS PASSE HORS D'ICI N'EST PAS IMPUTABLE A L'USB.
+            #
+            # Le garde-fou plus bas coupe tout quand rien n'avance pendant
+            # HID_TIMEOUT_MS. Il mesure une duree : encore faut-il que
+            # cette duree soit passee A ESSAYER D'ENVOYER. Si la boucle
+            # principale s'absente une seconde - relecture de profils.json
+            # apres un enregistrement depuis la page web, ecriture des
+            # compteurs sur la flash - ce temps-la n'a RIEN a voir avec
+            # l'USB, et le faire compter declenchait une panne imaginaire :
+            # ecran ERR, plus une touche, RESET obligatoire. Panne
+            # constatee a l'usage, en pleine configuration.
+            #
+            # On avance donc l'horloge du garde-fou du meme ecart. Un vrai
+            # blocage USB, lui, appelle tick() toutes les 2 ms sans jamais
+            # progresser : l'ecart reste minuscule et le garde-fou joue
+            # toujours son role.
+            absence = ticks_diff(now, self.dernier_tick)
+            self.dernier_tick = now
+            if absence > getattr(C, "HID_HORS_BOUCLE_MS", 100):
+                self.progress = ticks_add(self.progress, absence)
+
             opened = self.interface.is_open()
 
             if not opened:

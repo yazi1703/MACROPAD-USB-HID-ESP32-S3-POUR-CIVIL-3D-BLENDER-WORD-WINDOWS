@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 288 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 293 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 288 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  258 pour le firmware, 30 pour le compagnon Windows.
+- 293 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  263 pour le firmware, 30 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -70,6 +70,20 @@ sur GPIO30 - l'horloge de la flash - et on verifie que `diag.broches()`
 la SIGNALE sans jamais construire le `Pin`, avec un faux Pin qui echoue si
 on l'appelle. Creer un Pin sur la flash suffit a faire tomber la carte :
 l'outil de diagnostic ne doit pas etre ce qui la fait tomber.
+
+**LA PANNE IMAGINAIRE DU GARDE-FOU** (`BugRechargementPendantUneMacro`,
+5 tests). Correction 15, constatee a l'usage : ecran ERR et plus une seule
+touche, apres un enregistrement depuis la page web. Le garde-fou HID
+comptait comme un blocage USB le temps passe HORS de la boucle - relire
+profils.json, ecrire les compteurs sur la flash. Trois de ces tests font
+tourner la VRAIE boucle de main.py avec un rechargement lent en plein vol,
+jusqu'a cinq secondes. Les deux autres encadrent la correction dans les
+deux sens : une absence de la boucle ne doit PAS declencher la panne, un
+vrai blocage USB - ou tick() est appele sans arret - doit TOUJOURS la
+declencher. Le cinquieme attrape la panne silencieuse qui accompagnait la
+premiere : un modificateur tenu pendant un rechargement restait enfonce
+cote Windows, et il echoue avec (-1,) != () - le code du Ctrl coince.
+Trois mutations verifiees.
 
 **CE QUE LA PAGE PEUT REGLER** (`LaPagePeutToutRegler`, 3 tests). Nes
 d'une question posee telle quelle : « je peux le faire depuis la page
@@ -409,7 +423,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 288 tests
+Ran 293 tests
 
 OK
 ```

@@ -62,6 +62,7 @@ REGLAGES_ATTENDUS = (
     ("config", "DOIGTS"),
     ("config", "RGB_RESPIRATION_MAX"),
     ("config", "RGB_COULEURS2"),
+    ("config", "HID_HORS_BOUCLE_MS"),
     ("profiles", "COMBO_LABEL_MAX"),
     ("profiles", "COMBOS"),
 )
