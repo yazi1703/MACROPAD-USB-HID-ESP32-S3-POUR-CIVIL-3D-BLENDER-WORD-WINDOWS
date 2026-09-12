@@ -299,6 +299,16 @@ Toutes les animations sont pilotées par comparaison de dates dans
 | La colonne du milieu affiche `-` partout | aucune macro longue définie dans ce profil |
 | Un résumé de macro est tronqué | 4 caractères par colonne de geste, c'est la largeur de l'écran. Le libellé, lui, en a 6 |
 
+> **Le gros bouton ESC a son propre maintien.** Échap part **dès
+> l'appui** — sa priorité est absolue et rien ne la lui prend. Mais s'il
+> reste enfoncé au-delà de `ESC_MAINTIEN_MS` (700 ms), il envoie **en
+> plus** la macro `ESC_MAINTIEN` de `profiles.py`, Ctrl+Z d'usine.
+>
+> Le seuil est plus long que `GESTE_LONG_MS` **volontairement** : un ESC
+> qu'on garde enfoncé par réflexe — le temps de voir si la commande
+> s'arrête bien — ne doit pas défaire du vrai travail. Elle ne part qu'une
+> fois par appui, quelle que soit la durée.
+
 > **Un quatrième geste existe : deux touches appuyées ensemble.** Il a son
 > propre fichier, parce qu'il pose une question à lui seul — comment
 > attendre le second doigt sans ralentir le premier :

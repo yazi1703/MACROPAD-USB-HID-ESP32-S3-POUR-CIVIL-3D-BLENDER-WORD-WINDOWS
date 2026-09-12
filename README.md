@@ -82,28 +82,55 @@ BLENDER  →  CIVIL3D  →  WORD  →  WINDOWS  →  BLENDER
 
 |  | BLENDER | CIVIL 3D | WORD | WINDOWS |
 |---|---|---|---|---|
-| **B1** | **Ctrl+C** | **Ctrl+C** | **Ctrl+C** | **Ctrl+C** |
-| **B2** | `R` | **Maj / Ctrl maintenus** | Ctrl+B | Alt+Tab |
-| **B3** | `S` | **F3** accrochages | Ctrl+I | Win+E |
-| **B4** | `Tab` | `_PLINE` + Entrée | Ctrl+U | Ctrl+Maj+Échap |
-| **B5** | `E` | `_ISOLATEOBJECTS` + Entrée | Ctrl+S | Win+V |
-| **B6** | `G` | `_SELECTSIMILAR` + Entrée | Ctrl+Maj+C | Win+Maj+S |
+| **B1** pouce | **Maj maintenue** | **Maj maintenue** | **Maj maintenue** | **Maj maintenue** |
+| **B2** index | **Ctrl+C** | **Ctrl+C** | **Ctrl+C** | **Ctrl+C** |
+| **B3** index | `S` | **F3** accrochages | Ctrl+I | Win+E |
+| **B4** majeur | `Tab` | `_PLINE` + Entrée | Ctrl+U | Ctrl+Maj+Échap |
+| **B5** annul. | `E` | `_ISOLATEOBJECTS` + Entrée | Ctrl+S | Win+V |
+| **B6** auric. | `G` | `_SELECTSIMILAR` + Entrée | Ctrl+Maj+C | Win+Maj+S |
 
-**La touche 1 est la même dans tous les profils** — copier / coller /
-annuler, comme ESC qui est déjà global :
+**B1 et B2 sont GLOBALES**, comme ESC : elles ne changent jamais de
+logiciel. Trois touches fixes, quatre touches qui suivent le profil.
 
-| Geste | B1, partout |
+**B1, le pouce, est une vraie touche modificatrice** — dans tous les
+profils. Elle ne tape rien : elle enfonce Maj ou Ctrl et les **garde
+enfoncés** tant que ton doigt reste dessus, pour que tu cliques à la
+souris pendant ce temps.
+
+| Ce que tu fais | Ce que le PC reçoit |
+|---|---|
+| tu appuies et tu **maintiens** | **Maj** enfoncée, relâchée quand tu lâches |
+| tu appuies **brièvement**, puis tu **maintiens** | **Ctrl** enfoncé, relâché quand tu lâches |
+
+**Elle est sur le pouce, et c'est tout l'intérêt** : le pouce se pose sur
+un autre plan que les quatre doigts, il peut donc rester appuyé sans
+rendre aucune autre touche inatteignable. Quand ce rôle était sur l'index,
+le maintenir bloquait B3 — même doigt — et donc trois combinaisons.
+
+**B2, l'index, est le presse-papiers** — dans tous les profils :
+
+| Geste | B2, partout |
 |---|---|
 | appui court | **Ctrl+C** copier |
 | double appui | **Ctrl+V** coller |
-| appui long | **Ctrl+Z** annuler |
+| appui long | la commande la plus utile du logiciel courant |
+
+**Et Ctrl+Z est passé sur le MAINTIEN du gros bouton ESC.** Échap part
+toujours **dès l'appui**, sans le moindre délai — c'est sa raison d'être.
+Mais si tu gardes le doigt dessus plus de 700 ms, il envoie **en plus**
+Ctrl+Z : on annule la commande, puis on défait ce qu'elle a laissé, d'un
+seul bouton et sans lâcher la souris.
 
 Les autres appuis longs et doubles des valeurs d'usine :
 
 | | Appui long | Double appui |
 |---|---|---|
+| **partout** B1 MAJ | — | **Ctrl maintenu** (voir ci-dessous) |
+| **BLENDER** B2 COPIER | `R` rotation | Ctrl+V |
+| **CIVIL 3D** B2 COPIER | Ctrl+X couper | Ctrl+V |
+| **WORD** B2 COPIER | Ctrl+B gras | Ctrl+V |
+| **WINDOWS** B2 COPIER | Alt+Tab | Ctrl+V |
 | **BLENDER** B6 `G` | Ctrl+Maj+Z rétablir | — |
-| **CIVIL 3D** B2 MAJ | — | **Ctrl maintenu** (voir ci-dessous) |
 | **CIVIL 3D** B3 F3 | `_ZOOM E` vue globale | — |
 | **CIVIL 3D** B4 PLINE | `_SPLINE` | — |
 | **CIVIL 3D** B5 ISOLE | `_UNISOLATEOBJECTS` | — |
@@ -119,18 +146,9 @@ Les autres appuis longs et doubles des valeurs d'usine :
 > court ». L'appui **long**, lui, ne coûte rien. Sur tes touches les plus
 > utilisées, laisse la colonne « double » vide.
 
-**La touche B2 de Civil 3D est une vraie touche modificatrice.** Elle ne
-tape rien : elle enfonce Ctrl ou Maj et les **garde enfoncés** tant que
-ton doigt reste dessus, pour que tu cliques à la souris pendant ce temps.
-
-| Ce que tu fais | Ce que le PC reçoit |
-|---|---|
-| tu appuies et tu **maintiens** | **Maj** enfoncée, relâchée quand tu lâches |
-| tu appuies **brièvement**, puis tu **maintiens** | **Ctrl** enfoncé, relâché quand tu lâches |
-
-**Maj est en premier** parce que c'est le maintien **instantané**, et
-c'est celui qu'on utilise le plus, main droite à la souris (Maj+clic pour
-désélectionner). Le modificateur descend **dès l'appui**, sans aucun
+**Maj est en premier** sur B1 parce que c'est le maintien **instantané**,
+et c'est celui qu'on utilise le plus, main droite à la souris (Maj+clic
+pour désélectionner). Le modificateur descend **dès l'appui**, sans aucun
 délai. Détail et limites dans [`docs/09`](docs/09-ecran-et-gestes.md).
 
 **Et deux touches appuyées ensemble font une commande de plus.** Six
@@ -265,7 +283,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   └── README.md                 comment les charger au démarrage
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             250 tests du firmware, exécutables sur PC
+│   ├── test_logic.py             255 tests du firmware, exécutables sur PC
 │   ├── test_pc.py                30 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
@@ -291,7 +309,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 280 tests ... OK
+→ Ran 285 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport

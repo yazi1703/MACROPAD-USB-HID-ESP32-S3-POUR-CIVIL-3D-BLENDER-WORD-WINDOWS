@@ -40,7 +40,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`404 lignes - sha256 4feae3ef84d91b97`
+`413 lignes - sha256 0098603114ad97a9`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -376,6 +376,15 @@ GESTE_LONG_MS = 400
 # au copier. Si tu rates des collages, remonte-le : c'est sans danger.
 GESTE_DOUBLE_MS = 200
 
+# Le gros bouton ESC maintenu envoie EN PLUS la macro ESC_MAINTIEN de
+# profiles.py (Ctrl+Z d'usine). Echap, lui, part toujours des l'appui.
+#
+# 700 ms et non GESTE_LONG_MS (400) : un bouton ESC qu'on garde enfonce
+# par reflexe - le temps de voir si la commande s'arrete bien - ne doit
+# PAS declencher une annulation qu'on n'a pas demandee. Dans Civil 3D, un
+# Ctrl+Z involontaire defait un vrai travail.
+ESC_MAINTIEN_MS = 700
+
 DEBOUNCE_MS = 25        # anti-rebond des touches B1 à B4
 ESC_DEBOUNCE_MS = 20    # anti-rebond du bouton ESC
 # True : le bouton ESC agit dès le premier front (retard ~0 ms) puis ignore
@@ -453,7 +462,7 @@ LED_RETURN_MS = 350     # retour progressif du flash vers la respiration
 
 ## device/profiles.py
 
-`334 lignes - sha256 ce336ada00f8d7e3`
+`380 lignes - sha256 989bde8dd21c3915`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -557,9 +566,39 @@ def K(label, court, long=None, double=None):
 # avant de conclure "c'etait un appui court" - ici, avant de copier. Sur
 # une touche ou tu veux zero attente, laisse la colonne "double" vide et
 # sers-toi de l'appui long, qui lui ne coute rien.
-def presse_papiers():
+def modificateur(label="MAJ"):
+    """B1 : une vraie touche modificatrice, dans TOUS les profils.
+
+    Elle ne tape rien. Elle enfonce Maj ou Ctrl et les GARDE enfonces tant
+    que ton doigt reste dessus, pour que tu cliques a la souris pendant ce
+    temps.
+
+      appui maintenu             -> MAJ  (Maj+clic : deselectionner)
+      appui bref puis maintenu   -> CTRL (Ctrl+clic : ajouter)
+
+    Maj est en premier parce que c'est le maintien INSTANTANE, et celui
+    qu'on utilise le plus, main droite a la souris.
+
+    ELLE EST SUR LE POUCE, ET C'EST TOUT L'INTERET. Le pouce se pose sur
+    un autre plan que les quatre doigts : il peut donc rester appuye sans
+    rendre aucune autre touche inatteignable. Quand ce role etait sur
+    l'index (B2), le maintenir bloquait B3 - meme doigt - et donc les
+    trois combinaisons qui l'utilisent.
+    """
+    return K(label, [("maintien", ("SHIFT",))],
+             double=[("maintien", ("CTRL",))])
+
+
+def presse_papiers(long=None):
+    """B2 : copier et coller, dans TOUS les profils.
+
+    Ctrl+Z n'y est plus : il est passe sur le MAINTIEN DU BOUTON ESC, ou
+    on l'atteint sans lacher la souris. L'appui long de B2 reste donc
+    disponible pour la commande qui occupait cette touche avant le
+    nouveau dessin - on ne perd rien.
+    """
     return K("COPIER", [("combo", ("CTRL", "C"))],
-             long=[("combo", ("CTRL", "Z"))],
+             long=long,
              double=[("combo", ("CTRL", "V"))])
 
 
@@ -567,8 +606,9 @@ PROFILES = {
 
     # -----------------------------------------------------------------
     "BLENDER": [
-        presse_papiers(),
-        K("ROT",    [("key", "R")]),
+        modificateur(),
+        # L'appui long garde la rotation, qui occupait cette touche avant.
+        presse_papiers(long=[("key", "R")]),
         K("SCALE",  [("key", "S")]),
         K("TAB",    [("key", "TAB")]),
         K("EXTRUD", [("key", "E")]),
@@ -585,16 +625,10 @@ PROFILES = {
     # CHAQUE TOUCHE PORTE UNE FAMILLE : c'est ce qui rend le profil facile
     # a retenir. Appui court et appui long vont toujours ensemble.
     "CIVIL3D": [
-        presse_papiers(),
-
-        # LA TOUCHE MODIFICATRICE. Elle ne tape rien : elle enfonce Maj ou
-        # Ctrl et les GARDE enfonces tant que ton doigt reste dessus.
-        #   appui maintenu             -> MAJ   (Maj+clic : deselectionner)
-        #   appui bref puis maintenu   -> CTRL  (Ctrl+clic : ajouter)
-        # Maj est en premier parce que c'est le maintien INSTANTANE, et
-        # c'est celui que tu utilises le plus, main droite a la souris.
-        K("MAJ",    [("maintien", ("SHIFT",))],
-          double=[("maintien", ("CTRL",))]),
+        modificateur(),
+        # Rien a preserver ici : ce role etait deja sur B2, il est passe
+        # sur le pouce. Ctrl+X complete donc la famille du presse-papiers.
+        presse_papiers(long=[("combo", ("CTRL", "X"))]),
 
         # Affichage : accrochages, et vue globale en appui long.
         K("F3",     [("key", "F3")],
@@ -621,8 +655,9 @@ PROFILES = {
     # ANGLAIS. Sur un Word FRANCAIS, Gras se fait avec Ctrl+G et non
     # Ctrl+B. Tu peux corriger cela en trente secondes depuis une page web.
     "WORD": [
-        presse_papiers(),
-        K("GRAS",   [("combo", ("CTRL", "B"))]),
+        modificateur(),
+        # L'appui long garde le gras, qui occupait cette touche avant.
+        presse_papiers(long=[("combo", ("CTRL", "B"))]),
         K("ITAL",   [("combo", ("CTRL", "I"))]),
         K("SOULIG", [("combo", ("CTRL", "U"))]),
         K("ENREG",  [("combo", ("CTRL", "S"))],
@@ -636,8 +671,9 @@ PROFILES = {
 
     # -----------------------------------------------------------------
     "WINDOWS": [
-        presse_papiers(),
-        K("ALTTAB", [("combo", ("ALT", "TAB"))]),
+        modificateur(),
+        # L'appui long garde Alt+Tab, qui occupait cette touche avant.
+        presse_papiers(long=[("combo", ("ALT", "TAB"))]),
         K("EXPLOR", [("combo", ("WIN", "E"))],
           long=[("combo", ("WIN", "D"))]),                 # afficher le bureau
         # Verrouiller est sur un appui LONG : impossible de verrouiller
@@ -714,6 +750,25 @@ COMBOS = {
 # AutoLISP de civil3d/macropad_tools.lsp. Elles s'ecrivent SANS le "_" :
 # le souligne demande la version internationale d'une commande AutoCAD
 # native, une commande LISP n'a pas de traduction.
+
+
+# =====================================================================
+# LE GROS BOUTON ESC MAINTENU
+# =====================================================================
+# Echap part DES L'APPUI, sans le moindre delai : c'est la raison d'etre
+# de ce bouton, et rien ne doit la lui prendre. Mais s'il reste enfonce,
+# il envoie EN PLUS ceci.
+#
+# Ctrl+Z apres un Echap, c'est de toute facon la sequence qu'on fait pour
+# revenir en arriere : on annule la commande, puis on defait ce qu'elle a
+# laisse. Ici, un seul bouton, sans lacher la souris.
+#
+# Le seuil est dans config.py (ESC_MAINTIEN_MS), et il est plus long que
+# celui des touches : un bouton ESC qu'on garde enfonce par reflexe ne
+# doit pas declencher une annulation qu'on n'a pas demandee.
+#
+# Mets None pour n'avoir qu'Echap.
+ESC_MAINTIEN = [("combo", ("CTRL", "Z"))]
 
 
 # Nom affiche a l'ecran quand il differe de la cle interne.
@@ -886,7 +941,7 @@ else:
 
 ## device/main.py
 
-`603 lignes - sha256 6c14c345a7d05f82`
+`627 lignes - sha256 e7909f7d23f7ba15`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -940,7 +995,7 @@ import config as C
 import runtime
 import store
 from inputs import Inputs
-from profiles import ProfileManager, TESTS, COURT
+from profiles import ProfileManager, TESTS, COURT, ESC_MAINTIEN
 from gestures import Gestes, FIN
 from combos import Combos, APPUI, nom_touches
 from stats import Stats
@@ -958,6 +1013,7 @@ REGLAGES_NEUFS = (
     ("GESTE_COMBO_MS", 50),
     ("COMBO_FLASH_MS", 1200),
     ("RGB_RESPIRATION_MAX", 0.55),
+    ("ESC_MAINTIEN_MS", 700),
 )
 _manquants = []
 
@@ -1124,6 +1180,11 @@ def run():
                 compile_actions(actions, C.KEYBOARD_LAYOUT)
     # Les valeurs d'usine ne passent jamais par store.charger() : c'est ici
     # qu'une combinaison mal ecrite dans profiles.py doit se voir.
+    # La macro du bouton ESC maintenu n'est dans aucun profil : elle a
+    # donc besoin de sa propre verification, sinon elle echouerait au
+    # premier appui long plutot qu'au demarrage.
+    if ESC_MAINTIEN:
+        compile_actions(ESC_MAINTIEN, C.KEYBOARD_LAYOUT)
     problemes = store.verifier_combos(table_combos, profils, NB_TOUCHES)
     if problemes:
         raise ValueError("combinaisons : " + " ; ".join(problemes))
@@ -1271,6 +1332,8 @@ def run():
         display.message("HID ERROR", "VOIR REPL")
 
     demarre = ticks_ms()
+    esc_depuis = None          # instant de l'appui sur ESC, None = relache
+    esc_annule = False         # la macro du maintien est-elle deja partie ?
     prevenu_usb = False
     arme = False
     etait_pret = False
@@ -1315,18 +1378,23 @@ def run():
 
                     # --- 1. ESC : priorite absolue --------------------
                     if nom == "ESC":
-                        if front == 1:
-                            # ESC annule aussi une combinaison en train de
-                            # se former, sans rien declencher.
-                            combos.reinitialiser()
-                            if keyboard:
-                                keyboard.escape(now)
-                                # tick() tout de suite : le paquet part dans
-                                # le meme tour de boucle.
-                                keyboard.tick(now)
-                            if led:
-                                led.flash(now)
-                            print("ESC")
+                        if front != 1:
+                            # Relache : le maintien ne compte plus.
+                            esc_depuis = None
+                            continue
+                        esc_depuis = now
+                        esc_annule = False
+                        # ESC annule aussi une combinaison en train de se
+                        # former, sans rien declencher.
+                        combos.reinitialiser()
+                        if keyboard:
+                            keyboard.escape(now)
+                            # tick() tout de suite : le paquet part dans le
+                            # meme tour de boucle.
+                            keyboard.tick(now)
+                        if led:
+                            led.flash(now)
+                        print("ESC")
                         continue
 
                     # --- 2. Profils et verrouillage -------------------
@@ -1371,6 +1439,17 @@ def run():
                         if combo:
                             declencher_combo(combo, now)
                         router(differes)
+
+                # ESC MAINTENU. Echap est deja parti des l'appui - on ne
+                # lui prend pas sa priorite -, on ajoute seulement la macro
+                # du maintien, et UNE SEULE FOIS par appui.
+                if (esc_depuis is not None and not esc_annule and ESC_MAINTIEN
+                        and ticks_diff(now, esc_depuis)
+                        >= reglage("ESC_MAINTIEN_MS", 700)):
+                    esc_annule = True
+                    print("ESC maintenu")
+                    if keyboard:
+                        keyboard.submit(ESC_MAINTIEN)
 
                 # Fin de la fenetre des combinaisons.
                 combo, differes = combos.service(now)

@@ -49,7 +49,7 @@ import config as C
 import runtime
 import store
 from inputs import Inputs
-from profiles import ProfileManager, TESTS, COURT
+from profiles import ProfileManager, TESTS, COURT, ESC_MAINTIEN
 from gestures import Gestes, FIN
 from combos import Combos, APPUI, nom_touches
 from stats import Stats
@@ -67,6 +67,7 @@ REGLAGES_NEUFS = (
     ("GESTE_COMBO_MS", 50),
     ("COMBO_FLASH_MS", 1200),
     ("RGB_RESPIRATION_MAX", 0.55),
+    ("ESC_MAINTIEN_MS", 700),
 )
 _manquants = []
 
@@ -233,6 +234,11 @@ def run():
                 compile_actions(actions, C.KEYBOARD_LAYOUT)
     # Les valeurs d'usine ne passent jamais par store.charger() : c'est ici
     # qu'une combinaison mal ecrite dans profiles.py doit se voir.
+    # La macro du bouton ESC maintenu n'est dans aucun profil : elle a
+    # donc besoin de sa propre verification, sinon elle echouerait au
+    # premier appui long plutot qu'au demarrage.
+    if ESC_MAINTIEN:
+        compile_actions(ESC_MAINTIEN, C.KEYBOARD_LAYOUT)
     problemes = store.verifier_combos(table_combos, profils, NB_TOUCHES)
     if problemes:
         raise ValueError("combinaisons : " + " ; ".join(problemes))
@@ -380,6 +386,8 @@ def run():
         display.message("HID ERROR", "VOIR REPL")
 
     demarre = ticks_ms()
+    esc_depuis = None          # instant de l'appui sur ESC, None = relache
+    esc_annule = False         # la macro du maintien est-elle deja partie ?
     prevenu_usb = False
     arme = False
     etait_pret = False
@@ -424,18 +432,23 @@ def run():
 
                     # --- 1. ESC : priorite absolue --------------------
                     if nom == "ESC":
-                        if front == 1:
-                            # ESC annule aussi une combinaison en train de
-                            # se former, sans rien declencher.
-                            combos.reinitialiser()
-                            if keyboard:
-                                keyboard.escape(now)
-                                # tick() tout de suite : le paquet part dans
-                                # le meme tour de boucle.
-                                keyboard.tick(now)
-                            if led:
-                                led.flash(now)
-                            print("ESC")
+                        if front != 1:
+                            # Relache : le maintien ne compte plus.
+                            esc_depuis = None
+                            continue
+                        esc_depuis = now
+                        esc_annule = False
+                        # ESC annule aussi une combinaison en train de se
+                        # former, sans rien declencher.
+                        combos.reinitialiser()
+                        if keyboard:
+                            keyboard.escape(now)
+                            # tick() tout de suite : le paquet part dans le
+                            # meme tour de boucle.
+                            keyboard.tick(now)
+                        if led:
+                            led.flash(now)
+                        print("ESC")
                         continue
 
                     # --- 2. Profils et verrouillage -------------------
@@ -480,6 +493,17 @@ def run():
                         if combo:
                             declencher_combo(combo, now)
                         router(differes)
+
+                # ESC MAINTENU. Echap est deja parti des l'appui - on ne
+                # lui prend pas sa priorite -, on ajoute seulement la macro
+                # du maintien, et UNE SEULE FOIS par appui.
+                if (esc_depuis is not None and not esc_annule and ESC_MAINTIEN
+                        and ticks_diff(now, esc_depuis)
+                        >= reglage("ESC_MAINTIEN_MS", 700)):
+                    esc_annule = True
+                    print("ESC maintenu")
+                    if keyboard:
+                        keyboard.submit(ESC_MAINTIEN)
 
                 # Fin de la fenetre des combinaisons.
                 combo, differes = combos.service(now)

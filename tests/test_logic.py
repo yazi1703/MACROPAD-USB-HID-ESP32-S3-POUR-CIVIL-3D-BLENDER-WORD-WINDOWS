@@ -39,6 +39,7 @@ _fb.FrameBuffer = _FrameBuffer; _fb.MONO_HLSB = 3; _fb.MONO_VLSB = 0
 sys.modules['framebuf'] = _fb
 from inputs import Debouncer
 from profiles import ProfileManager, PROFILES, TESTS
+from profiles import ESC_MAINTIEN as P_ESC_MAINTIEN
 from layouts import compile_actions, character_keys, letter_code
 from hid_keyboard import HIDKeyboard
 from led import Led, breath
@@ -92,19 +93,32 @@ class Logic(unittest.TestCase):
                 for actions in gestes.values():
                     self.assertTrue(compile_actions(actions,'FR_AZERTY'))
         # B4, B5 et B6 de CIVIL3D ecrivent une commande _XXX suivie
-        # d'Entree. B1 est le presse-papiers, B2 la touche modificatrice
-        # et B3 la touche F3.
+        # d'Entree. B1 est la modificatrice, B2 le presse-papiers, B3 F3.
         for index in (3,4,5):
             seq=compile_actions(PROFILES['CIVIL3D'][index][1]['court'],'FR_AZERTY')
             self.assertEqual(seq[0],(37,)); self.assertEqual(seq[-1],(40,))
         self.assertEqual(compile_actions([('combo',('CTRL','Z'))],'FR_AZERTY'),[(-1,26)])
-        # La touche 1 est le presse-papiers dans TOUS les profils.
+        # LES DEUX TOUCHES GLOBALES, identiques dans TOUS les profils :
+        # B1 la modificatrice (sur le pouce), B2 le presse-papiers (sur
+        # l'index). Seul l'appui LONG de B2 change d'un profil a l'autre.
         for nom, macros in PROFILES.items():
             label, gestes = macros[0]
+            self.assertEqual(label, 'MAJ', nom)
+            self.assertEqual(gestes['court'], [('maintien',('SHIFT',))], nom)
+            self.assertEqual(gestes['double'], [('maintien',('CTRL',))], nom)
+            self.assertNotIn('long', gestes, nom)
+
+            label, gestes = macros[1]
             self.assertEqual(label, 'COPIER', nom)
             self.assertEqual(gestes['court'], [('combo',('CTRL','C'))], nom)
             self.assertEqual(gestes['double'], [('combo',('CTRL','V'))], nom)
-            self.assertEqual(gestes['long'], [('combo',('CTRL','Z'))], nom)
+        # Ctrl+Z a quitte les touches : il est sur le MAINTIEN d'ESC.
+        self.assertEqual(P_ESC_MAINTIEN, [('combo',('CTRL','Z'))])
+        for nom, macros in PROFILES.items():
+            for label, gestes in macros:
+                for actions in gestes.values():
+                    self.assertNotEqual(actions, [('combo',('CTRL','Z'))],
+                                        '%s %s' % (nom, label))
     def test_invalid_text_atomic(self):
         t=Transport(); k=HIDKeyboard(t); k.tick(0)
         with self.assertRaises(ValueError): k.submit([('text','ABC€')])
@@ -739,10 +753,12 @@ class PageWebDeConfiguration(unittest.TestCase):
         # Chaque geste est une SUITE d'etapes, meme quand il n'y en a qu'une.
         self.assertEqual(civil[3]["court"][0]["valeur"], "_PLINE")
         self.assertEqual(civil[3]["court"][0]["type"], "text_enter")
-        # Les combinaisons sont lisibles dans le formulaire.
-        self.assertEqual(civil[0]["court"][0]["valeur"], "CTRL+C")
-        self.assertEqual(civil[0]["double"][0]["valeur"], "CTRL+V")
-        self.assertEqual(civil[0]["long"][0]["valeur"], "CTRL+Z")
+        # Les deux touches globales sont lisibles dans le formulaire.
+        self.assertEqual(civil[0]["court"][0]["valeur"], "SHIFT")
+        self.assertEqual(civil[0]["court"][0]["type"], "maintien")
+        self.assertEqual(civil[0]["double"][0]["valeur"], "CTRL")
+        self.assertEqual(civil[1]["court"][0]["valeur"], "CTRL+C")
+        self.assertEqual(civil[1]["double"][0]["valeur"], "CTRL+V")
         # L'appui long de B3 montre toute la vue.
         self.assertEqual(civil[2]["long"][0]["valeur"], "_ZOOM E")
         # Les combinaisons voyagent avec le profil, en numeros de touches
@@ -1102,21 +1118,20 @@ class GestesCourtLongDouble(unittest.TestCase):
     def test_configurer_depuis_les_macros(self):
         import profiles as P
         self.G.configurer(P.PROFILES['CIVIL3D'])
+        # B1 est la touche modificatrice, sur le POUCE : mode a part.
+        self.assertTrue(self.G.a_maintien[0])
+        self.assertTrue(self.G.a_maintien2[0])
+        # B2 est le presse-papiers : court et double occupes.
+        self.assertTrue(self.G.a_double[1])
+        self.assertFalse(self.G.a_maintien[1])
         # B3 F3 a un appui long (la vue globale), pas de double.
         self.assertTrue(self.G.a_long[2])
         self.assertFalse(self.G.a_double[2])
-        # B1 est le presse-papiers : les trois gestes sont occupes.
-        self.assertTrue(self.G.a_long[0])
-        self.assertTrue(self.G.a_double[0])
         # Et surtout : AUCUNE des touches de commande n'a de double appui.
         # C'est ce qui les garde instantanees - un double appui, c'est
         # GESTE_DOUBLE_MS d'attente avant de savoir quoi envoyer.
         for index in (2, 3, 4, 5):
             self.assertFalse(self.G.a_double[index], "B%d" % (index + 1))
-        # B2 est la touche modificatrice : mode a part.
-        self.assertTrue(self.G.a_maintien[1])
-        self.assertTrue(self.G.a_maintien2[1])
-        self.assertFalse(self.G.a_maintien[0])
 
 
 class CombinaisonsSimultanees(unittest.TestCase):
@@ -1424,6 +1439,99 @@ class CombinaisonsDansLaBoucleReelle(unittest.TestCase):
         # ESC est parti, et rien d'autre : ni F3, ni la vue globale de
         # l'appui long, alors que B3 est restee enfoncee 300 ms.
         self.assertEqual(rapports, self._attendu([("key", "ESC")]))
+
+
+class EscMaintenu(unittest.TestCase):
+    """Echap part des l'appui ; le MAINTIEN ajoute l'annulation.
+
+    Le point delicat : ESC a une priorite absolue et part sur le FRONT
+    D'APPUI, pas au relachement. Distinguer un appui court d'un long en
+    attendant le relachement lui aurait pris cette priorite - et c'est
+    exactement ce qu'il ne faut pas. On garde donc Echap instantane, et
+    on AJOUTE Ctrl+Z si le doigt reste dessus.
+    """
+
+    def setUp(self):
+        clock[0] = 0
+        Pin.levels = {}
+        try:
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    def _boucle(self, chronologie, fin=4000):
+        import main, runtime
+        transport = Transport()
+
+        def sleep_simule(ms):
+            clock[0] += ms
+            chronologie(clock[0])
+            if clock[0] >= fin:
+                raise KeyboardInterrupt()
+
+        with patch.object(runtime, 'interface', transport), \
+             patch.object(runtime, 'safe_mode', False), \
+             patch.object(runtime, 'config_mode', False), \
+             patch.object(main, 'sleep_ms', sleep_simule):
+            with self.assertRaises(KeyboardInterrupt):
+                main.run()
+        return [r for r in transport.sent if r]
+
+    def test_un_appui_bref_n_envoie_qu_echap(self):
+        """La priorite d'ESC ne doit pas avoir bouge d'un pouce."""
+        def chrono(t):
+            Pin.levels[14] = 0 if 2600 <= t < 2800 else 1   # 200 ms
+
+        rapports = self._boucle(chrono)
+        self.assertEqual(rapports,
+                         compile_actions([("key", "ESC")], C.KEYBOARD_LAYOUT))
+
+    def test_un_maintien_ajoute_l_annulation(self):
+        def chrono(t):
+            Pin.levels[14] = 0 if 2600 <= t < 3600 else 1   # 1 s
+
+        rapports = self._boucle(chrono)
+        attendu = (compile_actions([("key", "ESC")], C.KEYBOARD_LAYOUT)
+                   + compile_actions(P_ESC_MAINTIEN, C.KEYBOARD_LAYOUT))
+        self.assertEqual(rapports, attendu)
+
+    def test_l_annulation_ne_part_qu_une_fois(self):
+        """Garder le doigt trois secondes ne doit pas defaire trois fois."""
+        def chrono(t):
+            Pin.levels[14] = 0 if 2600 <= t < 6000 else 1
+
+        rapports = self._boucle(chrono, fin=6500)
+        annulation = compile_actions(P_ESC_MAINTIEN, C.KEYBOARD_LAYOUT)
+        self.assertEqual(rapports.count(annulation[0]), 1,
+                         "l'annulation est partie plusieurs fois")
+
+    def test_le_seuil_est_plus_long_que_celui_des_touches(self):
+        """Un ESC garde par reflexe ne doit pas defaire du vrai travail.
+
+        Dans Civil 3D, un Ctrl+Z involontaire annule un vrai travail : le
+        seuil d'ESC est donc volontairement plus long que GESTE_LONG_MS.
+        """
+        self.assertGreater(C.ESC_MAINTIEN_MS, C.GESTE_LONG_MS)
+
+        def chrono(t):
+            # 500 ms : au-dela de GESTE_LONG_MS, en dessous du seuil d'ESC.
+            Pin.levels[14] = 0 if 2600 <= t < 3100 else 1
+
+        rapports = self._boucle(chrono)
+        self.assertEqual(rapports,
+                         compile_actions([("key", "ESC")], C.KEYBOARD_LAYOUT))
+
+    def test_deux_appuis_maintenus_annulent_deux_fois(self):
+        """Le compteur doit bien se reamorcer au relachement."""
+        def chrono(t):
+            appuye = (2600 <= t < 3600) or (4000 <= t < 5000)
+            Pin.levels[14] = 0 if appuye else 1
+
+        rapports = self._boucle(chrono, fin=5500)
+        annulation = compile_actions(P_ESC_MAINTIEN, C.KEYBOARD_LAYOUT)
+        self.assertEqual(rapports.count(annulation[0]), 2)
 
 
 class CombinaisonsDansLaConfiguration(unittest.TestCase):
@@ -1889,12 +1997,15 @@ class ToucheModificatrice(unittest.TestCase):
     def test_les_valeurs_usine_de_civil3d(self):
         import profiles as P
         import store
-        label, gestes = P.PROFILES["CIVIL3D"][1]
-        self.assertEqual(label, "MAJ")
-        # Maj d'abord : c'est le maintien INSTANTANE, et celui qu'on
-        # utilise le plus, main droite a la souris.
-        self.assertEqual(gestes["court"], [("maintien", ("SHIFT",))])
-        self.assertEqual(gestes["double"], [("maintien", ("CTRL",))])
+        # Elle est sur B1 - le POUCE - et dans TOUS les profils.
+        for nom in C.PROFILES_ORDER:
+            label, gestes = P.PROFILES[nom][0]
+            self.assertEqual(label, "MAJ", nom)
+            # Maj d'abord : c'est le maintien INSTANTANE, et celui qu'on
+            # utilise le plus, main droite a la souris.
+            self.assertEqual(gestes["court"], [("maintien", ("SHIFT",))], nom)
+            self.assertEqual(gestes["double"], [("maintien", ("CTRL",))], nom)
+        label, gestes = P.PROFILES["CIVIL3D"][0]
         # Et elles restent verifiables comme n'importe quelle macro.
         self.assertEqual(store.verifier({"CIVIL3D": P.PROFILES["CIVIL3D"]},
                                         ["CIVIL3D"], 6), [])

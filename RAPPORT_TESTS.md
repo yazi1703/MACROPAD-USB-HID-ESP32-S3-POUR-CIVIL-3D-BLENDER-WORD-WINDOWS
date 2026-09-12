@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 280 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 285 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 280 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  250 pour le firmware, 30 pour le compagnon Windows.
+- 285 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  255 pour le firmware, 30 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -70,6 +70,18 @@ sur GPIO30 - l'horloge de la flash - et on verifie que `diag.broches()`
 la SIGNALE sans jamais construire le `Pin`, avec un faux Pin qui echoue si
 on l'appelle. Creer un Pin sur la flash suffit a faire tomber la carte :
 l'outil de diagnostic ne doit pas etre ce qui la fait tomber.
+
+**LE MAINTIEN DU BOUTON ESC** (`EscMaintenu`, 5 tests, dans la vraie
+boucle de main.py). Le point delicat : ESC a une priorite absolue et part
+sur le FRONT D'APPUI, pas au relachement. Distinguer un appui court d'un
+long en attendant le relachement lui aurait pris cette priorite - c'est
+exactement ce qu'il ne faut pas. On garde donc Echap instantane et on
+AJOUTE Ctrl+Z si le doigt reste. Les tests exigent qu'un appui bref
+n'envoie QUE Echap, qu'un maintien ajoute l'annulation, qu'elle ne part
+QU'UNE FOIS meme sur trois secondes, que le compteur se reamorce au
+relachement (deux maintiens = deux annulations), et que le seuil reste
+plus long que GESTE_LONG_MS - dans Civil 3D, un Ctrl+Z involontaire defait
+un vrai travail. Trois mutations verifiees.
 
 **Les combinaisons de touches** (`CombinaisonsSimultanees`,
 `CombinaisonsDansLaBoucleReelle` et `CombinaisonsDansLaConfiguration`,
@@ -386,7 +398,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 280 tests
+Ran 285 tests
 
 OK
 ```

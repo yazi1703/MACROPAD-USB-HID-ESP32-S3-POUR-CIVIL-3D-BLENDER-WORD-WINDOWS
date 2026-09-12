@@ -99,9 +99,39 @@ def K(label, court, long=None, double=None):
 # avant de conclure "c'etait un appui court" - ici, avant de copier. Sur
 # une touche ou tu veux zero attente, laisse la colonne "double" vide et
 # sers-toi de l'appui long, qui lui ne coute rien.
-def presse_papiers():
+def modificateur(label="MAJ"):
+    """B1 : une vraie touche modificatrice, dans TOUS les profils.
+
+    Elle ne tape rien. Elle enfonce Maj ou Ctrl et les GARDE enfonces tant
+    que ton doigt reste dessus, pour que tu cliques a la souris pendant ce
+    temps.
+
+      appui maintenu             -> MAJ  (Maj+clic : deselectionner)
+      appui bref puis maintenu   -> CTRL (Ctrl+clic : ajouter)
+
+    Maj est en premier parce que c'est le maintien INSTANTANE, et celui
+    qu'on utilise le plus, main droite a la souris.
+
+    ELLE EST SUR LE POUCE, ET C'EST TOUT L'INTERET. Le pouce se pose sur
+    un autre plan que les quatre doigts : il peut donc rester appuye sans
+    rendre aucune autre touche inatteignable. Quand ce role etait sur
+    l'index (B2), le maintenir bloquait B3 - meme doigt - et donc les
+    trois combinaisons qui l'utilisent.
+    """
+    return K(label, [("maintien", ("SHIFT",))],
+             double=[("maintien", ("CTRL",))])
+
+
+def presse_papiers(long=None):
+    """B2 : copier et coller, dans TOUS les profils.
+
+    Ctrl+Z n'y est plus : il est passe sur le MAINTIEN DU BOUTON ESC, ou
+    on l'atteint sans lacher la souris. L'appui long de B2 reste donc
+    disponible pour la commande qui occupait cette touche avant le
+    nouveau dessin - on ne perd rien.
+    """
     return K("COPIER", [("combo", ("CTRL", "C"))],
-             long=[("combo", ("CTRL", "Z"))],
+             long=long,
              double=[("combo", ("CTRL", "V"))])
 
 
@@ -109,8 +139,9 @@ PROFILES = {
 
     # -----------------------------------------------------------------
     "BLENDER": [
-        presse_papiers(),
-        K("ROT",    [("key", "R")]),
+        modificateur(),
+        # L'appui long garde la rotation, qui occupait cette touche avant.
+        presse_papiers(long=[("key", "R")]),
         K("SCALE",  [("key", "S")]),
         K("TAB",    [("key", "TAB")]),
         K("EXTRUD", [("key", "E")]),
@@ -127,16 +158,10 @@ PROFILES = {
     # CHAQUE TOUCHE PORTE UNE FAMILLE : c'est ce qui rend le profil facile
     # a retenir. Appui court et appui long vont toujours ensemble.
     "CIVIL3D": [
-        presse_papiers(),
-
-        # LA TOUCHE MODIFICATRICE. Elle ne tape rien : elle enfonce Maj ou
-        # Ctrl et les GARDE enfonces tant que ton doigt reste dessus.
-        #   appui maintenu             -> MAJ   (Maj+clic : deselectionner)
-        #   appui bref puis maintenu   -> CTRL  (Ctrl+clic : ajouter)
-        # Maj est en premier parce que c'est le maintien INSTANTANE, et
-        # c'est celui que tu utilises le plus, main droite a la souris.
-        K("MAJ",    [("maintien", ("SHIFT",))],
-          double=[("maintien", ("CTRL",))]),
+        modificateur(),
+        # Rien a preserver ici : ce role etait deja sur B2, il est passe
+        # sur le pouce. Ctrl+X complete donc la famille du presse-papiers.
+        presse_papiers(long=[("combo", ("CTRL", "X"))]),
 
         # Affichage : accrochages, et vue globale en appui long.
         K("F3",     [("key", "F3")],
@@ -163,8 +188,9 @@ PROFILES = {
     # ANGLAIS. Sur un Word FRANCAIS, Gras se fait avec Ctrl+G et non
     # Ctrl+B. Tu peux corriger cela en trente secondes depuis une page web.
     "WORD": [
-        presse_papiers(),
-        K("GRAS",   [("combo", ("CTRL", "B"))]),
+        modificateur(),
+        # L'appui long garde le gras, qui occupait cette touche avant.
+        presse_papiers(long=[("combo", ("CTRL", "B"))]),
         K("ITAL",   [("combo", ("CTRL", "I"))]),
         K("SOULIG", [("combo", ("CTRL", "U"))]),
         K("ENREG",  [("combo", ("CTRL", "S"))],
@@ -178,8 +204,9 @@ PROFILES = {
 
     # -----------------------------------------------------------------
     "WINDOWS": [
-        presse_papiers(),
-        K("ALTTAB", [("combo", ("ALT", "TAB"))]),
+        modificateur(),
+        # L'appui long garde Alt+Tab, qui occupait cette touche avant.
+        presse_papiers(long=[("combo", ("ALT", "TAB"))]),
         K("EXPLOR", [("combo", ("WIN", "E"))],
           long=[("combo", ("WIN", "D"))]),                 # afficher le bureau
         # Verrouiller est sur un appui LONG : impossible de verrouiller
@@ -256,6 +283,25 @@ COMBOS = {
 # AutoLISP de civil3d/macropad_tools.lsp. Elles s'ecrivent SANS le "_" :
 # le souligne demande la version internationale d'une commande AutoCAD
 # native, une commande LISP n'a pas de traduction.
+
+
+# =====================================================================
+# LE GROS BOUTON ESC MAINTENU
+# =====================================================================
+# Echap part DES L'APPUI, sans le moindre delai : c'est la raison d'etre
+# de ce bouton, et rien ne doit la lui prendre. Mais s'il reste enfonce,
+# il envoie EN PLUS ceci.
+#
+# Ctrl+Z apres un Echap, c'est de toute facon la sequence qu'on fait pour
+# revenir en arriere : on annule la commande, puis on defait ce qu'elle a
+# laisse. Ici, un seul bouton, sans lacher la souris.
+#
+# Le seuil est dans config.py (ESC_MAINTIEN_MS), et il est plus long que
+# celui des touches : un bouton ESC qu'on garde enfonce par reflexe ne
+# doit pas declencher une annulation qu'on n'a pas demandee.
+#
+# Mets None pour n'avoir qu'Echap.
+ESC_MAINTIEN = [("combo", ("CTRL", "Z"))]
 
 
 # Nom affiche a l'ecran quand il differe de la cle interne.

@@ -331,6 +331,15 @@ GESTE_LONG_MS = 400
 # au copier. Si tu rates des collages, remonte-le : c'est sans danger.
 GESTE_DOUBLE_MS = 200
 
+# Le gros bouton ESC maintenu envoie EN PLUS la macro ESC_MAINTIEN de
+# profiles.py (Ctrl+Z d'usine). Echap, lui, part toujours des l'appui.
+#
+# 700 ms et non GESTE_LONG_MS (400) : un bouton ESC qu'on garde enfonce
+# par reflexe - le temps de voir si la commande s'arrete bien - ne doit
+# PAS declencher une annulation qu'on n'a pas demandee. Dans Civil 3D, un
+# Ctrl+Z involontaire defait un vrai travail.
+ESC_MAINTIEN_MS = 700
+
 DEBOUNCE_MS = 25        # anti-rebond des touches B1 à B4
 ESC_DEBOUNCE_MS = 20    # anti-rebond du bouton ESC
 # True : le bouton ESC agit dès le premier front (retard ~0 ms) puis ignore
