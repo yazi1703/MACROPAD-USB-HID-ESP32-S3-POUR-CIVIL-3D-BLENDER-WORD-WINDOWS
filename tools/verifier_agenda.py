@@ -55,7 +55,23 @@ def _resume_entree(entree):
 
 def main():
     if len(sys.argv) < 2:
-        print(__doc__.strip().split("\n\n")[2])
+        # Un mode d'emploi, pas un morceau de docstring pris au hasard :
+        # on arrive ici APRES s'etre trompe de chemin, c'est le pire moment
+        # pour recevoir un message approximatif.
+        print("Dit ce que le compagnon comprend d'un fichier d'agenda.")
+        print()
+        print("  python3 %s <fichier.json> [AAAA-MM-JJ]"
+              % os.path.basename(__file__))
+        print()
+        print("Le fichier d'exemple livre avec le projet :")
+        print("  python3 %s %s"
+              % (os.path.abspath(__file__),
+                 os.path.join(RACINE, "pc", "agenda-exemple.json")))
+        print()
+        print("Ton fichier OneDrive, si tu ne sais plus ou il est")
+        print("(a coller dans PowerShell) :")
+        print("  Get-ChildItem $env:USERPROFILE -Recurse -Filter agenda.json"
+              " -ErrorAction SilentlyContinue | Select -Expand FullName")
         return 2
     chemin = sys.argv[1]
     if len(sys.argv) > 2:
