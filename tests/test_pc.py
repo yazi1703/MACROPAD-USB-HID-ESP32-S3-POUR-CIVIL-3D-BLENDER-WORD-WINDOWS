@@ -38,6 +38,7 @@ class RecapitulatifDesCommandes(unittest.TestCase):
                 "titre": "CIVIL 3D",
                 "touches": [
                     {"label": "CTRL",
+                     "nom": "Ctrl maintenu, Maj en double",
                      "court": [{"type": "maintien", "valeur": "CTRL"}],
                      "long": [],
                      "double": [{"type": "maintien", "valeur": "MAJ"}]},
@@ -53,6 +54,7 @@ class RecapitulatifDesCommandes(unittest.TestCase):
                 ],
                 "combos": [
                     {"touches": [5, 6], "label": "VUE PREC.",
+                     "nom": "Vue precedente",
                      "actions": [{"type": "text_enter",
                                   "valeur": "MPVIEWPREV"}]},
                 ],
@@ -65,11 +67,16 @@ class RecapitulatifDesCommandes(unittest.TestCase):
     def _lignes(self):
         return MA.lignes_du_profil(self.CONFIG, "CIVIL3D")
 
-    def test_chaque_geste_donne_une_ligne_lisible(self):
+    def test_chaque_touche_a_son_en_tete_puis_ses_gestes(self):
+        """Une ligne d'en-tete par touche : numero, libelle court, nom
+        complet. Les gestes viennent dessous, sans repeter le numero."""
         lignes = self._lignes()
-        self.assertIn(("B1", "CTRL", "appui court", "maintenir CTRL"), lignes)
+        self.assertIn(("B1", "CTRL", "", "Ctrl maintenu, Maj en double"),
+                      lignes)
+        self.assertIn(("", "", "appui court", "maintenir CTRL"), lignes)
         self.assertIn(("", "", "double appui", "maintenir MAJ"), lignes)
-        self.assertIn(("B2", "COPIER", "appui court", "CTRL+C"), lignes)
+        self.assertIn(("B2", "COPIER", "", ""), lignes)
+        self.assertIn(("", "", "appui court", "CTRL+C"), lignes)
 
     def test_une_suite_d_etapes_se_lit_d_un_trait(self):
         """Le cas qui justifie ce recapitulatif : une macro en trois temps
@@ -86,9 +93,9 @@ class RecapitulatifDesCommandes(unittest.TestCase):
         lignes = self._lignes()
         b2 = [i for i, l in enumerate(lignes) if l[0] == "B2"]
         self.assertEqual(len(b2), 1)
-        # Les deux lignes suivantes appartiennent a B2 et sont anonymes.
-        self.assertEqual(lignes[b2[0] + 1][0], "")
-        self.assertEqual(lignes[b2[0] + 2][0], "")
+        # Les trois lignes suivantes appartiennent a B2 et sont anonymes.
+        for decalage in (1, 2, 3):
+            self.assertEqual(lignes[b2[0] + decalage][0], "")
 
     def test_un_geste_vide_ne_prend_pas_de_ligne(self):
         lignes = self._lignes()
@@ -98,8 +105,9 @@ class RecapitulatifDesCommandes(unittest.TestCase):
         """Un recapitulatif qui les oublierait ne servirait a rien : ce
         sont justement celles qu'on ne retient pas."""
         lignes = self._lignes()
-        self.assertIn(("B5+B6", "VUE PREC.", "ensemble",
-                       "taper MPVIEWPREV puis Entree"), lignes)
+        self.assertIn(("B5+B6", "VUE PREC.", "", "Vue precedente"), lignes)
+        self.assertIn(("", "", "ensemble", "taper MPVIEWPREV puis Entree"),
+                      lignes)
         self.assertIn(("ESC", "", "appui court", "ESC"), lignes)
         self.assertIn(("", "", "maintenu", "CTRL+Z"), lignes)
 

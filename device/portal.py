@@ -82,6 +82,18 @@ input.alt{width:auto;flex:0 0 auto;margin:0 0 0 2px;cursor:pointer}
 .cap.on{background:#3d7bfd;color:#fff}
 .rec{color:#f0a6b6}
 .rec.on{background:#6d2233;color:#fff}
+/* La barre d'enregistrement reste COLLEE EN BAS DE L'ECRAN. Sans elle,
+   il fallait remonter la page pour retrouver le bouton Stop - et la page
+   fait plusieurs ecrans de haut. */
+#bande{position:fixed;left:0;right:0;bottom:0;z-index:30;display:none;
+background:#6d2233;color:#fff;padding:10px 16px;align-items:center;
+gap:14px;flex-wrap:wrap;box-shadow:0 -6px 18px rgba(0,0,0,.45);
+font:13px system-ui}
+#bande.on{display:flex}
+#bande b{font-weight:700}
+#bande .cible{font:12px ui-monospace,monospace;opacity:.85}
+#bande .grow{flex:1}
+#bande button{background:#fff;color:#6d2233;font-weight:700}
 #msg.rec{background:#33131d;border:1px solid #7d2a3c;color:#f0a6b6}
 input:focus,select:focus{outline:0;border-color:#3d7bfd}
 table{width:100%;border-collapse:collapse}
@@ -90,7 +102,8 @@ th{font:11px system-ui;color:#6f7788;text-align:left;font-weight:600;
 text-transform:uppercase;letter-spacing:.6px;padding-bottom:6px}
 td.k{width:30px;color:#3d7bfd;font:700 13px ui-monospace,monospace}
 td.g{width:58px;color:#6f7788;font:11px system-ui}
-td.lab{width:110px}td.ty{width:132px}
+td.lab{width:150px}td.ty{width:132px}
+input.nom{margin-top:4px;font:11px system-ui;color:#8b94a6}
 tr.sep td{border-top:1px solid #1f2531;padding-top:8px}
 .use{width:64px;text-align:right;font:11px ui-monospace,monospace;color:#6f7788}
 .bar{height:3px;background:#3d7bfd;border-radius:2px;margin-top:3px}
@@ -122,7 +135,10 @@ text-align:center}
 <span class=tag id=cnt>...</span>
 </header>
 <main>
-<p class=hint>Libelles : 6 caracteres maximum. Combinaison :
+<p class=hint>Chaque touche a un LIBELLE COURT (6 caracteres, c'est la largeur de
+l'ecran OLED) et un NOM COMPLET, qui s'affiche dans le recapitulatif du
+compagnon PC - la ou la place ne manque pas.
+Libelles : 6 caracteres maximum. Combinaison :
 <b>CTRL+MAJ+ESC</b>. Chaque touche accepte trois gestes : appui court,
 appui long et double appui.</p>
 <p class=hint>Le carre de couleur a cote du titre donne la couleur des
@@ -159,6 +175,13 @@ defile.</p>
 </div>
 <div id=msg></div>
 </main>
+<div id=bande>
+<b>Enregistrement</b>
+<span class=cible id=bande_cible></span>
+<span id=bande_compte></span>
+<span class=grow></span>
+<button onclick=recStop()>Stop</button>
+</div>
 <script>
 // =====================================================================
 // LE FILET : UNE PAGE NE DOIT JAMAIS MOURIR EN SILENCE
@@ -255,7 +278,9 @@ function nomTouche(ev){
 
 function capture(champ,cb){
  var b=el("button",{cls:"s cap",
-  title:"Cliquer, puis appuyer sur la combinaison voulue"},["\u2328"]);
+  title:"Capturer UNE SEULE combinaison dans cette case. Pour enregistrer "+
+   "une suite de frappes, utilise le bouton Enregistrer plus bas."},
+  ["\u2328"]);
  b.onclick=function(){
   b.className="s cap on";champ.value="";
   champ.onkeydown=function(ev){
@@ -296,6 +321,19 @@ function recListe(){
  while(liste.length&&liste[0].type=="none"&&!liste[0].valeur)liste.shift();
  return liste;}
 
+// La barre collee en bas : elle dit CE QU'ON ENREGISTRE et porte le
+// bouton Stop, toujours a portee de souris quelle que soit la position
+// dans la page.
+function recBande(){
+ var b=document.getElementById("bande");
+ if(!b)return;
+ if(!REC){b.className="";return;}
+ b.className="on";
+ document.getElementById("bande_cible").textContent=REC.ou||"";
+ var n=recListe().length+(REC.texte?1:0);
+ document.getElementById("bande_compte").textContent=
+  n?(n+" etape"+(n>1?"s":"")):"tape ta sequence au clavier";}
+
 function recVider(){
  if(REC&&REC.texte){
   recListe().push({type:"text",valeur:REC.texte});
@@ -331,21 +369,23 @@ function recTouche(ev){
   recListe().push({type:nom.indexOf("+")>=0?"combo":"key",valeur:nom});}
  REC.t=maintenant;
  render();
+ recBande();
  return false;}
 
-function recDemarrer(k,g){
+function recDemarrer(k,g,ou){
  if(REC)recStop();
  k[g]=[];                                 // on REMPLACE, on n'ajoute pas
- REC={k:k,g:g,texte:"",t:0};
+ REC={k:k,g:g,texte:"",t:0,ou:ou||""};
  if(document.activeElement&&document.activeElement.blur)
   document.activeElement.blur();
  document.onkeydown=recTouche;
  render();
- say("Enregistrement : tape ta sequence au clavier. Echap ou le bouton "+
-  "Stop pour terminer. Les attentes de plus de 0,4 s deviennent des "+
-  "pauses. Rien n'est envoye au macropad avant Enregistrer.",1);
- var boite=document.getElementById("msg");
- if(boite)boite.className="rec";}
+ recBande();
+ // sansDefiler : on reste sur la touche qu'on modifie.
+ say("Enregistrement : tape ta sequence au clavier, autant de frappes que "+
+  "tu veux. Clique sur Stop (en bas de l'ecran) ou appuie sur Echap pour "+
+  "terminer. Les attentes de plus de 0,4 s deviennent des pauses. Rien "+
+  "n'est envoye au macropad avant Enregistrer.",1,true);}
 
 function recStop(){
  if(!REC)return;
@@ -353,10 +393,11 @@ function recStop(){
  var combien=recListe().length;
  document.onkeydown=null;
  REC=null;
+ recBande();
  render();
  say(combien?("Enregistre : "+combien+" etape(s). Verifie, puis clique "+
   "sur Enregistrer pour l'appliquer au macropad."):
-  "Rien n'a ete enregistre.",1);}
+  "Rien n'a ete enregistre.",1,true);}
 
 // Le meme bouton sert aux gestes et aux combinaisons : les deux rangent
 // leurs etapes dans la meme forme.
@@ -364,8 +405,9 @@ function boutonEnr(k,g){
  var actif=REC&&REC.k===k&&REC.g===g;
  return el("button",{cls:actif?"s add rec on":"s add rec",
   title:actif?"Terminer l'enregistrement":
-   "Enregistrer la sequence au clavier (remplace les etapes)"},
-  [actif?"\u25a0 Stop":"\u23fa Enregistrer"]);}
+   "Enregistrer une SUITE de frappes au clavier, autant que tu veux, "+
+   "jusqu'au clic sur Stop. Remplace les etapes de ce geste."},
+  [actif?"\u25a0 Stop":"\u23fa Enregistrer une suite"]);}
 
 function maxUse(){var m=1;for(var n in D.profils)
  (D.profils[n].touches||[]).forEach(function(t){if(t.usages>m)m=t.usages;});
@@ -429,7 +471,17 @@ function ligne(p,i,tb,mx){
   tr.appendChild(el("td",{cls:"g"},[LIB[g]]));
   if(gi==0){
    var cl=el("td",{cls:"lab",rowspan:3},[]);
-   cl.appendChild(inp(k.label,6,function(v){k.label=v;}));
+   var court=inp(k.label,6,function(v){k.label=v;});
+   court.title="libelle court : les 6 caracteres de l'ecran OLED";
+   cl.appendChild(court);
+   // Le nom COMPLET. Six caracteres ne disent pas grand-chose a qui n'a
+   // pas ecrit la configuration : celui-ci s'affiche dans le
+   // recapitulatif du compagnon PC, ou la place ne manque pas.
+   var complet=inp(k.nom||"",60,function(v){k.nom=v;});
+   complet.className="nom";
+   complet.title="nom complet, affiche dans le recapitulatif du PC";
+   complet.placeholder="nom complet";
+   cl.appendChild(complet);
    tr.appendChild(cl);
   }
   var ca=el("td",{},[]);
@@ -441,7 +493,8 @@ function ligne(p,i,tb,mx){
    ["+ etape"]));
   var enr=boutonEnr(k,g);
   enr.onclick=function(){
-   if(REC&&REC.k===k&&REC.g===g)recStop();else recDemarrer(k,g);};
+   if(REC&&REC.k===k&&REC.g===g)recStop();
+   else recDemarrer(k,g,(p.titre||"")+" - B"+(i+1)+" - "+LIB[g]);};
   pile.appendChild(enr);
   ca.appendChild(pile);
   tr.appendChild(ca);
@@ -476,7 +529,7 @@ function litTouches(v){
 // Une fonction a part, comme ligne() : sinon la variable de boucle serait
 // partagee par toutes les lignes et chaque champ ecrirait dans la
 // derniere combinaison.
-function ligneCombo(liste,ci,tb){
+function ligneCombo(liste,ci,tb,titre){
  var c=liste[ci];
  var tr=el("tr",{},[]);
  var ct=inp((c.touches||[]).join("+"),11,
@@ -485,7 +538,11 @@ function ligneCombo(liste,ci,tb){
  var c1=el("td",{cls:"duo"},[]);c1.appendChild(ct);tr.appendChild(c1);
  var cl=inp(c.label,16,function(v){c.label=v;});
  cl.title="libelle affiche a l'ecran quand la combinaison part";
- var c2=el("td",{cls:"lab"},[]);c2.appendChild(cl);tr.appendChild(c2);
+ var cn=inp(c.nom||"",60,function(v){c.nom=v;});
+ cn.className="nom";cn.placeholder="nom complet";
+ cn.title="nom complet, affiche dans le recapitulatif du PC";
+ var c2=el("td",{cls:"lab"},[]);
+ c2.appendChild(cl);c2.appendChild(cn);tr.appendChild(c2);
  var pile=el("div",{cls:"pile"},[]);
  etapes(c,"actions").forEach(function(e,rang){
   pile.appendChild(ligneEtape(c,"actions",rang));});
@@ -494,7 +551,9 @@ function ligneCombo(liste,ci,tb){
   ["+ etape"]));
  var enr=boutonEnr(c,"actions");
  enr.onclick=function(){
-  if(REC&&REC.k===c&&REC.g==="actions")recStop();else recDemarrer(c,"actions");};
+  if(REC&&REC.k===c&&REC.g==="actions")recStop();
+  else recDemarrer(c,"actions",(titre||"")+" - "+
+   (c.touches||[]).map(function(n){return "B"+n;}).join("+"));};
  pile.appendChild(enr);
  var c3=el("td",{},[]);c3.appendChild(pile);tr.appendChild(c3);
  tr.appendChild(el("td",{cls:"use"},[el("button",{cls:"d s",
@@ -514,7 +573,7 @@ function tableauCombos(p){
    "seront reprises. Ajoutes-en une ici pour decider toi-meme."]));
  var tb=el("table",{},[el("tr",{},[el("th",{},["Touches"]),
   el("th",{},["Libelle"]),el("th",{},["Action"]),el("th",{},[""])])]);
- for(var i=0;i<liste.length;i++)ligneCombo(liste,i,tb);
+ for(var i=0;i<liste.length;i++)ligneCombo(liste,i,tb,p.titre);
  bloc.appendChild(tb);
  bloc.appendChild(el("button",{cls:"s add",onclick:function(){
   if(!p.combos)p.combos=[];
@@ -596,9 +655,12 @@ function addProfil(){var n="PROFIL",i=1;while(D.profils[n])n="PROFIL"+(++i);
  var t=[];for(var k=0;k<N;k++)t.push({label:"",usages:0});
  D.profils[n]={titre:n,couleur:"#808080",touches:t};
  D.ordre.push(n);render();}
-function say(t,ok){var m=document.getElementById("msg");
+// sansDefiler : on NE saute PAS en bas de page. Indispensable pendant un
+// enregistrement - sinon chaque message perdait de vue la touche qu'on
+// etait en train de modifier, et il fallait remonter la chercher.
+function say(t,ok,sansDefiler){var m=document.getElementById("msg");
  m.textContent=t;m.className=ok?"ok":"ko";m.style.display="block";
- window.scrollTo(0,document.body.scrollHeight);}
+ if(!sansDefiler)window.scrollTo(0,document.body.scrollHeight);}
 function dl(){var a=document.createElement("a");
  a.href=URL.createObjectURL(new Blob([JSON.stringify(D,null,2)],
   {type:"application/json"}));

@@ -75,11 +75,13 @@ les 224 Ko de RAM de la carte.
 | Renommer un profil | ✅ nom interne et titre affiché |
 | Ajouter / supprimer un profil | ✅ |
 | Changer les macros des 6 touches | ✅ libellé, type, valeur |
+| **Nom complet d'une touche** | ✅ en clair, pour le récapitulatif du PC |
 | **Trois gestes par touche** | ✅ appui court, appui long, double appui |
 | **Couleur des LED du profil** | ✅ carré de couleur à côté du titre |
 | **Table des logiciels détectés** | ✅ programme, profil, abrégé écran |
 | **Compteur d'usage** | ✅ affiché en bout de ligne, avec sa barre |
-| **Capturer un raccourci au clavier** | ✅ bouton ⌨ : tu appuies, la page écrit le nom |
+| **Capturer un raccourci au clavier** | ✅ bouton ⌨ : **une seule** combinaison, dans la case visée |
+| **Enregistrer une suite de frappes** | ✅ bouton ⏺ : autant de frappes que tu veux, Stop quand tu as fini |
 | Télécharger une sauvegarde | ✅ fichier JSON |
 | **Restaurer une sauvegarde** | ✅ elle est chargée dans le formulaire, tu vérifies, tu enregistres |
 | Revenir aux valeurs d'usine | ✅ bouton dédié |
@@ -99,6 +101,44 @@ Les deux durées se règlent dans `config.py` (`GESTE_LONG_MS`,
 `GESTE_DOUBLE_MS`). Une touche qui n'a **pas** de macro « double » part
 dès le relâchement : tu ne paies l'attente que là où tu t'en sers.
 Voir le [chapitre 9](09-ecran-et-gestes.md) pour le détail.
+
+### Le nom complet
+
+Le libellé d'une touche fait **six caractères** : c'est la largeur de
+l'écran OLED. `SELSIM` et `PLINE` ne disent pas grand-chose trois semaines
+plus tard, et rien du tout à quelqu'un qui n'a pas écrit la configuration.
+
+À côté du libellé, une case **`nom complet`** — 60 caractères — pour dire
+la même chose en clair :
+
+| Libellé | Nom complet |
+|---|---|
+| `SELSIM` | Selectionner les objets similaires |
+| `PLINE` | Polyligne, ou spline en appui long |
+| `VUE PREC.` | Vue enregistree precedente |
+
+Ce nom ne va **pas** sur l'écran de la carte : il n'y tiendrait pas, et la
+carte continue d'afficher le libellé court. Il sert au **récapitulatif du
+compagnon PC** ([chapitre 8](08-detection-auto.md)), où la place ne manque
+pas. Les **combinaisons** ont la même case.
+
+Le nom est facultatif. Laissé vide, le récapitulatif n'affiche que le
+libellé court : rien ne casse, tu perds juste l'explication. Au-delà de
+60 caractères, il est coupé — le fichier de configuration vit sur la flash
+de la carte, aucun champ n'y grossit sans limite.
+
+> Les noms d'usine sont dans `device/profiles.py`, table `NOMS`. Ils sont
+> rangés avec les macros, dans le même fichier de configuration, et
+> suivent donc la sauvegarde et la restauration.
+
+**Vider les cases les vide pour de bon.** Ça mérite d'être dit, parce que
+la règle voisine fait le contraire : un `profils.json` écrit **avant** les
+noms complets n'en contient aucun, et on lui remet ceux d'usine — sinon
+une simple mise à jour du firmware te les ferait perdre. Mais un fichier
+qui **parle** des noms, même pour dire qu'ils sont vides, est respecté :
+sans cette nuance, tu effaçais les cases, tu enregistrais, et les noms
+d'usine revenaient au rechargement suivant. Deux situations différentes,
+deux réponses ; deux tests les tiennent.
 
 ### Remettre les compteurs à zéro
 
@@ -130,9 +170,23 @@ Cette troisième ligne est la raison d'être des deux filets ajoutés depuis :
 une page qui échoue **doit le dire**. Elle n'a plus le droit de rester
 muette.
 
+### Deux boutons, deux travaux différents
+
+Ils se ressemblent et ne font pas la même chose. La confusion entre les
+deux fait perdre du temps, alors autant la lever tout de suite :
+
+| Bouton | Où | Ce qu'il fait |
+|---|---|---|
+| **⌨** | collé à la case | capture **UNE SEULE** combinaison et s'arrête. C'est ce qu'on veut pour remplir une case `combinaison` : `CTRL+S`, et voilà |
+| **⏺ Enregistrer une suite** | à côté de `+ etape` | capture **autant de frappes que tu veux**, jusqu'à ce que tu l'arrêtes |
+
+Si tu voulais enregistrer `_PLINE` + Entrée et que la page s'est arrêtée
+après la première touche, c'est le ⌨ que tu avais cliqué. Le texte au
+survol de chaque bouton le redit.
+
 ### L'enregistreur de séquence
 
-À côté de **`+ etape`**, un bouton **`⏺ Enregistrer`**. Tu cliques, tu
+À côté de **`+ etape`**, le bouton **`⏺ Enregistrer une suite`**. Tu cliques, tu
 tapes ta séquence **au clavier**, et la page en fait des étapes. Bien plus
 rapide que de choisir un type et une valeur pour chaque frappe — et
 surtout, ça capture les **pauses réelles**, celles qu'on ne pense jamais à
@@ -153,6 +207,35 @@ le bouton repasse sur **`■ Stop`** pendant la prise. L'enregistrement
 fur et à mesure, et **rien n'est envoyé au macropad** tant que tu n'as pas
 cliqué sur *Enregistrer*.
 
+#### La barre du bas : arrêter à la souris, sans chercher
+
+Tant qu'un enregistrement est en cours, une **barre rouge reste collée en
+bas de la fenêtre**, quelle que soit la position dans la page :
+
+```
+ Enregistrement   CIVIL 3D - B4 - appui long   3 etapes            [ Stop ]
+```
+
+Elle porte trois choses : **quoi** on enregistre (profil, touche, geste),
+**combien** d'étapes sont déjà prises, et un bouton **Stop** toujours à
+portée de souris. Plus besoin de retrouver le bouton de la touche pour
+arrêter — c'était le reproche : Échap marche, mais quand on a les mains
+sur la souris on veut cliquer.
+
+Le compte se met à jour à chaque frappe. Une séquence qui n'avance pas
+alors que tu tapes veut dire que le navigateur **t'a volé** la frappe
+(voir la limite ci-dessous) : tu le vois maintenant tout de suite, au lieu
+de le découvrir à la relecture.
+
+> **Corrigé en même temps :** la page **sautait en bas** à chaque message,
+> donc à chaque frappe enregistrée. Il fallait remonter chercher la touche
+> qu'on était en train de modifier — une corvée, et pendant un
+> enregistrement c'était une corvée à répétition. Les messages émis
+> pendant une prise ne défilent plus la page (`say(..., sansDefiler)`) :
+> tu restes sur la touche que tu modifies. Les autres messages — erreurs,
+> confirmation d'enregistrement — défilent toujours, eux : il faut bien
+> les voir.
+
 > **Limite du navigateur :** quelques raccourcis sont réservés par Windows
 > ou par le navigateur et ne peuvent pas être interceptés — `Ctrl+W`,
 > `F11`, la touche Windows seule. Ajoute-les à la main avec le bouton ⌨.
@@ -170,6 +253,7 @@ avec exactement le même éditeur d'étapes.
 |---|---|
 | **Touches** | les numéros gravés sur le pad : `3+4`, ou `3 4`, ou même `3 et 4` |
 | **Libellé** | ce que l'écran affichera, 16 caractères au plus |
+| **Nom complet** | la même chose en clair, pour le récapitulatif du PC |
 | **Action** | même chose que pour un geste, suites d'étapes comprises |
 
 Deux règles y sont vérifiées à l'enregistrement : il faut **au moins deux

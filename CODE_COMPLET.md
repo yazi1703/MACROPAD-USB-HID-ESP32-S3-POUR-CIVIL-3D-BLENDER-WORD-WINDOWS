@@ -470,7 +470,7 @@ LED_RETURN_MS = 350     # retour progressif du flash vers la respiration
 
 ## device/profiles.py
 
-`386 lignes - sha256 729d6113d5f4cf91`
+`434 lignes - sha256 ed1a4efcab741509`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -785,6 +785,54 @@ COMBOS = {
 ESC_MAINTIEN = [("combo", ("CTRL", "Z"))]
 
 
+# =====================================================================
+# LES NOMS COMPLETS
+# =====================================================================
+# Le libelle d'une touche fait SIX caracteres : c'est la largeur de
+# l'ecran OLED, et "SELSIM" ou "PLINE" ne disent pas grand-chose a qui
+# n'a pas ecrit la configuration.
+#
+# Ce tableau donne le nom en clair. Il ne sert PAS a la carte - elle
+# continue d'afficher le libelle court - mais au recapitulatif du
+# compagnon PC, ou la place ne manque pas. Il se modifie depuis la page
+# de configuration, comme le reste.
+#
+# La cle est "B4" pour une touche, "B3+B4" pour une combinaison. Une
+# entree absente n'est pas un probleme : le libelle court fait alors
+# office de nom.
+NOMS = {
+    "CIVIL3D": {
+        "B1": "Ctrl maintenu, Maj en double appui",
+        "B2": "Copier / coller / couper",
+        "B3": "Accrochages aux objets, vue globale en long",
+        "B4": "Polyligne, ou spline en appui long",
+        "B5": "Isoler la selection, tout remontrer en long",
+        "B6": "Selectionner les objets similaires",
+        "B5+B6": "Vue enregistree precedente",
+        "B3+B4": "Vue enregistree suivante",
+        "B4+B5": "Editer une polyligne (PEDIT)",
+        "B3+B5": "Eteindre le calque de l'objet designe",
+        "B4+B6": "Rallumer le dernier calque eteint",
+        "B3+B6": "Hachures",
+    },
+    "BLENDER": {
+        "B1": "Ctrl maintenu, Maj en double appui",
+        "B2": "Copier / coller, rotation en appui long",
+        "B6": "Deplacer, retablir en appui long",
+    },
+    "WORD": {
+        "B1": "Ctrl maintenu, Maj en double appui",
+        "B2": "Copier / coller, gras en appui long",
+        "B6": "Reproduire la mise en forme, l'appliquer en double",
+    },
+    "WINDOWS": {
+        "B1": "Ctrl maintenu, Maj en double appui",
+        "B2": "Copier / coller, Alt+Tab en appui long",
+        "B4": "Gestionnaire des taches, verrouiller en long",
+    },
+}
+
+
 # Nom affiche a l'ecran quand il differe de la cle interne.
 TITLES = {"CIVIL3D": "CIVIL 3D"}
 
@@ -955,7 +1003,7 @@ else:
 
 ## device/main.py
 
-`635 lignes - sha256 1269b00e984a9292`
+`638 lignes - sha256 f62fdf2ebae2c88c`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1181,7 +1229,10 @@ def run():
         return
 
     # --- Chargement de la configuration --------------------------------
-    (profils, ordre, titres, couleurs, couleurs2, table_combos,
+    # noms : les noms complets des touches. Ils ne servent qu'au
+    # recapitulatif du compagnon PC - la carte affiche le libelle court -
+    # mais ils doivent traverser le rechargement sans se perdre.
+    (profils, ordre, titres, couleurs, couleurs2, _noms, table_combos,
      apps, repli, origine) = store.charger(NB_TOUCHES)
     print("Macros chargees depuis :", origine)
 
@@ -1251,7 +1302,7 @@ def run():
         nonlocal manager, titres, ordre, couleurs, couleurs2, table_combos
         try:
             (neufs, ordre_neuf, titres_neufs, couleurs_neuves, secondes_neuves,
-             combos_neuves, _apps, _repli,
+             _noms_neufs, combos_neuves, _apps, _repli,
              origine_neuve) = store.charger(NB_TOUCHES)
             nouveau = ProfileManager(ordre_neuf, manager.name, neufs, NB_TOUCHES)
         except Exception as exc:
@@ -2669,7 +2720,7 @@ def compile_actions(actions, layout, caps_lock=False):
 
 ## device/store.py
 
-`617 lignes - sha256 396ef0f0386a34a2`
+`667 lignes - sha256 6a45c18f31131ca4`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2767,6 +2818,10 @@ TYPES = ("key", "combo", "maintien", "pause", "text", "text_enter", "none")
 # Repli si profiles.py est reste a une version anterieure : une carte dont
 # on n'a televerse qu'une partie des fichiers doit demarrer, pas planter.
 LABEL_COMBO_MAX = getattr(P, "COMBO_LABEL_MAX", 16)
+# Le nom complet ne sert qu'au recapitulatif du compagnon PC, ou la place
+# ne manque pas. On le borne quand meme : un fichier de configuration ne
+# doit pas pouvoir gonfler sans limite.
+NOM_MAX = 60
 
 
 # =====================================================================
@@ -2848,7 +2903,7 @@ def nom_combo(indices):
     return "+".join("B%d" % (int(index) + 1) for index in indices)
 
 
-def combos_vers_json(combos):
+def combos_vers_json(combos, noms=None):
     """Forme interne -> liste JSON, avec des numeros de touches lisibles.
 
     En interne les touches sont numerotees a partir de zero, comme partout
@@ -2860,6 +2915,7 @@ def combos_vers_json(combos):
     for indices, label, actions in (combos or []):
         liste.append({"touches": [int(index) + 1 for index in indices],
                       "label": str(label),
+                      "nom": (noms or {}).get(nom_combo(indices), ""),
                       "actions": actions_vers_json(actions)})
     return liste
 
@@ -2930,6 +2986,15 @@ def couleur_usine(nom):
     """Couleur d'usine d'un profil, ou la couleur par defaut."""
     return tuple(getattr(C, "RGB_COULEURS", {}).get(
         nom, C.RGB_COULEUR_DEFAUT))
+
+
+def noms_usine(profil):
+    """Les noms complets d'usine d'un profil : {"B4": "...", "B3+B4": "..."}.
+
+    Une entree absente n'est pas un manque : le libelle court de six
+    caracteres fait alors office de nom.
+    """
+    return dict(getattr(P, "NOMS", {}).get(profil) or {})
 
 
 def couleur_usine2(nom):
@@ -3072,8 +3137,9 @@ def defauts():
     apps = [tuple(a) for a in P.APPS]
     couleurs = dict((nom, couleur_usine(nom)) for nom in profils)
     couleurs2 = dict((nom, couleur_usine2(nom)) for nom in profils)
+    noms = dict((nom, noms_usine(nom)) for nom in profils)
     return (profils, list(C.PROFILES_ORDER), dict(P.TITLES), couleurs,
-            couleurs2, combos_usine(), apps, tuple(P.APPS_REPLI))
+            couleurs2, noms, combos_usine(), apps, tuple(P.APPS_REPLI))
 
 
 # =====================================================================
@@ -3081,13 +3147,14 @@ def defauts():
 # =====================================================================
 def vers_json(nb_touches, stats=None):
     """Configuration complete, prete a etre envoyee a une page web."""
-    (profils, ordre, titres, couleurs, couleurs2, combos,
+    (profils, ordre, titres, couleurs, couleurs2, noms, combos,
      apps, repli, origine) = charger(nb_touches)
     blocs = {}
     for nom, touches in profils.items():
         liste = []
         for index, (label, gestes) in enumerate(touches):
-            entree = {"label": label}
+            entree = {"label": label,
+                      "nom": (noms.get(nom) or {}).get("B%d" % (index + 1), "")}
             for geste in P.GESTES:
                 entree[geste] = actions_vers_json((gestes or {}).get(geste))
             if stats is not None:
@@ -3101,7 +3168,7 @@ def vers_json(nb_touches, stats=None):
             "couleur2": (couleur_vers_texte(couleurs2.get(nom))
                          if couleurs2.get(nom) else ""),
             "touches": liste,
-            "combos": combos_vers_json(combos.get(nom)),
+            "combos": combos_vers_json(combos.get(nom), noms.get(nom)),
         }
 
     return {
@@ -3129,10 +3196,18 @@ def depuis_json(data, nb_touches):
     """Forme web -> forme interne. Leve une exception si c'est illisible."""
     ordre = [str(n) for n in data["ordre"]]
     profils, titres, couleurs, combos = {}, {}, {}, {}
-    couleurs2 = {}
+    couleurs2, noms = {}, {}
     usine = combos_usine()
     for nom, bloc in data["profils"].items():
         touches = []
+        cles_longues = {}
+        # "Le fichier PARLE-T-IL des noms complets ?" n'est pas la meme
+        # question que "en donne-t-il un ?". Un fichier ecrit avant les noms
+        # n'a aucun champ "nom" : on remet ceux d'usine. Un fichier qui en a
+        # un, meme VIDE, dit que tu les as EFFACES expres : on respecte.
+        # Sans cette distinction, vider les noms les faisait revenir au
+        # rechargement suivant - impossible de s'en debarrasser.
+        parle_des_noms = False
         for entree in bloc["touches"][:nb_touches]:
             gestes = {}
             if "type" in entree and not any(g in entree for g in P.GESTES):
@@ -3148,6 +3223,11 @@ def depuis_json(data, nb_touches):
                 if actions:
                     gestes[geste] = actions
             touches.append((str(entree.get("label", ""))[:P.LABEL_MAX], gestes))
+            if "nom" in entree:
+                parle_des_noms = True
+            long = str(entree.get("nom", "") or "").strip()[:NOM_MAX]
+            if long:
+                cles_longues["B%d" % len(touches)] = long
         while len(touches) < nb_touches:
             touches.append(("", {}))
         profils[str(nom)] = touches
@@ -3163,6 +3243,23 @@ def depuis_json(data, nb_touches):
             # comme pour les combinaisons. Une chaine VIDE, elle, veut dire
             # "pas d'alternance" et est respectee.
             couleurs2[str(nom)] = couleur_usine2(str(nom))
+        for entree in (bloc.get("combos") or []):
+            if "nom" in (entree or {}):
+                parle_des_noms = True
+            long = str((entree or {}).get("nom", "") or "").strip()[:NOM_MAX]
+            numeros = (entree or {}).get("touches") or []
+            if long and numeros:
+                # La cle est TRIEE, comme les indices que combos_depuis_json
+                # fabrique. Sans ce tri, une combinaison saisie "4 3" au lieu
+                # de "3 4" rangerait son nom sous une cle que plus personne
+                # ne relit : le nom disparaitrait en silence.
+                try:
+                    numeros = sorted(int(n) for n in numeros)
+                except (TypeError, ValueError):
+                    pass
+                cles_longues["+".join("B%s" % n for n in numeros)] = long
+        noms[str(nom)] = (cles_longues if parle_des_noms
+                          else noms_usine(str(nom)))
         if "combos" in bloc:
             combos[str(nom)] = combos_depuis_json(bloc.get("combos"))
         else:
@@ -3181,15 +3278,16 @@ def depuis_json(data, nb_touches):
     bloc_repli = bloc_apps.get("repli") or {}
     repli = (str(bloc_repli.get("profil", P.APPS_REPLI[0])).upper(),
              str(bloc_repli.get("abrege", P.APPS_REPLI[1]))[:7])
-    return profils, ordre, titres, couleurs, couleurs2, combos, apps, repli
+    return (profils, ordre, titres, couleurs, couleurs2, noms, combos,
+            apps, repli)
 
 
 # =====================================================================
 # Lecture et ecriture du fichier
 # =====================================================================
 def charger(nb_touches):
-    """Retourne (profils, ordre, titres, couleurs, couleurs2, combos, apps,
-    repli, origine).
+    """Retourne (profils, ordre, titres, couleurs, couleurs2, noms, combos,
+    apps, repli, origine).
 
     origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire d'ou
     viennent les macros actives.
@@ -3205,7 +3303,7 @@ def charger(nb_touches):
         return defauts() + ("usine",)
 
     try:
-        (profils, ordre, titres, couleurs, couleurs2, combos,
+        (profils, ordre, titres, couleurs, couleurs2, noms, combos,
          apps, repli) = depuis_json(data, nb_touches)
     except Exception as exc:
         print("[store] %s mal forme (%s), retour aux valeurs d'usine"
@@ -3219,12 +3317,12 @@ def charger(nb_touches):
             print("   -", probleme)
         return defauts() + ("usine",)
 
-    return (profils, ordre, titres, couleurs, couleurs2, combos, apps, repli,
-            "fichier")
+    return (profils, ordre, titres, couleurs, couleurs2, noms, combos, apps,
+            repli, "fichier")
 
 
-def enregistrer(profils, ordre, titres, couleurs, couleurs2, combos, apps,
-                repli, nb_touches):
+def enregistrer(profils, ordre, titres, couleurs, couleurs2, noms, combos,
+                apps, repli, nb_touches):
     """Verifie puis ecrit. Retourne (True, "") ou (False, raison)."""
     problemes = verifier(profils, ordre, nb_touches, combos)
     if problemes:
@@ -3233,8 +3331,10 @@ def enregistrer(profils, ordre, titres, couleurs, couleurs2, combos, apps,
     blocs = {}
     for nom, touches in profils.items():
         liste = []
-        for label, gestes in touches:
-            entree = {"label": label}
+        for index, (label, gestes) in enumerate(touches):
+            entree = {"label": label,
+                      "nom": ((noms or {}).get(nom) or {}).get(
+                          "B%d" % (index + 1), "")}
             for geste in P.GESTES:
                 entree[geste] = actions_vers_json((gestes or {}).get(geste))
             liste.append(entree)
@@ -3245,7 +3345,8 @@ def enregistrer(profils, ordre, titres, couleurs, couleurs2, combos, apps,
             "couleur2": (couleur_vers_texte((couleurs2 or {}).get(nom))
                          if (couleurs2 or {}).get(nom) else ""),
             "touches": liste,
-            "combos": combos_vers_json((combos or {}).get(nom)),
+            "combos": combos_vers_json((combos or {}).get(nom),
+                                       (noms or {}).get(nom)),
         }
 
     data = {"version": 2, "ordre": list(ordre), "profils": blocs,
@@ -3273,12 +3374,12 @@ def enregistrer(profils, ordre, titres, couleurs, couleurs2, combos, apps,
 def enregistrer_json(data, nb_touches):
     """Enregistre directement une configuration recue d'une page web."""
     try:
-        (profils, ordre, titres, couleurs, couleurs2, combos,
+        (profils, ordre, titres, couleurs, couleurs2, noms, combos,
          apps, repli) = depuis_json(data, nb_touches)
     except Exception as exc:
         return False, "donnees illisibles : %s" % exc
-    return enregistrer(profils, ordre, titres, couleurs, couleurs2, combos,
-                       apps, repli, nb_touches)
+    return enregistrer(profils, ordre, titres, couleurs, couleurs2, noms,
+                       combos, apps, repli, nb_touches)
 
 
 def effacer():
@@ -3424,7 +3525,7 @@ class Stats:
 
 ## device/portal.py
 
-`862 lignes - sha256 f8f45b82d46cab5e`
+`924 lignes - sha256 6c055c63b8ea70f2`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -3511,6 +3612,18 @@ input.alt{width:auto;flex:0 0 auto;margin:0 0 0 2px;cursor:pointer}
 .cap.on{background:#3d7bfd;color:#fff}
 .rec{color:#f0a6b6}
 .rec.on{background:#6d2233;color:#fff}
+/* La barre d'enregistrement reste COLLEE EN BAS DE L'ECRAN. Sans elle,
+   il fallait remonter la page pour retrouver le bouton Stop - et la page
+   fait plusieurs ecrans de haut. */
+#bande{position:fixed;left:0;right:0;bottom:0;z-index:30;display:none;
+background:#6d2233;color:#fff;padding:10px 16px;align-items:center;
+gap:14px;flex-wrap:wrap;box-shadow:0 -6px 18px rgba(0,0,0,.45);
+font:13px system-ui}
+#bande.on{display:flex}
+#bande b{font-weight:700}
+#bande .cible{font:12px ui-monospace,monospace;opacity:.85}
+#bande .grow{flex:1}
+#bande button{background:#fff;color:#6d2233;font-weight:700}
 #msg.rec{background:#33131d;border:1px solid #7d2a3c;color:#f0a6b6}
 input:focus,select:focus{outline:0;border-color:#3d7bfd}
 table{width:100%;border-collapse:collapse}
@@ -3519,7 +3632,8 @@ th{font:11px system-ui;color:#6f7788;text-align:left;font-weight:600;
 text-transform:uppercase;letter-spacing:.6px;padding-bottom:6px}
 td.k{width:30px;color:#3d7bfd;font:700 13px ui-monospace,monospace}
 td.g{width:58px;color:#6f7788;font:11px system-ui}
-td.lab{width:110px}td.ty{width:132px}
+td.lab{width:150px}td.ty{width:132px}
+input.nom{margin-top:4px;font:11px system-ui;color:#8b94a6}
 tr.sep td{border-top:1px solid #1f2531;padding-top:8px}
 .use{width:64px;text-align:right;font:11px ui-monospace,monospace;color:#6f7788}
 .bar{height:3px;background:#3d7bfd;border-radius:2px;margin-top:3px}
@@ -3551,7 +3665,10 @@ text-align:center}
 <span class=tag id=cnt>...</span>
 </header>
 <main>
-<p class=hint>Libelles : 6 caracteres maximum. Combinaison :
+<p class=hint>Chaque touche a un LIBELLE COURT (6 caracteres, c'est la largeur de
+l'ecran OLED) et un NOM COMPLET, qui s'affiche dans le recapitulatif du
+compagnon PC - la ou la place ne manque pas.
+Libelles : 6 caracteres maximum. Combinaison :
 <b>CTRL+MAJ+ESC</b>. Chaque touche accepte trois gestes : appui court,
 appui long et double appui.</p>
 <p class=hint>Le carre de couleur a cote du titre donne la couleur des
@@ -3588,6 +3705,13 @@ defile.</p>
 </div>
 <div id=msg></div>
 </main>
+<div id=bande>
+<b>Enregistrement</b>
+<span class=cible id=bande_cible></span>
+<span id=bande_compte></span>
+<span class=grow></span>
+<button onclick=recStop()>Stop</button>
+</div>
 <script>
 // =====================================================================
 // LE FILET : UNE PAGE NE DOIT JAMAIS MOURIR EN SILENCE
@@ -3684,7 +3808,9 @@ function nomTouche(ev){
 
 function capture(champ,cb){
  var b=el("button",{cls:"s cap",
-  title:"Cliquer, puis appuyer sur la combinaison voulue"},["\u2328"]);
+  title:"Capturer UNE SEULE combinaison dans cette case. Pour enregistrer "+
+   "une suite de frappes, utilise le bouton Enregistrer plus bas."},
+  ["\u2328"]);
  b.onclick=function(){
   b.className="s cap on";champ.value="";
   champ.onkeydown=function(ev){
@@ -3725,6 +3851,19 @@ function recListe(){
  while(liste.length&&liste[0].type=="none"&&!liste[0].valeur)liste.shift();
  return liste;}
 
+// La barre collee en bas : elle dit CE QU'ON ENREGISTRE et porte le
+// bouton Stop, toujours a portee de souris quelle que soit la position
+// dans la page.
+function recBande(){
+ var b=document.getElementById("bande");
+ if(!b)return;
+ if(!REC){b.className="";return;}
+ b.className="on";
+ document.getElementById("bande_cible").textContent=REC.ou||"";
+ var n=recListe().length+(REC.texte?1:0);
+ document.getElementById("bande_compte").textContent=
+  n?(n+" etape"+(n>1?"s":"")):"tape ta sequence au clavier";}
+
 function recVider(){
  if(REC&&REC.texte){
   recListe().push({type:"text",valeur:REC.texte});
@@ -3760,21 +3899,23 @@ function recTouche(ev){
   recListe().push({type:nom.indexOf("+")>=0?"combo":"key",valeur:nom});}
  REC.t=maintenant;
  render();
+ recBande();
  return false;}
 
-function recDemarrer(k,g){
+function recDemarrer(k,g,ou){
  if(REC)recStop();
  k[g]=[];                                 // on REMPLACE, on n'ajoute pas
- REC={k:k,g:g,texte:"",t:0};
+ REC={k:k,g:g,texte:"",t:0,ou:ou||""};
  if(document.activeElement&&document.activeElement.blur)
   document.activeElement.blur();
  document.onkeydown=recTouche;
  render();
- say("Enregistrement : tape ta sequence au clavier. Echap ou le bouton "+
-  "Stop pour terminer. Les attentes de plus de 0,4 s deviennent des "+
-  "pauses. Rien n'est envoye au macropad avant Enregistrer.",1);
- var boite=document.getElementById("msg");
- if(boite)boite.className="rec";}
+ recBande();
+ // sansDefiler : on reste sur la touche qu'on modifie.
+ say("Enregistrement : tape ta sequence au clavier, autant de frappes que "+
+  "tu veux. Clique sur Stop (en bas de l'ecran) ou appuie sur Echap pour "+
+  "terminer. Les attentes de plus de 0,4 s deviennent des pauses. Rien "+
+  "n'est envoye au macropad avant Enregistrer.",1,true);}
 
 function recStop(){
  if(!REC)return;
@@ -3782,10 +3923,11 @@ function recStop(){
  var combien=recListe().length;
  document.onkeydown=null;
  REC=null;
+ recBande();
  render();
  say(combien?("Enregistre : "+combien+" etape(s). Verifie, puis clique "+
   "sur Enregistrer pour l'appliquer au macropad."):
-  "Rien n'a ete enregistre.",1);}
+  "Rien n'a ete enregistre.",1,true);}
 
 // Le meme bouton sert aux gestes et aux combinaisons : les deux rangent
 // leurs etapes dans la meme forme.
@@ -3793,8 +3935,9 @@ function boutonEnr(k,g){
  var actif=REC&&REC.k===k&&REC.g===g;
  return el("button",{cls:actif?"s add rec on":"s add rec",
   title:actif?"Terminer l'enregistrement":
-   "Enregistrer la sequence au clavier (remplace les etapes)"},
-  [actif?"\u25a0 Stop":"\u23fa Enregistrer"]);}
+   "Enregistrer une SUITE de frappes au clavier, autant que tu veux, "+
+   "jusqu'au clic sur Stop. Remplace les etapes de ce geste."},
+  [actif?"\u25a0 Stop":"\u23fa Enregistrer une suite"]);}
 
 function maxUse(){var m=1;for(var n in D.profils)
  (D.profils[n].touches||[]).forEach(function(t){if(t.usages>m)m=t.usages;});
@@ -3858,7 +4001,17 @@ function ligne(p,i,tb,mx){
   tr.appendChild(el("td",{cls:"g"},[LIB[g]]));
   if(gi==0){
    var cl=el("td",{cls:"lab",rowspan:3},[]);
-   cl.appendChild(inp(k.label,6,function(v){k.label=v;}));
+   var court=inp(k.label,6,function(v){k.label=v;});
+   court.title="libelle court : les 6 caracteres de l'ecran OLED";
+   cl.appendChild(court);
+   // Le nom COMPLET. Six caracteres ne disent pas grand-chose a qui n'a
+   // pas ecrit la configuration : celui-ci s'affiche dans le
+   // recapitulatif du compagnon PC, ou la place ne manque pas.
+   var complet=inp(k.nom||"",60,function(v){k.nom=v;});
+   complet.className="nom";
+   complet.title="nom complet, affiche dans le recapitulatif du PC";
+   complet.placeholder="nom complet";
+   cl.appendChild(complet);
    tr.appendChild(cl);
   }
   var ca=el("td",{},[]);
@@ -3870,7 +4023,8 @@ function ligne(p,i,tb,mx){
    ["+ etape"]));
   var enr=boutonEnr(k,g);
   enr.onclick=function(){
-   if(REC&&REC.k===k&&REC.g===g)recStop();else recDemarrer(k,g);};
+   if(REC&&REC.k===k&&REC.g===g)recStop();
+   else recDemarrer(k,g,(p.titre||"")+" - B"+(i+1)+" - "+LIB[g]);};
   pile.appendChild(enr);
   ca.appendChild(pile);
   tr.appendChild(ca);
@@ -3905,7 +4059,7 @@ function litTouches(v){
 // Une fonction a part, comme ligne() : sinon la variable de boucle serait
 // partagee par toutes les lignes et chaque champ ecrirait dans la
 // derniere combinaison.
-function ligneCombo(liste,ci,tb){
+function ligneCombo(liste,ci,tb,titre){
  var c=liste[ci];
  var tr=el("tr",{},[]);
  var ct=inp((c.touches||[]).join("+"),11,
@@ -3914,7 +4068,11 @@ function ligneCombo(liste,ci,tb){
  var c1=el("td",{cls:"duo"},[]);c1.appendChild(ct);tr.appendChild(c1);
  var cl=inp(c.label,16,function(v){c.label=v;});
  cl.title="libelle affiche a l'ecran quand la combinaison part";
- var c2=el("td",{cls:"lab"},[]);c2.appendChild(cl);tr.appendChild(c2);
+ var cn=inp(c.nom||"",60,function(v){c.nom=v;});
+ cn.className="nom";cn.placeholder="nom complet";
+ cn.title="nom complet, affiche dans le recapitulatif du PC";
+ var c2=el("td",{cls:"lab"},[]);
+ c2.appendChild(cl);c2.appendChild(cn);tr.appendChild(c2);
  var pile=el("div",{cls:"pile"},[]);
  etapes(c,"actions").forEach(function(e,rang){
   pile.appendChild(ligneEtape(c,"actions",rang));});
@@ -3923,7 +4081,9 @@ function ligneCombo(liste,ci,tb){
   ["+ etape"]));
  var enr=boutonEnr(c,"actions");
  enr.onclick=function(){
-  if(REC&&REC.k===c&&REC.g==="actions")recStop();else recDemarrer(c,"actions");};
+  if(REC&&REC.k===c&&REC.g==="actions")recStop();
+  else recDemarrer(c,"actions",(titre||"")+" - "+
+   (c.touches||[]).map(function(n){return "B"+n;}).join("+"));};
  pile.appendChild(enr);
  var c3=el("td",{},[]);c3.appendChild(pile);tr.appendChild(c3);
  tr.appendChild(el("td",{cls:"use"},[el("button",{cls:"d s",
@@ -3943,7 +4103,7 @@ function tableauCombos(p){
    "seront reprises. Ajoutes-en une ici pour decider toi-meme."]));
  var tb=el("table",{},[el("tr",{},[el("th",{},["Touches"]),
   el("th",{},["Libelle"]),el("th",{},["Action"]),el("th",{},[""])])]);
- for(var i=0;i<liste.length;i++)ligneCombo(liste,i,tb);
+ for(var i=0;i<liste.length;i++)ligneCombo(liste,i,tb,p.titre);
  bloc.appendChild(tb);
  bloc.appendChild(el("button",{cls:"s add",onclick:function(){
   if(!p.combos)p.combos=[];
@@ -4025,9 +4185,12 @@ function addProfil(){var n="PROFIL",i=1;while(D.profils[n])n="PROFIL"+(++i);
  var t=[];for(var k=0;k<N;k++)t.push({label:"",usages:0});
  D.profils[n]={titre:n,couleur:"#808080",touches:t};
  D.ordre.push(n);render();}
-function say(t,ok){var m=document.getElementById("msg");
+// sansDefiler : on NE saute PAS en bas de page. Indispensable pendant un
+// enregistrement - sinon chaque message perdait de vue la touche qu'on
+// etait en train de modifier, et il fallait remonter la chercher.
+function say(t,ok,sansDefiler){var m=document.getElementById("msg");
  m.textContent=t;m.className=ok?"ok":"ko";m.style.display="block";
- window.scrollTo(0,document.body.scrollHeight);}
+ if(!sansDefiler)window.scrollTo(0,document.body.scrollHeight);}
 function dl(){var a=document.createElement("a");
  a.href=URL.createObjectURL(new Blob([JSON.stringify(D,null,2)],
   {type:"application/json"}));

@@ -43,7 +43,8 @@ Object.defineProperty(Element.prototype, 'innerHTML', {
 });
 
 const registre = {};
-['profs', 'apps', 'msg', 'src', 'cnt'].forEach(function (id) {
+['profs', 'apps', 'msg', 'src', 'cnt',
+ 'bande', 'bande_cible', 'bande_compte'].forEach(function (id) {
   registre[id] = new Element('div');
 });
 
@@ -54,7 +55,10 @@ const document = {
   getElementById: function (id) { return registre[id] || null; },
   body: { scrollHeight: 0 }
 };
-const window = { scrollTo: function () {} };
+// On COMPTE les sauts en bas de page : pendant un enregistrement, il ne
+// doit y en avoir aucun - sinon on perd de vue la touche qu'on modifie.
+let defilements = 0;
+const window = { scrollTo: function () { defilements += 1; } };
 const location = { reload: function () {} };
 function confirm() { return true; }
 const URL = { createObjectURL: function () { return 'blob:x'; } };
@@ -88,7 +92,8 @@ new Function('document', 'window', 'fetch', 'URL', 'Blob', 'confirm',
                       'recDemarrer:recDemarrer,recStop:recStop,' +
                       'frapper:function(e){return recTouche(e);},' +
                       'enCours:function(){return !!REC;},' +
-                      'zero:zero,onerror:function(){' +
+                      'zero:zero,recBande:recBande,' +
+                      'onerror:function(){' +
                       'return window.onerror.apply(null,arguments);},' +
                       'charger_sauvegarde:charger_sauvegarde};')(
   document, window, fetch, URL, Blob, confirm, location);
@@ -177,9 +182,12 @@ setTimeout(function () {
     // ---- on tape dans les champs de la PREMIERE touche ---------------
     // Par carte : nom interne, titre, puis par touche un libelle suivi
     // des trois valeurs de gestes.
+    // Par carte : nom interne, titre, puis PAR TOUCHE un libelle court,
+    // un nom complet, et les trois valeurs de gestes.
     const c = champs(profs.children[0]);
-    saisir(c[2], 'ZZZ');            // libelle de la touche 1
-    saisir(c[3], 'TESTVAL');        // valeur de son appui court
+    saisir(c[2], 'ZZZ');            // libelle court de la touche 1
+    saisir(c[3], 'Nom complet B1'); // son nom complet
+    saisir(c[4], 'TESTVAL');        // valeur de son appui court
 
     // ---- on change aussi la couleur des LED du profil ---------------
     const cc = couleurs(profs.children[0]);
@@ -222,7 +230,7 @@ setTimeout(function () {
       sel2.value = 'pause';
       if (sel2.onchange) { sel2.onchange(); }
       const champs2 = champs(registre.profs.children[0]);
-      saisir(champs2[4], '500');               // duree de la pause
+      saisir(champs2[5], '500');               // duree de la pause
     }
 
     // ---- puis on enregistre, et on regarde ce qui part --------------
@@ -233,6 +241,7 @@ setTimeout(function () {
       const p = envoye ? envoye.profils[envoye.ordre[0]] : null;
       vu.envoye = !!envoye;
       vu.touche1_label = p ? p.touches[0].label : null;
+      vu.touche1_nom = p ? p.touches[0].nom : null;
       // Un geste est maintenant une SUITE d'etapes.
       const suite = p ? p.touches[0].court : null;
       vu.touche1_etapes = suite ? suite.length : 0;
@@ -282,8 +291,11 @@ setTimeout(function () {
       // une commande, Entree, une attente, puis Ctrl+S.
       const page = globalThis.__page;
       const cible = D.profils[D.ordre[0]].touches[1];
-      page.recDemarrer(cible, 'long');
+      defilements = 0;
+      page.recDemarrer(cible, 'long', 'CIVIL 3D - B2 - long');
       vu.rec_en_cours = page.enCours();
+      vu.rec_bande_visible = registre.bande.className;
+      vu.rec_bande_cible = registre.bande_cible.textContent;
       const frappe = function (e, saut) {
         if (saut) { horloge += saut; }
         page.frapper(e);
@@ -295,8 +307,11 @@ setTimeout(function () {
       frappe({ code: 'ControlLeft' });                  // modificateur seul
       frappe({ code: 'KeyS', key: 's', ctrlKey: true }, 900);
       frappe({ code: 'F5', key: 'F5' });
+      vu.rec_bande_compte = registre.bande_compte.textContent;
       page.recStop();
       vu.rec_termine = !page.enCours();
+      vu.rec_bande_apres = registre.bande.className;
+      vu.rec_defilements = defilements;
       vu.rec_etapes = cible.long;
       vu.rec_message = registre.msg.textContent;
 

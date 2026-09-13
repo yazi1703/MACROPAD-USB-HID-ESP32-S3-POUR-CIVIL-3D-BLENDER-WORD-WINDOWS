@@ -1,8 +1,8 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 305 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 316 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
-> **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
+> **Mise à jour après relecture.** Le projet a été relu, seize corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
 > ont été écrits, au moins un par correction.
 >
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 305 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  263 pour le firmware, 42 pour le compagnon Windows.
+- 316 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  274 pour le firmware, 42 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -24,9 +24,15 @@
 
 **Base V0.** Navigation dans les deux sens ; anti-rebond, rebonds et maintien ; démarrage avec touche tenue ; retour circulaire des ticks ; 26 lettres FR, underscore, macros et ENTER ; Caps Lock ; refus atomique d'un texte non pris en charge ; pressions/relâchements de Ctrl+Shift+Esc ; ESC au milieu d'Alt+Tab/texte ; endpoint occupé sans perte immédiate ; file bornée ; déconnexion sans reprise de macro ; faute et timeout avec annulation/libération ; respiration, flash et passage des ticks ; SAFE MODE sans initialisation HID et retour REPL ; absence/panne OLED ; une page transmise par tick ; boucle main simulée avec macro Civil3D, NEXT et ESC ; rapports de huit octets produits par la classe officielle KeyboardInterface.
 
-**La page de configuration** (`PageDeConfigurationIntacte`, 10 tests). La page servie par `device/portal.py` et celle servie par `pc/macropad_auto.py` sont comparees a leur source unique `tools/page_config.html` ; le JavaScript est verifie syntaxiquement par `node --check` ; enfin il est **execute hors navigateur** avec un DOM minimal (`tests/page_smoke.js`), une fois avec les valeurs d'usine — on compte alors les cartes de profil, les listes deroulantes et les lignes de logiciels produites — une fois avec une configuration vide, pour verifier que la page explique pourquoi elle n'a rien a montrer, et une fois en TAPANT dans les champs pour verifier que chaque saisie arrive bien sur la touche voulue - et nulle part ailleurs - dans ce qui part vers le macropad. La capture de raccourci et la restauration d'une sauvegarde sont exercees de la meme facon : on fabrique de faux evenements clavier et on verifie les noms produits - dont AltGr, qui se presente comme Ctrl+Alt sous Windows et ne doit pas ressortir en CTRL+ALT -, puis on passe CHAQUE nom du tableau de la page dans layouts.key_code du firmware. Une page qui ecrirait DELETE la ou le firmware attend SUPPR fabriquerait des macros refusees a l'enregistrement sans que rien n'explique pourquoi ; ce test l'interdit. La restauration est verifiee sur une sauvegarde valable, sur un fichier illisible et sur un JSON etranger.
+**La page de configuration** (`PageDeConfigurationIntacte`, 20 tests). La page servie par `device/portal.py` et celle servie par `pc/macropad_auto.py` sont comparees a leur source unique `tools/page_config.html` ; le JavaScript est verifie syntaxiquement par `node --check` ; enfin il est **execute hors navigateur** avec un DOM minimal (`tests/page_smoke.js`), une fois avec les valeurs d'usine — on compte alors les cartes de profil, les listes deroulantes et les lignes de logiciels produites — une fois avec une configuration vide, pour verifier que la page explique pourquoi elle n'a rien a montrer, et une fois en TAPANT dans les champs pour verifier que chaque saisie arrive bien sur la touche voulue - et nulle part ailleurs - dans ce qui part vers le macropad. La capture de raccourci et la restauration d'une sauvegarde sont exercees de la meme facon : on fabrique de faux evenements clavier et on verifie les noms produits - dont AltGr, qui se presente comme Ctrl+Alt sous Windows et ne doit pas ressortir en CTRL+ALT -, puis on passe CHAQUE nom du tableau de la page dans layouts.key_code du firmware. Une page qui ecrirait DELETE la ou le firmware attend SUPPR fabriquerait des macros refusees a l'enregistrement sans que rien n'explique pourquoi ; ce test l'interdit. La restauration est verifiee sur une sauvegarde valable, sur un fichier illisible et sur un JSON etranger.
 
 LE FILET CONTRE LA PAGE MORTE y est verifie lui aussi : une erreur JavaScript doit s'AFFICHER, avec son message et sa ligne, au lieu d'arreter tout le script en laissant une page muette - c'est la signature commune des corrections 11 et 13, et le retirer fait echouer la moitie de cette classe. La REMISE A ZERO DES COMPTEURS est exercee sur ses trois chemins : le bouton vise bien /api/compteurs, la route du portail efface les compteurs et refuse proprement quand il n'y en a pas, et la commande serie !ZERO efface les compteurs ET LEUR FICHIER - sans cette suppression, enregistrer() refuserait d'ecrire une table vide et les anciens chiffres reviendraient au prochain demarrage. L'ENREGISTREUR DE SEQUENCE y est exerce de bout en bout : on rejoue au clavier ce qu'un utilisateur taperait vraiment - une commande, Entree, une attente de 900 ms, puis Ctrl+S et F5 - avec une horloge simulee, et on verifie les trois regles qui portent tout : les caracteres ordinaires s'accumulent en UNE etape, Entree apres du texte donne "texte + Entree", et une attente reelle devient une pause. Le test qui compte est le suivant : ce que l'enregistreur fabrique repasse par store.actions_depuis_json puis compile_actions, et la configuration complete par store.verifier - une sequence enregistree qui serait refusee a l'enregistrement transformerait un raccourci en piege. Echap arrete la prise sans s'enregistrer lui-meme. Supprimer l'accumulation du texte ou la mesure des pauses fait echouer deux tests.
+
+L'ENREGISTREMENT A LA SOURIS est verifie sous deux angles, parce qu'un DOM minimal ne suffit pas. Angle 1, en executant la page : le nombre d'appels a window.scrollTo pendant une prise doit rester a ZERO - c'est le correctif de la corvee signalee a l'usage, la page sautait en bas a chaque frappe - et la barre du bas doit s'allumer, nommer la touche en cours, compter les etapes, puis s'eteindre a l'arret. Angle 2, en lisant le HTML et le CSS servis : la barre doit etre en position fixe, collee en bas, et porter un bouton cable sur recStop. Sans ce second test, rien n'interdirait de la remettre dans le flux de la page, ou elle redeviendrait inatteignable sans defiler. Quatre mutations ont ete verifiees : retirer la garde sansDefiler, empecher la barre de s'allumer, la decoller du bas, renommer recStop - chacune fait echouer un test.
+
+LE NOM COMPLET des touches et des combinaisons (`NomCompletDesTouches`, 8 tests) fait l'aller-retour complet : saisi dans la page, il part dans le JSON, revient par store.charger - dont le tuple est passe de neuf a dix elements - et ressort dans le recapitulatif du compagnon PC. Les tests verifient qu'un nom trop long est tronque a NOM_MAX - le fichier vit sur la flash de la carte -, qu'un nom absent laisse le libelle court faire office de nom sans rien casser, et que le recapitulatif produit bien une ligne d'en-tete par touche portant ce nom.
+
+UN DEFAUT A ETE TROUVE ET CORRIGE PAR CES TESTS, avant toute mise en service. Le repli "aucun nom dans le fichier -> on remet ceux d'usine" est indispensable pour relire un profils.json ecrit AVANT les noms complets : sans lui, une mise a jour du firmware les ferait disparaitre. Mais applique tel quel, il rendait l'effacement IMPOSSIBLE : vider toutes les cases, enregistrer, et les noms d'usine revenaient au rechargement suivant. depuis_json distingue desormais "le fichier ne parle pas des noms" de "le fichier dit qu'ils sont vides", exactement comme il le fait deja pour les combinaisons et pour la seconde couleur. Deux tests tiennent les deux moities de la regle, et cinq mutations ont ete verifiees : remettre l'ancien repli, retirer la troncature, cesser d'envoyer le nom a la page, supprimer les noms d'usine, et retirer le tri de la cle d'une combinaison - chacune fait echouer un test. Ce dernier tri compte : la page accepte "4 3" comme "3 4", et sans tri le nom partait sous une cle que plus personne ne relit.
 
 Ces tests sont nes du bug de la correction 11 : un antislash mal interprete cassait tout le script, et la page restait vide sans le moindre message.
 
@@ -212,10 +218,93 @@ Ces tests ne nécessitent pas de carte et ne tapent aucune touche sur le PC. Ils
 test_version_1_relue_comme_appui_court ... ok
 test_version_2_non_touchee_par_la_conversion ... ok
 
+--- BrochesAvantDeSouder
+test_aucune_broche_n_est_utilisee_deux_fois ... ok
+test_diag_broches_refuse_quand_une_broche_est_interdite ... ok
+test_diag_ne_touche_JAMAIS_une_broche_reservee ... ok
+test_la_console_serie_est_deconseillee_pas_interdite ... ok
+test_les_broches_declarees_sont_toutes_utilisables ... ok
+test_les_broches_libres_excluent_ce_qui_sert_deja ... ok
+test_les_numeros_qui_n_existent_pas ... ok
+test_usb_et_flash_sont_reservees ... ok
+
 --- BugChangementDeProfil
 test_cancel_apres_repos_ne_declenche_pas_de_panne ... ok
 test_le_vrai_blocage_declenche_toujours_la_panne ... ok
 test_reconnexion_usb_efface_la_panne ... ok
+
+--- BugRechargementPendantUneMacro
+test_le_rechargement_lent_ne_coupe_plus_le_clavier ... ok
+test_le_rechargement_relache_le_modificateur_tenu ... ok
+test_un_rechargement_instantane_ne_changeait_deja_rien ... ok
+test_un_vrai_blocage_usb_reste_detecte ... ok
+test_une_absence_de_la_boucle_ne_declenche_pas_de_panne ... ok
+
+--- CombinaisonsDansLaBoucleReelle
+test_deux_touches_ensemble_tapent_la_commande_de_la_combinaison ... ok
+test_esc_annule_une_combinaison_en_cours_de_formation ... ok
+test_un_appui_long_sur_une_touche_membre_part_a_l_heure ... ok
+test_une_touche_membre_seule_garde_sa_macro ... ok
+
+--- CombinaisonsDansLaConfiguration
+test_aller_retour_par_le_fichier ... ok
+test_aucune_combinaison_ne_touche_la_modificatrice ... ok
+test_deux_combinaisons_sur_les_memes_touches ... ok
+test_deux_touches_du_meme_doigt_sont_refusees ... ok
+test_la_meme_touche_deux_fois ... ok
+test_le_libelle_est_tronque_pas_refuse ... ok
+test_le_message_nomme_les_touches_et_le_doigt ... ok
+test_les_combinaisons_d_usine_sont_chargees ... ok
+test_les_combinaisons_d_usine_sont_toutes_jouables ... ok
+test_les_numeros_du_fichier_sont_ceux_du_pad ... ok
+test_les_valeurs_d_usine_sont_saines ... ok
+test_sans_table_de_doigts_rien_n_est_verifie ... ok
+test_un_fichier_combos_illisible_retombe_sur_l_usine ... ok
+test_un_fichier_sans_combos_recupere_celles_d_usine ... ok
+test_un_maintien_est_impossible ... ok
+test_un_profil_inconnu ... ok
+test_une_liste_vide_est_respectee ... ok
+test_une_macro_intapable_est_refusee ... ok
+test_une_seule_touche_n_est_pas_une_combinaison ... ok
+test_une_touche_qui_n_existe_pas ... ok
+test_verifier_refuse_l_enregistrement ... ok
+
+--- CombinaisonsSimultanees
+test_apres_esc_le_relachement_ne_reveille_rien ... ok
+test_deux_appuis_trop_espaces_restent_deux_appuis ... ok
+test_deux_touches_ensemble_declenchent_la_combinaison ... ok
+test_esc_abandonne_une_combinaison_en_attente ... ok
+test_l_appui_long_d_une_touche_membre_part_a_l_heure ... ok
+test_l_horodatage_d_origine_est_preserve ... ok
+test_l_ordre_des_doigts_n_a_pas_d_importance ... ok
+test_le_trio_ne_venant_pas_la_paire_part_a_la_fin_de_la_fenetre ... ok
+test_les_relachements_de_la_combinaison_sont_avales ... ok
+test_nom_pour_l_ecran ... ok
+test_rouler_les_doigts_ne_declenche_pas_une_seconde_fois ... ok
+test_une_combinaison_d_une_seule_touche_est_ignoree ... ok
+test_une_paire_attend_si_un_trio_peut_encore_se_former ... ok
+test_une_paire_sans_trio_declenche_sans_attendre ... ok
+test_une_tape_rapide_sur_une_membre_ne_perd_rien ... ok
+test_une_touche_hors_combinaison_passe_sans_delai ... ok
+
+--- ControleGeneral
+test_controle_accepte_un_clavier_ouvert ... ok
+test_controle_distingue_un_fichier_absent_d_un_fichier_casse ... ok
+test_controle_est_vert_sur_une_configuration_saine ... ok
+test_controle_signale_deux_roles_sur_une_meme_broche ... ok
+test_controle_signale_le_safe_mode ... ok
+test_controle_signale_les_interrupteurs_a_False ... ok
+test_controle_signale_un_clavier_jamais_ouvert ... ok
+test_controle_signale_un_reglage_manquant ... ok
+test_controle_signale_une_broche_reservee ... ok
+test_l_ecran_affiche_USB_quand_le_clavier_n_est_pas_ouvert ... ok
+test_le_repli_vaut_la_valeur_du_depot ... ok
+test_pas_de_doublon_dans_la_configuration_livree ... ok
+test_reglage_prefere_toujours_config ... ok
+test_un_config_ancien_ne_doit_plus_empecher_le_demarrage ... ok
+test_un_ctrl_c_n_est_pas_une_panne ... ok
+test_un_ecran_absent_n_aggrave_pas_la_panne ... ok
+test_une_panne_de_demarrage_est_affichee_pas_avalee ... ok
 
 --- Corrections
 test_capslock_digits_fr ... ok
@@ -241,6 +330,13 @@ test_un_ancien_fichier_sans_couleur_prend_celles_d_usine ... ok
 test_une_couleur_choisie_survit_a_l_enregistrement ... ok
 test_une_couleur_illisible_ne_bloque_pas_l_enregistrement ... ok
 
+--- EscMaintenu
+test_deux_appuis_maintenus_annulent_deux_fois ... ok
+test_l_annulation_ne_part_qu_une_fois ... ok
+test_le_seuil_est_plus_long_que_celui_des_touches ... ok
+test_un_appui_bref_n_envoie_qu_echap ... ok
+test_un_maintien_ajoute_l_annulation ... ok
+
 --- GestesCourtLongDouble
 test_appui_court_instantane_sans_double ... ok
 test_appui_court_retarde_si_double_possible ... ok
@@ -251,14 +347,21 @@ test_double_appui ... ok
 test_maintien_sans_macro_longue_reste_un_court ... ok
 test_touches_independantes ... ok
 
+--- LaPagePeutToutRegler
+test_echanger_les_deux_modificateurs_depuis_la_page ... ok
+test_le_nom_MAJ_est_bien_compris_par_le_clavier ... ok
+test_un_maintien_invente_est_refuse_avant_d_etre_ecrit ... ok
+
 --- LedsRgb
 test_aucun_acces_materiel_quand_c_est_desactive ... ok
 test_chaque_profil_a_sa_couleur ... ok
 test_deux_appuis_montent_deux_fois_plus_haut ... ok
 test_diag_rgb_eteint_tout_meme_si_on_l_interrompt ... ok
 test_diag_rgb_parcourt_toutes_les_led ... ok
+test_diag_rgb_pin_n_essaie_que_des_broches_libres ... ok
 test_diag_rgb_respecte_l_ordre_des_octets ... ok
 test_diag_rgb_sans_neopixel_ne_plante_pas ... ok
+test_diag_rgb_saute_decale_bien_le_ruban ... ok
 test_extinction_apres_la_veille_puis_reveil ... ok
 test_l_empilement_est_plafonne ... ok
 test_l_horloge_qui_saute_ne_fait_pas_sauter_la_couleur ... ok
@@ -268,10 +371,16 @@ test_la_couleur_respire_vraiment ... ok
 test_la_courbe_de_respiration ... ok
 test_la_led_suit_le_doigt_et_pas_la_macro ... ok
 test_la_luminosite_plafonne_vraiment_le_courant ... ok
+test_la_reserve_de_l_appui_ne_depasse_pas_le_plafond_de_courant ... ok
+test_la_respiration_reste_entre_son_plancher_et_son_plafond ... ok
 test_la_retombee_est_progressive_et_revient_au_calme ... ok
 test_le_demarrage_annonce_l_etat_des_led ... ok
 test_le_demarrage_dit_pourquoi_rien_ne_s_allume ... ok
+test_le_melange_bouge_le_moins_au_sommet ... ok
+test_le_melange_est_pur_aux_sommets ... ok
+test_le_pad_passe_vraiment_par_les_deux_couleurs ... ok
 test_materiel_absent_ne_plante_pas ... ok
+test_melanger_interpole_et_accepte_l_absence ... ok
 test_meme_a_fond_le_plafond_de_courant_tient ... ok
 test_montage_pwm_anode_commune ... ok
 test_montage_pwm_cathode_commune ... ok
@@ -282,8 +391,13 @@ test_pas_plus_d_un_envoi_par_periode ... ok
 test_profil_inconnu_prend_la_couleur_par_defaut ... ok
 test_respiration_eteinte_laisse_la_couleur_fixe ... ok
 test_rien_a_envoyer_rien_n_est_envoye ... ok
+test_sans_seconde_couleur_rien_ne_change ... ok
 test_tout_s_eteint_a_l_arret ... ok
+test_un_appui_amene_la_touche_a_sa_couleur_pleine ... ok
 test_un_appui_intensifie_sa_touche_tout_de_suite ... ok
+test_un_appui_se_voit_au_sommet_de_la_respiration ... ok
+test_une_couleur_pure_reagit_aussi ... ok
+test_une_panne_hid_efface_l_alternance ... ok
 
 --- LiaisonSerieAvecLePC
 test_changement_de_profil_demande_par_le_pc ... ok
@@ -292,12 +406,14 @@ test_configuration_trop_volumineuse_refusee ... ok
 test_json_casse_refuse ... ok
 test_le_pc_ecrit_la_configuration ... ok
 test_le_pc_lit_la_configuration ... ok
+test_le_pc_remet_les_compteurs_a_zero ... ok
 test_lecture_bornee_par_tour_de_boucle ... ok
 test_ligne_coupee_en_deux_envois ... ok
 test_macro_intapable_refusee_par_le_lien ... ok
 test_nom_du_document ... ok
 test_rechargement_demande ... ok
 test_version ... ok
+test_zero_sans_compteurs_repond_sans_planter ... ok
 
 --- Logic
 test_azerty_all_letters ... ok
@@ -325,16 +441,36 @@ test_ticks_wrap ... ok
 test_timeout_cancels_pending ... ok
 test_vendor_report_bytes ... ok
 
+--- NomCompletDesTouches
+test_aller_retour_par_le_fichier ... ok
+test_effacer_TOUS_les_noms_les_efface_vraiment ... ok
+test_la_page_recoit_le_nom_de_chaque_touche_et_combinaison ... ok
+test_les_noms_d_usine_sont_charges ... ok
+test_un_fichier_ecrit_avant_les_noms_retrouve_ceux_d_usine ... ok
+test_un_nom_absent_ne_casse_rien ... ok
+test_un_nom_trop_long_est_tronque ... ok
+test_une_combinaison_saisie_a_l_envers_garde_son_nom ... ok
+
 --- PageDeConfigurationIntacte
 test_compagnon_pc_sert_la_meme_page ... ok
+test_echap_arrete_l_enregistrement_sans_s_enregistrer ... ok
+test_l_enregistrement_ne_fait_pas_sauter_la_page ... ok
+test_l_enregistreur_ne_produit_que_des_macros_valables ... ok
+test_l_enregistreur_transforme_les_frappes_en_etapes ... ok
+test_la_barre_d_enregistrement_est_collee_en_bas_avec_son_stop ... ok
 test_la_capture_de_raccourci_donne_des_noms_valides ... ok
 test_la_couleur_des_led_se_choisit_par_profil ... ok
 test_la_page_previent_quand_elle_n_a_rien_recu ... ok
 test_la_page_se_construit_avec_de_vraies_donnees ... ok
 test_la_restauration_d_une_sauvegarde ... ok
+test_le_bouton_des_compteurs_vise_la_bonne_route ... ok
 test_le_javascript_de_la_page_est_valide ... ok
+test_les_combinaisons_s_editent_et_repartent_entieres ... ok
 test_portail_wifi_sert_la_page_source ... ok
 test_tous_les_noms_du_tableau_de_capture_sont_connus ... ok
+test_une_barre_collee_en_bas_porte_le_bouton_stop ... ok
+test_une_erreur_javascript_s_affiche_au_lieu_de_tout_tuer ... ok
+test_une_lecture_impossible_explique_quoi_verifier ... ok
 test_une_saisie_va_bien_sur_la_touche_ou_on_la_tape ... ok
 
 --- PageWebDeConfiguration
@@ -344,7 +480,18 @@ test_enregistrement_refuse_un_json_casse ... ok
 test_enregistrement_refuse_une_macro_intapable ... ok
 test_enregistrement_valide ... ok
 test_page_html_servie ... ok
+test_remise_a_zero_des_compteurs ... ok
+test_remise_a_zero_sans_compteurs_est_refusee_proprement ... ok
 test_retour_usine ... ok
+
+--- SecondeCouleurDansLaConfiguration
+test_aller_retour_par_le_fichier ... ok
+test_la_page_lit_et_ecrit_couleur2 ... ok
+test_les_secondes_couleurs_d_usine_sont_chargees ... ok
+test_un_fichier_sans_couleur2_reprend_celle_d_usine ... ok
+test_un_profil_sans_seconde_couleur_donne_None ... ok
+test_une_chaine_vide_coupe_l_alternance_pour_de_bon ... ok
+test_une_seconde_couleur_illisible_ne_fait_rien_perdre ... ok
 
 --- SuitesDEtapesEtPauses
 test_esc_interrompt_une_macro_en_pleine_pause ... ok
@@ -400,11 +547,34 @@ test_script_powershell_complet ... ok
 test_ecrit_dans_les_deux_sorties ... ok
 test_une_console_absente_ne_casse_rien ... ok
 
+--- LePanneauNeDoitPasFausserLaDetection
+test_None_et_chaine_vide_ne_veulent_pas_dire_la_meme_chose ... ok
+test_notre_propre_fenetre_est_reconnue ... ok
+test_une_vraie_fenetre_est_lue_normalement ... ok
+
 --- NomDeDocument
 test_chemin_complet_reduit_au_nom_de_fichier ... ok
 test_coupe_a_ce_que_l_ecran_retient ... ok
 test_titres_entre_crochets ... ok
 test_titres_windows_classiques ... ok
+
+--- PourquoiLeMacropadEstInjoignable
+test_aucun_port_espressif_le_dit ... ok
+test_la_raison_survit_au_silence_de_la_console ... ok
+test_port_occupe_le_dit_avec_le_nom_du_port ... ok
+test_pyserial_absent_le_dit ... ok
+test_un_debranchement_en_cours_de_route_est_nomme ... ok
+
+--- RecapitulatifDesCommandes
+test_chaque_touche_a_son_en_tete_puis_ses_gestes ... ok
+test_l_ancienne_forme_a_une_seule_action_se_lit_encore ... ok
+test_le_nom_de_la_touche_ne_se_repete_pas ... ok
+test_le_panneau_absent_ne_casse_rien ... ok
+test_les_combinaisons_et_ESC_y_sont_aussi ... ok
+test_un_geste_vide_ne_prend_pas_de_ligne ... ok
+test_un_profil_inconnu_ne_garde_que_ce_qui_est_global ... ok
+test_une_configuration_absente_ne_plante_pas ... ok
+test_une_suite_d_etapes_se_lit_d_un_trait ... ok
 
 --- TableDeSecours
 test_abrege_coupe_a_sept_caracteres ... ok
@@ -425,7 +595,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 305 tests
+Ran 316 tests
 
 OK
 ```

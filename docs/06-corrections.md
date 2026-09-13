@@ -645,6 +645,93 @@ enfoncé.
 
 ---
 
+## Correction 16 — L'enregistrement de macros était inutilisable (trouvée à l'usage)
+
+Deux reproches distincts, le même geste abîmé : enregistrer une suite de
+frappes depuis la page de configuration.
+
+### 16a — La page redescendait tout en bas à chaque frappe
+
+**Le symptôme.** « Pendant l'enregistrement des macros la page redescend
+tout en bas, et c'est une corvée de remonter et chercher la commande en
+cours. »
+
+**La cause.** Une seule ligne, écrite pour une bonne raison :
+
+```js
+function say(t,ok){ ... window.scrollTo(0,document.body.scrollHeight); }
+```
+
+Un message qu'on n'a pas vu ne sert à rien : `say()` faisait donc défiler
+la page jusqu'à lui. Parfait pour « Enregistré » ou pour une erreur —
+désastreux pendant une prise, où `say()` est appelé **à chaque frappe**.
+La page sautait en bas, il fallait remonter, retrouver la touche, et
+recommencer à la frappe suivante.
+
+**La correction.** Un troisième paramètre, et rien d'autre :
+
+```js
+function say(t,ok,sansDefiler){ ...
+ if(!sansDefiler)window.scrollTo(0,document.body.scrollHeight);}
+```
+
+Seuls les messages émis **pendant** un enregistrement le passent. Les
+erreurs et les confirmations défilent toujours : il faut bien les voir.
+
+### 16b — On ne pouvait enregistrer qu'une seule touche
+
+**Le symptôme.** « Le bouton enregistrer marche bien mais il enregistre une
+touche et s'arrête, je veux pouvoir enregistrer plus et puis l'arrêter
+avec un clic de la souris. »
+
+**La cause : deux boutons qui se ressemblent.** Il y en a bien deux, et ils
+ne font pas la même chose.
+
+| Bouton | Ce qu'il fait |
+|---|---|
+| **⌨**, collé à la case | capture **UNE** combinaison, puis s'arrête. C'est son travail |
+| **⏺ Enregistrer une suite**, à côté de `+ etape` | capture autant de frappes que tu veux |
+
+Le premier était libellé `⌨` sans plus d'explication, le second
+`⏺ Enregistrer`. Rien ne disait lequel faisait quoi. Le comportement
+signalé — « enregistre une touche et s'arrête » — est exactement celui
+du ⌨ : il n'y avait pas de défaut de code, mais un défaut d'interface,
+ce qui coûte le même temps.
+
+**La correction, en trois points.**
+
+1. Le second bouton s'appelle maintenant **`⏺ Enregistrer une suite`**, et
+   les deux ont un texte au survol qui dit leur portée : « Capturer UNE
+   SEULE combinaison dans cette case » contre « autant que tu veux,
+   jusqu'au clic sur Stop ».
+2. Une **barre collée en bas de la fenêtre** apparaît pendant toute la
+   prise. Elle dit **quoi** on enregistre, **combien** d'étapes sont
+   déjà prises, et porte un bouton **Stop** — à portée de souris quelle
+   que soit la position dans la page. C'était la demande : Échap
+   fonctionnait déjà, mais on a les mains sur la souris.
+3. Le compte d'étapes se met à jour à chaque frappe. Une prise qui
+   n'avance pas alors qu'on tape signifie que le navigateur a **volé** la
+   frappe (`Ctrl+W`, `F11`, la touche Windows seule) : ça se voit
+   immédiatement, au lieu de se découvrir à la relecture.
+
+**Les tests.** Trois, et deux angles différents.
+
+Le premier fait tourner la page **hors navigateur** (`tests/page_smoke.js`)
+et **compte les appels à `window.scrollTo`** pendant un enregistrement :
+il en veut zéro. Le deuxième lit la barre pendant la prise — allumée, la
+bonne touche, le compte d'étapes — puis vérifie qu'elle s'éteint après.
+
+Mais un DOM minimal n'a **pas de mise en page** : aucun de ces deux tests
+ne peut dire que la barre est réellement **atteignable à la souris**. Le
+troisième lit donc le HTML et le CSS servis et exige `position:fixed`,
+`bottom:0`, et un bouton câblé sur `recStop()`.
+
+Quatre mutations vérifiées, chacune tue un test : retirer la garde
+`sansDefiler` (le compteur passe à 2), empêcher la barre de s'allumer,
+décoller la barre du bas, et renommer `recStop`.
+
+---
+
 ## Ce qui n'a PAS été touché
 
 - La structure `device/` et les quatre fichiers USB officiels recopiés :

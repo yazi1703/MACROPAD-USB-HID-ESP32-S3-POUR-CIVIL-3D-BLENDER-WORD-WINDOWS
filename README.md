@@ -287,7 +287,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   └── README.md                 comment les charger au démarrage
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             263 tests du firmware, exécutables sur PC
+│   ├── test_logic.py             274 tests du firmware, exécutables sur PC
 │   ├── test_pc.py                42 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
@@ -313,7 +313,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 305 tests ... OK
+→ Ran 316 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport
@@ -324,7 +324,7 @@ de l'AZERTY et non le `Z` américain qui vaudrait `Ctrl+W` = fermer le
 document), qu'aucune macro ne laisse un modificateur enfoncé, l'anti-rebond,
 la priorité d'ESC, le SAFE MODE, la machine à états des trois gestes, le
 protocole série, la relecture d'un ancien `profils.json`, l'absence de
-débordement de l'écran, et les neuf corrections listées dans
+débordement de l'écran, et les seize corrections listées dans
 `docs/06-corrections.md`.
 
 **Non testé, faute de matériel :** l'énumération USB réelle sous Windows,

@@ -310,6 +310,54 @@ COMBOS = {
 ESC_MAINTIEN = [("combo", ("CTRL", "Z"))]
 
 
+# =====================================================================
+# LES NOMS COMPLETS
+# =====================================================================
+# Le libelle d'une touche fait SIX caracteres : c'est la largeur de
+# l'ecran OLED, et "SELSIM" ou "PLINE" ne disent pas grand-chose a qui
+# n'a pas ecrit la configuration.
+#
+# Ce tableau donne le nom en clair. Il ne sert PAS a la carte - elle
+# continue d'afficher le libelle court - mais au recapitulatif du
+# compagnon PC, ou la place ne manque pas. Il se modifie depuis la page
+# de configuration, comme le reste.
+#
+# La cle est "B4" pour une touche, "B3+B4" pour une combinaison. Une
+# entree absente n'est pas un probleme : le libelle court fait alors
+# office de nom.
+NOMS = {
+    "CIVIL3D": {
+        "B1": "Ctrl maintenu, Maj en double appui",
+        "B2": "Copier / coller / couper",
+        "B3": "Accrochages aux objets, vue globale en long",
+        "B4": "Polyligne, ou spline en appui long",
+        "B5": "Isoler la selection, tout remontrer en long",
+        "B6": "Selectionner les objets similaires",
+        "B5+B6": "Vue enregistree precedente",
+        "B3+B4": "Vue enregistree suivante",
+        "B4+B5": "Editer une polyligne (PEDIT)",
+        "B3+B5": "Eteindre le calque de l'objet designe",
+        "B4+B6": "Rallumer le dernier calque eteint",
+        "B3+B6": "Hachures",
+    },
+    "BLENDER": {
+        "B1": "Ctrl maintenu, Maj en double appui",
+        "B2": "Copier / coller, rotation en appui long",
+        "B6": "Deplacer, retablir en appui long",
+    },
+    "WORD": {
+        "B1": "Ctrl maintenu, Maj en double appui",
+        "B2": "Copier / coller, gras en appui long",
+        "B6": "Reproduire la mise en forme, l'appliquer en double",
+    },
+    "WINDOWS": {
+        "B1": "Ctrl maintenu, Maj en double appui",
+        "B2": "Copier / coller, Alt+Tab en appui long",
+        "B4": "Gestionnaire des taches, verrouiller en long",
+    },
+}
+
+
 # Nom affiche a l'ecran quand il differe de la cle interne.
 TITLES = {"CIVIL3D": "CIVIL 3D"}
 

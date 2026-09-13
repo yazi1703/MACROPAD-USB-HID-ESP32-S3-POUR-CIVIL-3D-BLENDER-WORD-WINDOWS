@@ -590,7 +590,7 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
     def test_rotation_sur_six_touches(self):
         from profiles import ProfileManager
         import store
-        (profils, ordre, titres, couleurs, couleurs2, combos,
+        (profils, ordre, titres, couleurs, couleurs2, noms, combos,
          apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, 'usine')
         p = ProfileManager(ordre, C.DEFAULT_PROFILE, profils, 6)
@@ -601,12 +601,13 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
     # --- enregistrement JSON --------------------------------------------
     def test_aller_retour_json(self):
         import store
-        (profils, ordre, titres, couleurs, couleurs2,
+        (profils, ordre, titres, couleurs, couleurs2, noms,
          combos, apps, repli) = store.defauts()
         ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
-                                       couleurs2, combos, apps, repli, 6)
+                                       couleurs2, noms, combos, apps,
+                                       repli, 6)
         self.assertTrue(ok, raison)
-        (relus, ordre2, titres2, couleursB, secondesB, combosB,
+        (relus, ordre2, titres2, couleursB, secondesB, nomsB, combosB,
          apps2, repli2, origine) = store.charger(6)
         self.assertEqual(origine, 'fichier')
         self.assertEqual(ordre2, ordre)
@@ -624,28 +625,30 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
 
     def test_macro_intapable_refusee(self):
         import store
-        (profils, ordre, titres, couleurs, couleurs2,
+        (profils, ordre, titres, couleurs, couleurs2, noms,
          combos, apps, repli) = store.defauts()
         profils['CIVIL3D'][0] = ('KO', {'court': [('key', 'TOUCHE_BIDON')]})
         ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
-                                       couleurs2, combos, apps, repli, 6)
+                                       couleurs2, noms, combos, apps,
+                                       repli, 6)
         self.assertFalse(ok)
         self.assertIn('CIVIL3D', raison)
 
     def test_libelle_trop_long_refuse(self):
         import store
-        (profils, ordre, titres, couleurs, couleurs2,
+        (profils, ordre, titres, couleurs, couleurs2, noms,
          combos, apps, repli) = store.defauts()
         profils['WORD'][0] = ('BEAUCOUPTROPLONG', {'court': [('key', 'A')]})
         ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
-                                       couleurs2, combos, apps, repli, 6)
+                                       couleurs2, noms, combos, apps,
+                                       repli, 6)
         self.assertFalse(ok)
 
     def test_fichier_corrompu_repli_sur_usine(self):
         import store
         with open(C.PROFILES_FILE, 'w') as f:
             f.write('{ ceci n est pas du JSON')
-        (profils, ordre, titres, couleurs, couleurs2, combos,
+        (profils, ordre, titres, couleurs, couleurs2, noms, combos,
          apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, 'usine')      # ne doit PAS planter
         self.assertEqual(len(profils['CIVIL3D']), 6)
@@ -658,7 +661,7 @@ class V1SixTouchesEtConfigWeb(unittest.TestCase):
                 'profils': {'X': {'titre': 'X', 'touches': [touche] * 6}}}
         with open(C.PROFILES_FILE, 'w') as f:
             J.dump(data, f)
-        (profils, ordre, titres, couleurs, couleurs2, combos,
+        (profils, ordre, titres, couleurs, couleurs2, noms, combos,
          apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, 'usine')
 
@@ -939,7 +942,7 @@ class PageWebDeConfiguration(unittest.TestCase):
 
         # La modification doit etre relue telle quelle par le firmware.
         import store
-        (profils, ordre, titres, couleurs, couleurs2, combos,
+        (profils, ordre, titres, couleurs, couleurs2, noms, combos,
          apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(profils["CIVIL3D"][0][0], "TALUS")
@@ -962,7 +965,7 @@ class PageWebDeConfiguration(unittest.TestCase):
         self.assertIn("WORD", resultat["raison"])
         # Rien ne doit avoir ete ecrit : on reste sur les profils d'usine.
         import store
-        self.assertEqual(store.charger(6)[8], "usine")
+        self.assertEqual(store.charger(6)[9], "usine")
 
     def test_enregistrement_refuse_un_json_casse(self):
         import json as J
@@ -973,9 +976,9 @@ class PageWebDeConfiguration(unittest.TestCase):
     def test_retour_usine(self):
         import store
         store.enregistrer(*store.defauts(), nb_touches=6)
-        self.assertEqual(store.charger(6)[8], "fichier")
+        self.assertEqual(store.charger(6)[9], "fichier")
         self._requete("POST", "/api/usine")
-        self.assertEqual(store.charger(6)[8], "usine")
+        self.assertEqual(store.charger(6)[9], "usine")
 
     def test_chemin_inconnu(self):
         self.assertIn(b"404", self._requete("GET", "/nimportequoi"))
@@ -1145,7 +1148,7 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         self.assertIn((link.EVT_RECHARGER, None), evenements)
         self.assertTrue(any(s.startswith("#OK:") for s in sorties), sorties)
 
-        (profils, ordre, titres, couleurs, couleurs2, combos,
+        (profils, ordre, titres, couleurs, couleurs2, noms, combos,
          apps, repli, origine) = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(profils["CIVIL3D"][0][0], "TALUS")
@@ -1167,7 +1170,7 @@ class LiaisonSerieAvecLePC(unittest.TestCase):
         self.assertNotIn((link.EVT_RECHARGER, None), evenements)
         self.assertTrue(any(s.startswith("#KO:") for s in sorties), sorties)
         # Rien n'a ete ecrit : on reste sur les profils d'usine.
-        self.assertEqual(store.charger(6)[8], "usine")
+        self.assertEqual(store.charger(6)[9], "usine")
 
     def test_json_casse_refuse(self):
         lien, source, sorties = self._lien()
@@ -1705,7 +1708,7 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
     # --- les valeurs d'usine -------------------------------------------
     def test_les_combinaisons_d_usine_sont_chargees(self):
         import store, profiles as P
-        combos = store.defauts()[5]
+        combos = store.defauts()[6]
         self.assertEqual(combos["CIVIL3D"], list(P.COMBOS["CIVIL3D"]))
         # Un profil sans combinaison n'en invente pas.
         self.assertEqual(combos.get("WORD", []), [])
@@ -1728,14 +1731,15 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
     # --- aller-retour vers le fichier ----------------------------------
     def test_aller_retour_par_le_fichier(self):
         import store
-        (profils, ordre, titres, couleurs, couleurs2,
+        (profils, ordre, titres, couleurs, couleurs2, noms,
          combos, apps, repli) = store.defauts()
         ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
-                                       couleurs2, combos, apps, repli, 6)
+                                       couleurs2, noms, combos, apps,
+                                       repli, 6)
         self.assertTrue(ok, raison)
-        relus = store.charger(6)[5]
+        relus = store.charger(6)[6]
         self.assertEqual(relus["CIVIL3D"], combos["CIVIL3D"])
-        self.assertEqual(store.charger(6)[8], "fichier")
+        self.assertEqual(store.charger(6)[9], "fichier")
 
     def test_les_numeros_du_fichier_sont_ceux_du_pad(self):
         """Dans le JSON, [3, 4] c'est B3 et B4 - pas les indices internes."""
@@ -1767,7 +1771,7 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
     def test_un_fichier_sans_combos_recupere_celles_d_usine(self):
         import store, profiles as P
         self._fichier_sans_combos()
-        (profils, ordre, titres, couleurs, couleurs2, combos, apps, repli,
+        (profils, ordre, titres, couleurs, couleurs2, noms, combos, apps, repli,
          origine) = store.charger(6)
         self.assertEqual(origine, "fichier")     # le reste est bien relu
         self.assertEqual(combos["CIVIL3D"], list(P.COMBOS["CIVIL3D"]))
@@ -1780,7 +1784,7 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
         data.pop("origine", None)
         with open(C.PROFILES_FILE, "w") as fichier:
             J.dump(data, fichier)
-        self.assertEqual(store.charger(6)[5]["CIVIL3D"], [])
+        self.assertEqual(store.charger(6)[6]["CIVIL3D"], [])
 
     # --- ce qui doit etre refuse ----------------------------------------
     def _refuse(self, combos, morceau):
@@ -1869,11 +1873,12 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
     def test_verifier_refuse_l_enregistrement(self):
         """Le controle est bien branche sur le chemin d'enregistrement."""
         import store
-        (profils, ordre, titres, couleurs, couleurs2,
+        (profils, ordre, titres, couleurs, couleurs2, noms,
          combos, apps, repli) = store.defauts()
         combos["CIVIL3D"] = [((2,), "SEULE", [("key", "F3")])]
         ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
-                                       couleurs2, combos, apps, repli, 6)
+                                       couleurs2, noms, combos, apps,
+                                       repli, 6)
         self.assertFalse(ok)
         self.assertIn("au moins deux touches", raison)
         # Et rien n'a ete ecrit : la configuration precedente est intacte.
@@ -1886,7 +1891,7 @@ class CombinaisonsDansLaConfiguration(unittest.TestCase):
         data.pop("origine", None)
         with open(C.PROFILES_FILE, "w") as fichier:
             J.dump(data, fichier)
-        (profils, ordre, titres, couleurs, couleurs2, combos, apps, repli,
+        (profils, ordre, titres, couleurs, couleurs2, noms, combos, apps, repli,
          origine) = store.charger(6)
         self.assertEqual(origine, "usine")
         self.assertEqual(combos["CIVIL3D"], list(P.COMBOS["CIVIL3D"]))
@@ -2002,7 +2007,7 @@ class SuitesDEtapesEtPauses(unittest.TestCase):
     def test_l_ancienne_forme_a_une_seule_action_se_relit(self):
         # Un profils.json ecrit avant les suites range UN objet par geste.
         import store
-        (profils, ordre, titres, couleurs, couleurs2, combos,
+        (profils, ordre, titres, couleurs, couleurs2, noms, combos,
          apps, repli) = store.depuis_json({
             "version": 2, "ordre": ["X"],
             "profils": {"X": {"titre": "X", "touches": [
@@ -2257,7 +2262,7 @@ class CouleursDesProfils(unittest.TestCase):
 
     def test_les_couleurs_usine_viennent_de_config(self):
         import store
-        _, _, _, couleurs, _, _, _, _ = store.defauts()
+        _, _, _, couleurs, _, _, _, _, _ = store.defauts()
         self.assertEqual(couleurs["CIVIL3D"], tuple(C.RGB_COULEURS["CIVIL3D"]))
         self.assertEqual(couleurs["BLENDER"], tuple(C.RGB_COULEURS["BLENDER"]))
 
@@ -2274,7 +2279,7 @@ class CouleursDesProfils(unittest.TestCase):
         ok, raison = store.enregistrer_json(data, 6)
         self.assertTrue(ok, raison)
 
-        _, _, _, couleurs, _, _, _, _, origine = store.charger(6)
+        _, _, _, couleurs, _, _, _, _, _, origine = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(couleurs["WORD"], (0x12, 0x34, 0x56))
         # Les autres n'ont pas bouge.
@@ -2291,7 +2296,7 @@ class CouleursDesProfils(unittest.TestCase):
             del bloc["couleur"]
         ok, raison = store.enregistrer_json(data, 6)
         self.assertTrue(ok, raison)
-        _, _, _, couleurs, _, _, _, _, _ = store.charger(6)
+        _, _, _, couleurs, _, _, _, _, _, _ = store.charger(6)
         self.assertEqual(couleurs["CIVIL3D"], tuple(C.RGB_COULEURS["CIVIL3D"]))
 
 
@@ -2737,11 +2742,12 @@ class SecondeCouleurDansLaConfiguration(unittest.TestCase):
 
     def test_aller_retour_par_le_fichier(self):
         import store
-        (profils, ordre, titres, couleurs, couleurs2,
+        (profils, ordre, titres, couleurs, couleurs2, noms,
          combos, apps, repli) = store.defauts()
         couleurs2["CIVIL3D"] = (10, 20, 30)
         ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
-                                       couleurs2, combos, apps, repli, 6)
+                                       couleurs2, noms, combos, apps,
+                                       repli, 6)
         self.assertTrue(ok, raison)
         self.assertEqual(store.charger(6)[4]["CIVIL3D"], (10, 20, 30))
 
@@ -2778,7 +2784,7 @@ class SecondeCouleurDansLaConfiguration(unittest.TestCase):
         data.pop("origine", None)
         with open(C.PROFILES_FILE, "w") as fichier:
             J.dump(data, fichier)
-        (profils, ordre, titres, couleurs, couleurs2, combos, apps, repli,
+        (profils, ordre, titres, couleurs, couleurs2, noms, combos, apps, repli,
          origine) = store.charger(6)
         self.assertEqual(origine, "fichier")
         self.assertEqual(couleurs2["CIVIL3D"],
@@ -2794,7 +2800,128 @@ class SecondeCouleurDansLaConfiguration(unittest.TestCase):
             J.dump(data, fichier)
         profils = store.charger(6)[0]
         self.assertEqual(len(profils["CIVIL3D"]), 6)
-        self.assertEqual(store.charger(6)[8], "fichier")
+        self.assertEqual(store.charger(6)[9], "fichier")
+
+
+class NomCompletDesTouches(unittest.TestCase):
+    """Le libelle fait SIX caracteres : c'est la largeur de l'ecran OLED.
+
+    "SELSIM" ne dit rien trois semaines plus tard. Le nom complet dit la
+    meme chose en clair, pour le recapitulatif du compagnon PC - le seul
+    endroit ou la place le permet. Il voyage dans profils.json comme le
+    reste, et c'est ce voyage que ces tests gardent : la page l'ecrit, le
+    fichier le retient, charger() le rend.
+    """
+
+    def setUp(self):
+        try:
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    def test_les_noms_d_usine_sont_charges(self):
+        import store, profiles
+        noms = store.defauts()[5]
+        self.assertEqual(noms["CIVIL3D"]["B6"],
+                         profiles.NOMS["CIVIL3D"]["B6"])
+        # Les combinaisons ont les leurs, sous la meme forme.
+        self.assertEqual(noms["CIVIL3D"]["B5+B6"],
+                         profiles.NOMS["CIVIL3D"]["B5+B6"])
+
+    def test_la_page_recoit_le_nom_de_chaque_touche_et_combinaison(self):
+        import store, profiles
+        data = store.vers_json(6)
+        bloc = data["profils"]["CIVIL3D"]
+        self.assertEqual(bloc["touches"][5]["nom"],
+                         profiles.NOMS["CIVIL3D"]["B6"])
+        combo = [c for c in bloc["combos"]
+                 if c["touches"] == [5, 6]][0]
+        self.assertEqual(combo["nom"], profiles.NOMS["CIVIL3D"]["B5+B6"])
+
+    def test_aller_retour_par_le_fichier(self):
+        """Ecrit depuis la page, relu apres redemarrage."""
+        import store
+        data = store.vers_json(6)
+        data["profils"]["CIVIL3D"]["touches"][3]["nom"] = "Polyligne a main levee"
+        (profils, ordre, titres, couleurs, couleurs2, noms,
+         combos, apps, repli) = store.depuis_json(data, 6)
+        ok, raison = store.enregistrer(profils, ordre, titres, couleurs,
+                                       couleurs2, noms, combos, apps,
+                                       repli, 6)
+        self.assertTrue(ok, raison)
+        self.assertEqual(store.charger(6)[5]["CIVIL3D"]["B4"],
+                         "Polyligne a main levee")
+
+    def test_un_nom_trop_long_est_tronque(self):
+        """Le fichier vit sur une flash de 16 Mo partagee avec le firmware :
+        aucun champ ne doit pouvoir grossir sans limite."""
+        import store
+        data = store.vers_json(6)
+        data["profils"]["CIVIL3D"]["touches"][0]["nom"] = "N" * 500
+        noms = store.depuis_json(data, 6)[5]
+        self.assertEqual(len(noms["CIVIL3D"]["B1"]), store.NOM_MAX)
+
+    def test_un_nom_absent_ne_casse_rien(self):
+        """Le nom est FACULTATIF : sans lui, le libelle court fait office
+        de nom dans le recapitulatif, et rien ne doit lever."""
+        import store
+        data = store.vers_json(6)
+        data["profils"]["CIVIL3D"]["touches"][2]["nom"] = ""
+        noms = store.depuis_json(data, 6)[5]
+        self.assertNotIn("B3", noms["CIVIL3D"])
+        self.assertIn("B4", noms["CIVIL3D"])       # les autres sont intacts
+
+    def test_effacer_TOUS_les_noms_les_efface_vraiment(self):
+        """Le piege qu'on evite ici, et il a ete reproduit avant correction.
+
+        Le repli "aucun nom -> on remet ceux d'usine" est bon pour un
+        fichier ecrit AVANT les noms complets. Applique a un fichier qui
+        parle des noms, il rend l'effacement impossible : tu vides les
+        cases, tu enregistres, et les noms d'usine reviennent au
+        rechargement suivant. Deux situations differentes, deux reponses.
+        """
+        import store
+        data = store.vers_json(6)
+        for touche in data["profils"]["CIVIL3D"]["touches"]:
+            touche["nom"] = ""
+        for combo in data["profils"]["CIVIL3D"]["combos"]:
+            combo["nom"] = ""
+        noms = store.depuis_json(data, 6)[5]
+        self.assertEqual(noms["CIVIL3D"], {},
+                         "les noms effaces sont revenus tout seuls")
+
+    def test_une_combinaison_saisie_a_l_envers_garde_son_nom(self):
+        """La page accepte "4 3" aussi bien que "3 4" - elle trie.
+
+        Le nom, lui, est range sous une cle "B3+B4". Si cette cle n'etait
+        pas triee comme les indices de la combinaison, le nom partirait
+        sous "B4+B3" : ecrit dans le fichier, jamais relu, disparu en
+        silence. C'est le genre de perte qu'on ne remarque qu'apres.
+        """
+        import store
+        data = store.vers_json(6)
+        combo = [c for c in data["profils"]["CIVIL3D"]["combos"]
+                 if c["touches"] == [5, 6]][0]
+        combo["touches"] = [6, 5]                  # saisi a l'envers
+        combo["nom"] = "Ma vue precedente"
+        noms = store.depuis_json(data, 6)[5]
+        self.assertEqual(noms["CIVIL3D"].get("B5+B6"), "Ma vue precedente")
+        self.assertNotIn("B6+B5", noms["CIVIL3D"])
+
+    def test_un_fichier_ecrit_avant_les_noms_retrouve_ceux_d_usine(self):
+        """L'autre moitie de la regle : personne ne perd les noms d'usine
+        en relisant un ancien profils.json."""
+        import store, profiles
+        data = store.vers_json(6)
+        for touche in data["profils"]["CIVIL3D"]["touches"]:
+            touche.pop("nom", None)
+        for combo in data["profils"]["CIVIL3D"]["combos"]:
+            combo.pop("nom", None)
+        noms = store.depuis_json(data, 6)[5]
+        self.assertEqual(noms["CIVIL3D"]["B6"],
+                         profiles.NOMS["CIVIL3D"]["B6"])
 
 
 class LedsRgb(unittest.TestCase):
@@ -3689,6 +3816,32 @@ class PageDeConfigurationIntacte(unittest.TestCase):
             "pc/macropad_auto.py a divergé : relance "
             "python3 tools/injecter_page.py")
 
+    def test_la_barre_d_enregistrement_est_collee_en_bas_avec_son_stop(self):
+        """Ce qui rend le Stop cliquable sans remonter la page.
+
+        Le test au-dessus fait tourner le JavaScript et verifie que la
+        barre s'allume, se remplit et s'eteint. Il ne peut rien dire de sa
+        POSITION : le DOM minimal n'a pas de mise en page. Or c'est
+        exactement ce qui repond au reproche - "je veux l'arreter avec un
+        clic de la souris", quelle que soit la position dans la page.
+
+        Deux choses a garder, donc, et elles sont dans le HTML et le CSS :
+        la barre est en position fixe, collee en bas, et elle porte un
+        bouton cable sur recStop.
+        """
+        bloc = self.re.search(r"#bande\{([^}]*)\}", self.source)
+        self.assertIsNotNone(bloc, "la regle CSS #bande a disparu")
+        regles = bloc.group(1).replace(" ", "").replace("\n", "")
+        self.assertIn("position:fixed", regles,
+                      "la barre ne suit plus le defilement")
+        self.assertIn("bottom:0", regles, "la barre n'est plus collee en bas")
+
+        barre = self.re.search(r"<div id=bande>(.*?)</div>", self.source,
+                               self.re.S)
+        self.assertIsNotNone(barre, "la barre d'enregistrement a disparu")
+        self.assertIn("recStop()", barre.group(1),
+                      "le bouton Stop de la barre n'appelle plus recStop")
+
     def test_le_javascript_de_la_page_est_valide(self):
         """Le controle qui aurait evite le bug : le script se lit-il ?"""
         node = shutil.which("node") or shutil.which("nodejs")
@@ -3799,6 +3952,9 @@ class PageDeConfigurationIntacte(unittest.TestCase):
 
         self.assertTrue(vu["envoye"], "l'enregistrement n'a rien envoye")
         self.assertEqual(vu["touche1_label"], "ZZZ")
+        # Le NOM COMPLET voyage lui aussi : six caracteres ne disent pas
+        # grand-chose a qui n'a pas ecrit la configuration.
+        self.assertEqual(vu["touche1_nom"], "Nom complet B1")
         self.assertEqual(vu["touche1_valeur"], "TESTVAL")
 
         # Un bouton "+ etape" par geste : 6 touches x 3 gestes.
@@ -3891,6 +4047,35 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         ])
         self.assertIn("4 etape", vu["rec_message"])
 
+    def test_l_enregistrement_ne_fait_pas_sauter_la_page(self):
+        """Corvee signalee a l'usage : la page sautait tout en bas.
+
+        say() ramenait en bas de page a chaque message. En plein
+        enregistrement, on perdait donc de vue la touche qu'on etait en
+        train de modifier, et il fallait remonter la chercher. La page
+        fait plusieurs ecrans de haut.
+        """
+        import store
+        vu = self._construire(store.vers_json(6))
+        self.assertEqual(vu["rec_defilements"], 0,
+                         "la page a saute en bas pendant l'enregistrement")
+
+    def test_une_barre_collee_en_bas_porte_le_bouton_stop(self):
+        """Le Stop doit etre atteignable sans remonter la page.
+
+        C'est ce qui permet d'enregistrer AUTANT DE FRAPPES QU'ON VEUT et
+        d'arreter d'un clic de souris, quelle que soit la position dans la
+        page.
+        """
+        import store
+        vu = self._construire(store.vers_json(6))
+        # Visible pendant, cachee apres.
+        self.assertEqual(vu["rec_bande_visible"], "on")
+        self.assertEqual(vu["rec_bande_apres"], "")
+        # Et elle dit ce qu'on enregistre, et combien d'etapes en cours.
+        self.assertIn("B2", vu["rec_bande_cible"])
+        self.assertIn("etape", vu["rec_bande_compte"])
+
     def test_l_enregistreur_ne_produit_que_des_macros_valables(self):
         """Le controle qui compte : ce qu'il fabrique doit etre TAPABLE.
 
@@ -3908,7 +4093,7 @@ class PageDeConfigurationIntacte(unittest.TestCase):
                                    ("key", "F5")])
         self.assertTrue(compile_actions(actions, C.KEYBOARD_LAYOUT))
         # Et la configuration complete reste acceptee par le firmware.
-        (profils, ordre, titres, couleurs, couleurs2,
+        (profils, ordre, titres, couleurs, couleurs2, noms,
          combos, apps, repli) = store.defauts()
         profils["CIVIL3D"][1][1]["long"] = actions
         self.assertEqual(store.verifier(profils, ordre, 6, combos), [])
@@ -4039,7 +4224,7 @@ class AncienFichierDeConfiguration(unittest.TestCase):
                 {"label": "", "type": "none", "valeur": ""},
             ]}},
         }
-        (profils, ordre, titres, couleurs, couleurs2, combos,
+        (profils, ordre, titres, couleurs, couleurs2, noms, combos,
          apps, repli) = store.depuis_json(ancien, 6)
         touches = profils["CIVIL3D"]
 
@@ -4069,7 +4254,7 @@ class AncienFichierDeConfiguration(unittest.TestCase):
                  "court": {"type": "combo", "valeur": "CTRL+B"}},
             ]}},
         }
-        profils, _, _, _, _, _, _, _ = store.depuis_json(recent, 6)
+        profils, _, _, _, _, _, _, _, _ = store.depuis_json(recent, 6)
         self.assertEqual(profils["WORD"][0][1]["court"],
                          [("combo", ("CTRL", "B"))])
 

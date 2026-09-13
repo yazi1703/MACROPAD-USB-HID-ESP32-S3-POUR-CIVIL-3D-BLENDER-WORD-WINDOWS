@@ -223,6 +223,9 @@ Combinaisons — deux touches appuyées ensemble
   même `3 et 4` — la page ne garde que les chiffres, les trie et enlève
   les doublons.
 * **Libellé** : ce que l'écran affichera, 16 caractères au plus.
+* **Nom complet** : la même chose en clair, 60 caractères, pour le
+  récapitulatif du compagnon PC. Facultatif — voir
+  [`docs/07`](07-mode-configuration.md).
 * **Action** : exactement le même éditeur que pour les gestes, avec les
   mêmes types et les mêmes suites d'étapes (commande, pause, validation).
 
@@ -231,6 +234,7 @@ Dans `profils.json`, cela donne :
 ```json
 "combos": [
   {"touches": [3, 4], "label": "VUE PREC.",
+   "nom": "Vue enregistree precedente",
    "actions": [{"type": "text_enter", "valeur": "MPVIEWPREV"}]}
 ]
 ```
@@ -250,6 +254,16 @@ COMBOS = {
     "CIVIL3D": [
         COMBO((3, 4), "VUE PREC.", [("text_enter", "MPVIEWPREV")]),
     ],
+}
+```
+
+Le nom complet, lui, vit dans la table `NOMS` du même fichier, où la clé
+est `"B3+B4"` — les numéros du pad, séparés par un `+`, dans l'ordre
+croissant :
+
+```python
+NOMS = {
+    "CIVIL3D": {"B3+B4": "Vue enregistree suivante"},
 }
 ```
 

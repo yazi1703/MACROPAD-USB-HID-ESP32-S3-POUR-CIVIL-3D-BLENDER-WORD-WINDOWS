@@ -160,19 +160,33 @@ Le compagnon affiche donc, **à chaque changement de profil**, une petite
 fenêtre en bas à droite avec **tout** ce que fait le pad :
 
 ```
-  CIVIL 3D                                    epingler  x
-  B1     CTRL     appui court   maintenir CTRL
-                  double appui  maintenir MAJ
-  B2     COPIER   appui court   CTRL+C
-                  appui long    CTRL+X
-                  double appui  CTRL+V
-  B3     F3       appui court   F3
-                  appui long    taper _ZOOM E puis Entree
+  CIVIL 3D                                        epingler  x
+  B1     CTRL                    Ctrl maintenu, Maj en double appui
+                  appui court    maintenir CTRL
+                  double appui   maintenir SHIFT
+  B2     COPIER                  Copier / coller / couper
+                  appui court    CTRL+C
+                  appui long     CTRL+X
+                  double appui   CTRL+V
+  B3     F3                      Accrochages aux objets, vue globale en long
+                  appui court    F3
+                  appui long     taper _ZOOM E puis Entree
   ...
-  B5+B6  VUE PREC.  ensemble    taper MPVIEWPREV puis Entree
-  ESC             appui court   ESC
-                  maintenu      CTRL+Z
+  B5+B6  VUE PREC.               Vue enregistree precedente
+                  ensemble       taper MPVIEWPREV puis Entree
+  ESC             appui court    ESC
+                  maintenu       CTRL+Z
 ```
+
+Une touche occupe donc **une ligne d'en-tête** — son numéro, son libellé
+court (celui de l'écran) et son **nom complet** — puis **une ligne par
+geste**, sans répéter le numéro. L'œil retrouve les touches d'un coup, et
+le nom complet dit enfin ce que `SELSIM` veut dire : c'est le seul endroit
+où la place le permet, l'écran OLED fait six caractères.
+
+Le nom complet se saisit dans la page de configuration
+([chapitre 7](07-mode-configuration.md)) et vit avec les macros, sur la
+carte. Une touche sans nom n'affiche que son libellé : rien ne casse.
 
 Elle disparaît seule au bout de quelques secondes. **« epingler »** la
 garde ouverte ; on la déplace en tirant sur son bandeau.

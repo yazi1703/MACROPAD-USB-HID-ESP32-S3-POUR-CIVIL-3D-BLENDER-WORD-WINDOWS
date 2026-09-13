@@ -221,7 +221,10 @@ def run():
         return
 
     # --- Chargement de la configuration --------------------------------
-    (profils, ordre, titres, couleurs, couleurs2, table_combos,
+    # noms : les noms complets des touches. Ils ne servent qu'au
+    # recapitulatif du compagnon PC - la carte affiche le libelle court -
+    # mais ils doivent traverser le rechargement sans se perdre.
+    (profils, ordre, titres, couleurs, couleurs2, _noms, table_combos,
      apps, repli, origine) = store.charger(NB_TOUCHES)
     print("Macros chargees depuis :", origine)
 
@@ -291,7 +294,7 @@ def run():
         nonlocal manager, titres, ordre, couleurs, couleurs2, table_combos
         try:
             (neufs, ordre_neuf, titres_neufs, couleurs_neuves, secondes_neuves,
-             combos_neuves, _apps, _repli,
+             _noms_neufs, combos_neuves, _apps, _repli,
              origine_neuve) = store.charger(NB_TOUCHES)
             nouveau = ProfileManager(ordre_neuf, manager.name, neufs, NB_TOUCHES)
         except Exception as exc:
