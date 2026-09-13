@@ -302,9 +302,37 @@ dans les deux cases :
 
 Aucune expression, aucune icône à trouver. Ça récupère quatre mois de
 calendrier d'un coup, et **c'est le compagnon qui filtre sur ta date
-locale** — l'écran affichera bien la bonne journée. Il faudra rallonger la
-date de fin un jour, mais tu auras **toute la chaîne qui tourne
-aujourd'hui**. Ne laisse pas un détail d'interface bloquer le reste.
+locale** — l'écran affichera bien la bonne journée.
+
+> ⚠️ **À ne garder que le temps de faire marcher la chaîne.** Quatre mois de
+> calendrier, avec le texte HTML de chaque invitation, font plusieurs
+> mégaoctets. OneDrive bascule alors en envoi par morceaux et l'action
+> échoue :
+>
+> ```
+> InvalidProtocolResponse
+> The response to partial content upload initiating request is not valid
+> ```
+>
+> Repasse aux expressions dès que tu as trouvé l'onglet **Fonction**.
+
+#### Si le fichier reste trop gros
+
+Le poids vient des descriptions d'invitations, dont on ne fait rien.
+Ajoute un nœud **entre `Calendrier` et le fichier** : **`+`** → **Sélectionner**
+(*Select*, dans « Opérations de données »).
+
+| Champ | Valeur (onglet **Fonction**) |
+|---|---|
+| **À partir de** | `body('Calendrier')?['value']` |
+| **Mapper** — clé `titre` | `item()?['subject']` |
+| **Mapper** — clé `debut` | `item()?['start']` |
+| **Mapper** — clé `fin` | `item()?['end']` |
+
+Puis, dans **Contenu du fichier** : `body('Selectionner')`.
+
+Chaque réunion tombe à une centaine d'octets, et le compagnon lit ce
+format directement — une simple liste, sans objet autour, c'est prévu.
 
 > **Pourquoi une fenêtre de trois jours, et pas la journée ?** Parce que
 > `utcNow()` donne l'heure **UTC**, décalée de 1 ou 2 h par rapport à toi :
