@@ -275,7 +275,8 @@ onglets : **`Fonction`** et *Contenu dynamique*.
 > anglaise dit *Expression*, la française dit **Fonction** : on peut
 > chercher longtemps le mauvais mot.
 
-Colle exactement :
+Tape la formule dans la **grande zone de saisie en haut du panneau** — pas
+dans la case du formulaire — puis **clique sur « Ajouter » / « OK »** :
 
 ```
 addDays(startOfDay(utcNow()), -1)
@@ -285,9 +286,29 @@ addDays(startOfDay(utcNow()), -1)
 addDays(startOfDay(utcNow()), 2)
 ```
 
-> Si tu ne trouves ni `fx` ni l'onglet : en haut à droite de l'éditeur, il
-> y a un interrupteur **« Nouveau concepteur »**. Désactive-le — l'ancien
-> affiche « Expression » en toutes lettres.
+> ### ⚠️ C'est le clic sur « Ajouter » qui compte
+>
+> Tapée directement dans la case, la formule est enregistrée comme du
+> **texte ordinaire** et envoyée telle quelle à Outlook, qui répond :
+>
+> ```
+> Valeur « addDays(startOfDay(utcNow()), -1) » non valide
+> pour le paramètre « Start Time »
+> ```
+>
+> **Comment savoir que c'est pris :** la case n'affiche plus du texte noir
+> mais une **pastille colorée**. Et l'onglet **Vue Code** du nœud tranche
+> sans relancer le flux :
+>
+> | Ce qu'on y lit | Verdict |
+> |---|---|
+> | `"startDateTimeUtc": "addDays(...)"` | ❌ du texte |
+> | `"startDateTimeUtc": "@{addDays(...)}"` | ✅ une expression |
+>
+> **Le raccourci qui évite tout ça :** tape la formule directement dans la
+> case, mais **encadrée de `@{ }`** :
+> `@{addDays(startOfDay(utcNow()), -1)}`. Ces accolades disent « ceci est
+> une formule », et il n'y a plus de panneau à manipuler.
 
 **b) Avec des dates écrites en clair** (pour démarrer). Tape juste du texte
 dans les deux cases :
