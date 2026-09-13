@@ -469,10 +469,26 @@ pourquoi**, et il affiche les heures brutes à côté des heures converties.
 1 ou 2 heures, c'est le fuseau — dis-le-moi avec la première entrée du
 fichier, j'adapte.
 
-Quand c'est bon, pointe le compagnon dessus :
+#### Étape 5 — le compagnon trouve le fichier tout seul
+
+**Tu n'as rien à taper.** Sans option, le compagnon cherche `agenda.json`
+dans cet ordre :
+
+1. à côté de `macropad_auto.py` — un fichier posé là est un choix explicite
+2. dans ton **OneDrive professionnel** (`%OneDriveCommercial%`)
+3. dans ton OneDrive personnel
+
+**C'est le cas 2 qui compte** : c'est exactement là que Power Automate
+dépose le sien. Le double-clic sur `macropad_auto.bat` comme le démarrage
+automatique avec Windows le trouvent donc sans aucune option.
+
+Si rien n'est trouvé, le compagnon **liste les dossiers qu'il a fouillés** —
+un « aucun agenda trouvé » sans cette liste n'aiderait personne.
+
+L'option reste là pour un chemin ailleurs :
 
 ```bat
-python macropad_auto.py --agenda "C:\Users\toi\OneDrive\agenda.json"
+python macropad_auto.py --agenda "D:\ailleurs\agenda.json"
 ```
 
 ---
@@ -603,6 +619,47 @@ après avoir tout soudé.
 complète. Remplace les heures par celles de ton après-midi et lance le
 compagnon avec `--agenda` : tu verras la vue bouger sans avoir configuré
 quoi que ce soit.
+
+---
+
+## 12.5 bis Que tout démarre tout seul
+
+Une fois le flux en place, il reste à ce que le compagnon se lance sans
+que tu y penses :
+
+```bat
+python demarrage_windows.py --installer
+```
+
+(ou double-clic sur `demarrage_windows.bat`, choix 1)
+
+La chaîne complète tourne alors sans une seule commande :
+
+```
+  Power Automate  →  OneDrive  →  compagnon PC  →  câble USB  →  écran
+   toutes les 15 min   se synchronise   le trouve tout seul
+```
+
+> ### Pourquoi l'agenda ne vit PAS sur la carte
+>
+> La question se pose naturellement — autant y répondre une fois.
+>
+> **La carte ne peut pas aller le chercher.** Il lui faudrait rejoindre le
+> WiFi de l'entreprise puis s'authentifier auprès de Microsoft en OAuth. Ce
+> n'est pas une limite de code : un ESP32 ne passera pas l'authentification
+> d'un tenant d'entreprise.
+>
+> **Elle n'a de toute façon pas d'horloge.** Même avec l'agenda en mémoire,
+> elle ignorerait l'heure qu'il est. Le PC resterait indispensable : on
+> n'aurait rien gagné.
+>
+> **Écrire sur la flash toutes les 15 minutes l'userait** — environ 35 000
+> écritures par an, sur une mémoire donnée pour ~100 000 cycles. C'est
+> exactement ce que `stats.py` évite déjà en n'écrivant que toutes les 25
+> frappes.
+>
+> Et le câble USB est déjà là : c'est lui qui alimente la carte. Le PC
+> pousse l'agenda dessus, c'est gratuit et instantané.
 
 ---
 

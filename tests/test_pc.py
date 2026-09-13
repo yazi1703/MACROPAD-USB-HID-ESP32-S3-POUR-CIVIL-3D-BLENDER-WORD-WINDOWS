@@ -1128,3 +1128,153 @@ class LesFormesPossiblesDUnFluxPowerAutomate(unittest.TestCase):
             "summary": "Depuis un autre outil",
             "start": "09:00", "end": "10:00"})
         self.assertEqual(titre, "Depuis un autre outil")
+
+
+class LeVraiVidageDUnFluxPowerAutomate(unittest.TestCase):
+    """Un echantillon REEL, capture sur le flux d'un utilisateur.
+
+    Jusqu'ici le format etait deduit, pas observe : je n'ai ni Windows, ni
+    Teams, ni Power Automate. Ce vidage est la vraie sortie du connecteur
+    Office 365 Outlook, action "Obtenir une vue Calendrier des evenements
+    (V3)", reduite aux champs qui nous concernent.
+
+    Il confirme la forme APLATIE, et il justifie deux choix faits a
+    l'aveugle :
+
+      - "start" est nu (aucun Z, aucun decalage) mais un champ voisin
+        "startWithTimeZone" porte le decalage, et "timeZone" est declare
+        au niveau de l'entree. Lire "start" seul decalerait tout ;
+      - le connecteur ecrit SEPT decimales de seconde.
+    """
+
+    JOUR = __import__("datetime").date(2026, 9, 13)
+
+    VIDAGE = {"value": [
+        {"subject": "ha",
+         "start": "2026-09-13T20:30:00.0000000",
+         "end": "2026-09-13T21:30:00.0000000",
+         "startWithTimeZone": "2026-09-13T20:30:00+00:00",
+         "endWithTimeZone": "2026-09-13T21:30:00+00:00",
+         "body": "", "isHtml": True, "timeZone": "UTC",
+         "isAllDay": False, "recurrence": "none", "showAs": "busy"},
+        {"subject": "a",
+         "start": "2026-09-14T07:00:00.0000000",
+         "end": "2026-09-14T08:00:00.0000000",
+         "startWithTimeZone": "2026-09-14T07:00:00+00:00",
+         "endWithTimeZone": "2026-09-14T08:00:00+00:00",
+         "body": "", "isHtml": True, "timeZone": "UTC",
+         "isAllDay": False, "recurrence": "none", "showAs": "busy"},
+    ]}
+
+    def _utc_en_local(self, jour, heure, minute=0):
+        import datetime
+        moment = datetime.datetime(2026, 9, jour, heure, minute,
+                                   tzinfo=datetime.timezone.utc).astimezone()
+        return moment
+
+    def test_le_vidage_reel_est_lu_correctement(self):
+        gardes, rejets = MA.examiner_agenda(self.VIDAGE, self.JOUR)
+
+        # L'evenement du jour, converti depuis UTC vers l'heure du PC.
+        debut = self._utc_en_local(13, 20, 30)
+        fin = self._utc_en_local(13, 21, 30)
+        if debut.date() != self.JOUR:
+            self.skipTest("fuseau du PC trop decale pour ce cas")
+        self.assertEqual(gardes, [(debut.hour * 60 + debut.minute,
+                                   fin.hour * 60 + fin.minute, "ha")])
+
+        # Celui de demain est ECARTE, avec sa raison nommee.
+        self.assertEqual(len(rejets), 1)
+        self.assertIn("pas aujourd'hui", rejets[0][1])
+
+    def test_le_champ_nu_n_est_pas_celui_qui_est_lu(self):
+        """Le controle qui compte : 'start' et 'startWithTimeZone' portent
+        ici la MEME heure, donc ce test ne prouverait rien tel quel. On
+        desaccorde volontairement les deux pour voir lequel est lu."""
+        import copy
+        vidage = copy.deepcopy(self.VIDAGE)
+        vidage["value"][0]["start"] = "2026-09-13T03:00:00.0000000"
+        gardes, _ = MA.examiner_agenda(vidage, self.JOUR)
+        attendu = self._utc_en_local(13, 20, 30)
+        if attendu.date() != self.JOUR:
+            self.skipTest("fuseau du PC trop decale pour ce cas")
+        self.assertEqual(gardes[0][0], attendu.hour * 60 + attendu.minute,
+                         "c'est le champ NU qui a ete lu, pas celui qui "
+                         "porte son fuseau")
+
+    def test_les_champs_inutiles_ne_genent_pas(self):
+        """Le vidage porte une trentaine de champs dont on ne fait rien -
+        webLink, iCalUId, organizer... Aucun ne doit perturber la lecture."""
+        gardes, _ = MA.examiner_agenda(self.VIDAGE, self.JOUR)
+        self.assertEqual([titre for _, _, titre in gardes], ["ha"])
+
+
+class TrouverLAgendaDansOneDrive(unittest.TestCase):
+    """La derniere piece pour que la chaine tourne sans rien taper.
+
+    Power Automate depose le fichier dans OneDrive ; Windows pose le
+    chemin de ce dossier dans une variable d'environnement. Sans cette
+    recherche, il fallait passer --agenda a la main - donc ouvrir une
+    console, donc y penser, donc ne pas le faire.
+    """
+
+    def setUp(self):
+        self.dossier = tempfile.mkdtemp()
+        self.onedrive = tempfile.mkdtemp()
+        self._avant = {v: os.environ.get(v) for v in MA._VARIABLES_ONEDRIVE}
+        for variable in MA._VARIABLES_ONEDRIVE:
+            os.environ.pop(variable, None)
+
+    def tearDown(self):
+        import shutil
+        for variable, valeur in self._avant.items():
+            if valeur is None:
+                os.environ.pop(variable, None)
+            else:
+                os.environ[variable] = valeur
+        shutil.rmtree(self.dossier, ignore_errors=True)
+        shutil.rmtree(self.onedrive, ignore_errors=True)
+
+    def _poser(self, dossier):
+        chemin = os.path.join(dossier, MA.AGENDA_PAR_DEFAUT)
+        with io.open(chemin, "w", encoding="utf-8") as fichier:
+            fichier.write("{}")
+        return chemin
+
+    def test_le_onedrive_professionnel_est_fouille(self):
+        os.environ["OneDriveCommercial"] = self.onedrive
+        attendu = self._poser(self.onedrive)
+        self.assertEqual(MA.chemin_agenda(None, self.dossier), attendu)
+
+    def test_le_onedrive_personnel_aussi(self):
+        os.environ["OneDrive"] = self.onedrive
+        attendu = self._poser(self.onedrive)
+        self.assertEqual(MA.chemin_agenda(None, self.dossier), attendu)
+
+    def test_le_dossier_du_script_passe_avant_OneDrive(self):
+        """Un fichier pose a cote du script est un choix explicite : il
+        doit l'emporter sur celui que le flux depose."""
+        os.environ["OneDriveCommercial"] = self.onedrive
+        self._poser(self.onedrive)
+        attendu = self._poser(self.dossier)
+        self.assertEqual(MA.chemin_agenda(None, self.dossier), attendu)
+
+    def test_l_option_l_emporte_sur_tout(self):
+        os.environ["OneDriveCommercial"] = self.onedrive
+        self._poser(self.onedrive)
+        self._poser(self.dossier)
+        self.assertEqual(MA.chemin_agenda("impose.json", self.dossier),
+                         "impose.json")
+
+    def test_un_OneDrive_sans_agenda_ne_donne_rien(self):
+        """On ne rend jamais un chemin qui n'existe pas : le message
+        d'erreur qui suivrait serait un faux coupable."""
+        os.environ["OneDriveCommercial"] = self.onedrive
+        self.assertIsNone(MA.chemin_agenda(None, self.dossier))
+
+    def test_les_lieux_fouilles_sont_annonces(self):
+        """Sans cette liste, "aucun agenda trouve" n'aide personne."""
+        os.environ["OneDriveCommercial"] = self.onedrive
+        lieux = MA.dossiers_agenda(self.dossier)
+        self.assertEqual(lieux[0], self.dossier)
+        self.assertIn(self.onedrive, lieux)

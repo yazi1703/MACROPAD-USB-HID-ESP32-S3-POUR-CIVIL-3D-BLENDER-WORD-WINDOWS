@@ -789,6 +789,27 @@ def lignes_agenda(evenements, titre_max=40):
 
 AGENDA_PAR_DEFAUT = "agenda.json"
 
+# Windows pose ces variables d'environnement en installant OneDrive.
+# OneDriveCommercial est le dossier professionnel - celui qui s'appelle
+# "OneDrive - <ton entreprise>" et ou un flux Power Automate depose ses
+# fichiers. OneDrive tout court est le dossier personnel.
+_VARIABLES_ONEDRIVE = ("OneDriveCommercial", "OneDriveConsumer", "OneDrive")
+
+
+def dossiers_agenda(dossier=None):
+    """Ou chercher un agenda.json, dans l'ordre de priorite.
+
+    Fonction PURE. L'ordre compte : le dossier du script d'abord, parce
+    qu'un fichier pose la est un choix explicite, OneDrive ensuite parce
+    que c'est la que le flux ecrit.
+    """
+    lieux = [dossier or os.path.dirname(os.path.abspath(__file__))]
+    for variable in _VARIABLES_ONEDRIVE:
+        racine = os.environ.get(variable)
+        if racine and racine not in lieux:
+            lieux.append(racine)
+    return lieux
+
 
 def chemin_agenda(demande, dossier=None):
     """Quel fichier d'agenda utiliser, ou None s'il n'y en a pas.
@@ -799,14 +820,18 @@ def chemin_agenda(demande, dossier=None):
     que --journal. Une option --agenda oubliee, et la carte n'apprend
     jamais l'heure - en affichant un message qui fait chercher ailleurs.
 
-    Donc : a defaut d'option, on prend agenda.json s'il est pose a cote
-    du script. Il n'y a plus rien a penser.
+    A defaut d'option on cherche donc agenda.json tout seul : a cote du
+    script, puis DANS LE ONEDRIVE. C'est la que Power Automate le depose,
+    et c'est la derniere piece qui manquait pour que la chaine entiere
+    tourne sans qu'on ait rien a taper.
     """
     if demande:
         return demande
-    dossier = dossier or os.path.dirname(os.path.abspath(__file__))
-    voisin = os.path.join(dossier, AGENDA_PAR_DEFAUT)
-    return voisin if os.path.exists(voisin) else None
+    for lieu in dossiers_agenda(dossier):
+        candidat = os.path.join(lieu, AGENDA_PAR_DEFAUT)
+        if os.path.exists(candidat):
+            return candidat
+    return None
 
 
 class SourceAgenda:
@@ -2088,9 +2113,10 @@ def main():
     if fichier_agenda:
         print("Agenda lu dans :", fichier_agenda)
     else:
-        print("Aucun fichier d'agenda (ni --agenda, ni %s a cote) :"
-              % AGENDA_PAR_DEFAUT)
-        print("  seule l'heure est envoyee. Voir docs/12-agenda-oled.md.")
+        print("Aucun %s trouve. Cherche dans :" % AGENDA_PAR_DEFAUT)
+        for lieu in dossiers_agenda():
+            print("  - %s" % lieu)
+        print("  Seule l'heure est envoyee. Voir docs/12-agenda-oled.md.")
     try:
         while True:
             maintenant = time.time()

@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 388 tests PC réussis ; 24 fichiers Python compilés avec succès.**
+**Résultat : 397 tests PC réussis ; 24 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, seize corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **24 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 388 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  304 pour le firmware, 84 pour le compagnon Windows.
+- 397 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  304 pour le firmware, 93 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -635,6 +635,11 @@ test_None_et_chaine_vide_ne_veulent_pas_dire_la_meme_chose ... ok
 test_notre_propre_fenetre_est_reconnue ... ok
 test_une_vraie_fenetre_est_lue_normalement ... ok
 
+--- LeVraiVidageDUnFluxPowerAutomate
+test_le_champ_nu_n_est_pas_celui_qui_est_lu ... ok
+test_le_vidage_reel_est_lu_correctement ... ok
+test_les_champs_inutiles_ne_genent_pas ... ok
+
 --- LesFormesPossiblesDUnFluxPowerAutomate
 test_la_forme_imbriquee_de_Graph_marche_toujours ... ok
 test_le_fichier_ecrit_a_la_main_reste_en_heure_locale ... ok
@@ -696,8 +701,16 @@ test_lignes_incompletes_ignorees ... ok
 test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
+--- TrouverLAgendaDansOneDrive
+test_l_option_l_emporte_sur_tout ... ok
+test_le_dossier_du_script_passe_avant_OneDrive ... ok
+test_le_onedrive_personnel_aussi ... ok
+test_le_onedrive_professionnel_est_fouille ... ok
+test_les_lieux_fouilles_sont_annonces ... ok
+test_un_OneDrive_sans_agenda_ne_donne_rien ... ok
+
 ----------------------------------------------------------------------
-Ran 388 tests
+Ran 397 tests
 
 OK
 ```
