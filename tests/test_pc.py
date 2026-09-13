@@ -863,3 +863,42 @@ class FichierAgenda(unittest.TestCase):
         """Sans --agenda, le compagnon se comporte exactement comme avant."""
         source = MA.SourceAgenda(None)
         self.assertFalse(source.relire(self.JOUR))
+
+
+class OuTrouverLAgenda(unittest.TestCase):
+    """Personne ne lance ce script en tapant une ligne de commande.
+
+    On double-clique sur macropad_auto.bat, et le raccourci de demarrage
+    automatique ne passe que --journal. Une option --agenda oubliee, et la
+    carte n'apprend jamais l'heure - en affichant "En attente du PC", un
+    message qui fait chercher du cote de la liaison alors que tout va
+    bien. D'ou un fichier par defaut, pose a cote du script.
+    """
+
+    def setUp(self):
+        self.dossier = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.dossier, ignore_errors=True)
+
+    def test_l_option_l_emporte_toujours(self):
+        self.assertEqual(MA.chemin_agenda("C:/ailleurs.json", self.dossier),
+                         "C:/ailleurs.json")
+
+    def test_le_fichier_voisin_sert_par_defaut(self):
+        voisin = os.path.join(self.dossier, MA.AGENDA_PAR_DEFAUT)
+        with io.open(voisin, "w", encoding="utf-8") as fichier:
+            fichier.write("{}")
+        self.assertEqual(MA.chemin_agenda(None, self.dossier), voisin)
+
+    def test_sans_rien_on_ne_devine_pas(self):
+        """Pas de fichier = pas d'agenda. On n'invente pas un chemin."""
+        self.assertIsNone(MA.chemin_agenda(None, self.dossier))
+
+    def test_l_option_l_emporte_meme_si_un_voisin_existe(self):
+        voisin = os.path.join(self.dossier, MA.AGENDA_PAR_DEFAUT)
+        with io.open(voisin, "w", encoding="utf-8") as fichier:
+            fichier.write("{}")
+        self.assertEqual(MA.chemin_agenda("autre.json", self.dossier),
+                         "autre.json")

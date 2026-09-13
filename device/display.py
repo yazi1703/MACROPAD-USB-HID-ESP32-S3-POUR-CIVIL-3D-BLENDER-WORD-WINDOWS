@@ -394,11 +394,11 @@ class Display:
         o.hline(0, _AG_SEPARATEUR_Y, 128, 1)
         self._dessiner_agenda_bas()
 
-    def _ag_resume(self, minute):
+    def _ag_resume(self, minute, now=None):
         """Recalcule la ligne du bas et relance son defilement."""
         if not self.agenda:
             return
-        prefixe, titre = self.agenda.resume(minute)
+        prefixe, titre = self.agenda.resume(minute, now)
         if prefixe == self._ag_prefixe and titre == self._ag_titre:
             return
         self._ag_prefixe, self._ag_titre = prefixe, titre
@@ -432,7 +432,7 @@ class Display:
             return
         minute = self.agenda.minute(now)
         self._ag_minute = minute
-        self._ag_resume(minute)
+        self._ag_resume(minute, now)
         self._redessiner()
 
     # ==================================================================
@@ -716,7 +716,7 @@ class Display:
         minute = self.agenda.minute(now) if self.agenda else None
         if minute != self._ag_minute:
             self._ag_minute = minute
-            self._ag_resume(minute)
+            self._ag_resume(minute, now)
             self._redessiner()
             return
 

@@ -683,6 +683,28 @@ def lignes_agenda(evenements, titre_max=40):
     return lignes
 
 
+AGENDA_PAR_DEFAUT = "agenda.json"
+
+
+def chemin_agenda(demande, dossier=None):
+    """Quel fichier d'agenda utiliser, ou None s'il n'y en a pas.
+
+    Fonction PURE, et elle existe a cause d'un vrai piege : personne ne
+    lance ce script en tapant une ligne de commande. On double-clique sur
+    macropad_auto.bat, et le raccourci de demarrage automatique ne passe
+    que --journal. Une option --agenda oubliee, et la carte n'apprend
+    jamais l'heure - en affichant un message qui fait chercher ailleurs.
+
+    Donc : a defaut d'option, on prend agenda.json s'il est pose a cote
+    du script. Il n'y a plus rien a penser.
+    """
+    if demande:
+        return demande
+    dossier = dossier or os.path.dirname(os.path.abspath(__file__))
+    voisin = os.path.join(dossier, AGENDA_PAR_DEFAUT)
+    return voisin if os.path.exists(voisin) else None
+
+
 class SourceAgenda:
     """Le fichier d'agenda, relu quand il change.
 
@@ -1912,7 +1934,8 @@ def main():
                                 "(0 pour ne pas l'afficher)")
     analyseur.add_argument(
         "--agenda",
-        help="fichier JSON de l'agenda du jour a afficher sur l'ecran "
+        help="fichier JSON de l'agenda du jour a afficher sur l'ecran. "
+             "Par defaut : agenda.json a cote de ce script, s'il existe "
              "(voir docs/12-agenda-oled.md)")
     analyseur.add_argument("--journal", action="store_true",
                            help="ecrire aussi dans macropad_auto.log "
@@ -1954,11 +1977,16 @@ def main():
 
     # L'agenda du jour. Sans --agenda, rien de tout cela ne tourne et le
     # compagnon se comporte exactement comme avant.
-    agenda = SourceAgenda(options.agenda)
+    fichier_agenda = chemin_agenda(options.agenda)
+    agenda = SourceAgenda(fichier_agenda)
     derniere_minute = None
     dernier_jour = None
-    if options.agenda:
-        print("Agenda lu dans :", options.agenda)
+    if fichier_agenda:
+        print("Agenda lu dans :", fichier_agenda)
+    else:
+        print("Aucun fichier d'agenda (ni --agenda, ni %s a cote) :"
+              % AGENDA_PAR_DEFAUT)
+        print("  seule l'heure est envoyee. Voir docs/12-agenda-oled.md.")
     try:
         while True:
             maintenant = time.time()
@@ -1986,14 +2014,25 @@ def main():
             # --- l'heure, puis l'agenda -------------------------------
             # L'heure part a CHAQUE MINUTE : c'est elle qui fait descendre
             # la ligne "maintenant" et tourner le compte a rebours. Sans
-            # elle, la carte finit par afficher "--:--" plutot qu'une
-            # heure qui aurait derive - voir device/agenda.py.
-            if options.agenda:
-                horloge = datetime.datetime.now()
-                repere = (horloge.hour, horloge.minute)
-                if repere != derniere_minute:
-                    if macropad.envoyer(ligne_heure(horloge)):
-                        derniere_minute = repere
+            # elle, la carte finit par afficher "--:--" plutot qu'une heure
+            # qui aurait derive - voir device/agenda.py.
+            #
+            # Elle part MEME SANS FICHIER D'AGENDA : elle ne coute qu'une
+            # ligne par minute, et sans elle l'ecran afficherait "En attente
+            # du PC" alors que le compagnon tourne - un symptome qui ment
+            # sur sa cause. Une carte dont AGENDA_ENABLED vaut False ignore
+            # proprement cette ligne.
+            horloge = datetime.datetime.now()
+            repere = (horloge.hour, horloge.minute)
+            if repere != derniere_minute:
+                if macropad.envoyer(ligne_heure(horloge)):
+                    if derniere_minute is None:
+                        # Une seule fois : sans cette ligne, rien sur le PC
+                        # ne dit si la carte est servie.
+                        print("Heure envoyee au macropad "
+                              "(mise a jour chaque minute).")
+                    derniere_minute = repere
+            if fichier_agenda:
                 change = agenda.relire(horloge.date())
                 if change or dernier_jour != horloge.date():
                     envoye = True

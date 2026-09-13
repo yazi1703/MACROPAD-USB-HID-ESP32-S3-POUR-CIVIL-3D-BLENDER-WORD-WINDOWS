@@ -5246,7 +5246,7 @@ def create_interface():
 
 ## device/display.py
 
-`748 lignes - sha256 b78af3e858fd9949`
+`748 lignes - sha256 a1cb8701f8d13d0c`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -5645,11 +5645,11 @@ class Display:
         o.hline(0, _AG_SEPARATEUR_Y, 128, 1)
         self._dessiner_agenda_bas()
 
-    def _ag_resume(self, minute):
+    def _ag_resume(self, minute, now=None):
         """Recalcule la ligne du bas et relance son defilement."""
         if not self.agenda:
             return
-        prefixe, titre = self.agenda.resume(minute)
+        prefixe, titre = self.agenda.resume(minute, now)
         if prefixe == self._ag_prefixe and titre == self._ag_titre:
             return
         self._ag_prefixe, self._ag_titre = prefixe, titre
@@ -5683,7 +5683,7 @@ class Display:
             return
         minute = self.agenda.minute(now)
         self._ag_minute = minute
-        self._ag_resume(minute)
+        self._ag_resume(minute, now)
         self._redessiner()
 
     # ==================================================================
@@ -5967,7 +5967,7 @@ class Display:
         minute = self.agenda.minute(now) if self.agenda else None
         if minute != self._ag_minute:
             self._ag_minute = minute
-            self._ag_resume(minute)
+            self._ag_resume(minute, now)
             self._redessiner()
             return
 
@@ -6003,7 +6003,7 @@ class Display:
 
 ## device/agenda.py
 
-`254 lignes - sha256 c814019a9c1f63aa`
+`263 lignes - sha256 7bd67f61f2d6190d`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -6240,16 +6240,25 @@ class Agenda:
         visibles = [e for e in self.evenements if e[1] > debut and e[0] < fin]
         return depart, visibles
 
-    def resume(self, minute):
+    def resume(self, minute, now=None):
         """La ligne du bas : (prefixe fixe, intitule qui defile).
 
-        Trois situations, trois reponses :
+        Quatre situations, quatre reponses :
           - une reunion est EN COURS  -> quand finit-elle
           - une reunion approche      -> dans combien de temps
           - plus rien aujourd'hui     -> le dire, et ne pas laisser vide
+          - pas d'heure               -> dire LAQUELLE des deux pannes
         """
         if minute is None:
-            return ("", "Heure inconnue - le PC ne repond plus")
+            # DEUX PANNES DIFFERENTES, DEUX MESSAGES, ET CA COMPTE.
+            # "Ne repond plus" sous-entend qu'il repondait AVANT : le dire
+            # a quelqu'un dont le compagnon n'a jamais parle l'envoie
+            # chercher une panne de liaison qui n'existe pas. Le vrai
+            # defaut est alors bien plus simple - le compagnon tourne sans
+            # l'option --agenda - et le message doit le dire.
+            if self.heure_perimee(now):
+                return ("", "Le PC ne repond plus")
+            return ("", "En attente du PC - lance-le avec --agenda")
         actuel = self.courant(minute)
         if actuel is not None:
             return (">" + texte_depuis_minutes(actuel[1]), actuel[2])

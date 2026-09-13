@@ -3079,7 +3079,28 @@ class AgendaDuJour(unittest.TestCase):
         """Un ecran muet ressemble a une panne. Il doit dire pourquoi."""
         self._remplir("08:00|09:00|Passee")
         self.assertIn("Plus rien", self.ag.resume(20 * 60)[1])
-        self.assertIn("Heure inconnue", self.ag.resume(None)[1])
+
+    def test_sans_heure_le_message_dit_LAQUELLE_des_deux_pannes(self):
+        """Trouve a l'usage, des le premier essai sur la carte.
+
+        "Le PC ne repond plus" sous-entend qu'il repondait AVANT. Affiche
+        a quelqu'un dont le compagnon n'a jamais parle, ce message envoie
+        chercher une panne de liaison qui n'existe pas - alors que le vrai
+        defaut est bien plus simple : le compagnon tourne sans --agenda.
+
+        heure_perimee() existait deja pour faire cette distinction. Elle
+        n'etait branchee nulle part : le defaut n'etait pas dans la
+        logique, mais dans le fait de ne pas s'en servir.
+        """
+        # 1. Le PC n'a JAMAIS parle.
+        self.assertIn("En attente", self.ag.resume(None, 0)[1])
+        self.assertNotIn("ne repond plus", self.ag.resume(None, 0)[1])
+
+        # 2. Le PC a parle, puis s'est tu.
+        self.ag.set_heure("10:00|LUN 01", 0)
+        tard = C.AGENDA_HEURE_PERIMEE_MS + 1000
+        self.assertIsNone(self.ag.minute(tard))
+        self.assertIn("ne repond plus", self.ag.resume(None, tard)[1])
 
 
 class VueAgendaSurLEcran(unittest.TestCase):

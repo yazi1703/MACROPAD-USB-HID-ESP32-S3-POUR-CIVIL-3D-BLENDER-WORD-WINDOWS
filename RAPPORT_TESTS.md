@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 368 tests PC réussis ; 24 fichiers Python compilés avec succès.**
+**Résultat : 373 tests PC réussis ; 24 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, seize corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **24 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 368 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  303 pour le firmware, 65 pour le compagnon Windows.
+- 373 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  304 pour le firmware, 69 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -241,6 +241,7 @@ test_le_resume_donne_l_heure_quand_c_est_loin ... ok
 test_le_resume_ne_laisse_jamais_la_ligne_vide ... ok
 test_les_evenements_sont_tries ... ok
 test_minuit_ne_fait_pas_deborder_l_heure ... ok
+test_sans_heure_le_message_dit_LAQUELLE_des_deux_pannes ... ok
 test_une_heure_illisible_est_refusee ... ok
 test_une_heure_trop_vieille_devient_inconnue ... ok
 test_une_ligne_illisible_n_annule_pas_les_autres ... ok
@@ -632,6 +633,12 @@ test_coupe_a_ce_que_l_ecran_retient ... ok
 test_titres_entre_crochets ... ok
 test_titres_windows_classiques ... ok
 
+--- OuTrouverLAgenda
+test_l_option_l_emporte_meme_si_un_voisin_existe ... ok
+test_l_option_l_emporte_toujours ... ok
+test_le_fichier_voisin_sert_par_defaut ... ok
+test_sans_rien_on_ne_devine_pas ... ok
+
 --- PourquoiLeMacropadEstInjoignable
 test_aucun_port_espressif_le_dit ... ok
 test_la_raison_survit_au_silence_de_la_console ... ok
@@ -669,7 +676,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 368 tests
+Ran 373 tests
 
 OK
 ```

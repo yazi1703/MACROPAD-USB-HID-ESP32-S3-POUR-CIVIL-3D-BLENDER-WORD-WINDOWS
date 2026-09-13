@@ -93,7 +93,18 @@ Elle dit trois choses différentes selon le moment :
 | la suivante est **proche** (< 1 h) | `19min` + son intitulé |
 | la suivante est **plus loin** | `19:30` + son intitulé |
 | **plus rien** aujourd'hui | `Plus rien aujourd'hui` |
-| le PC **ne répond plus** | `Heure inconnue - le PC ne repond plus` |
+| le PC **n'a jamais parlé** | `En attente du PC - lance-le avec --agenda` |
+| le PC **s'est tu** | `Le PC ne repond plus` |
+
+> **Ces deux derniers ne sont pas la même panne**, et le message le dit.
+> « Ne répond plus » sous-entend qu'il répondait avant : l'afficher alors
+> que le compagnon n'a jamais parlé envoie chercher un problème de liaison
+> qui n'existe pas — quand le vrai défaut est bien plus simple, le
+> compagnon lancé **sans `--agenda`**.
+>
+> Côté PC, le compagnon écrit une fois `Heure envoyee au macropad` dès que
+> la première heure part : si tu ne vois pas cette ligne, rien n'est
+> envoyé, et c'est là qu'il faut chercher.
 
 L'intitulé **défile** s'il est trop long, comme le nom de document.
 
@@ -189,11 +200,30 @@ rien ne sort de ton PC.
    OneDrive se synchronise sur ton PC, le compagnon n'a qu'à lire le fichier
    local.
 
-Puis :
+Puis, au choix :
 
 ```bat
+REM le chemin explicite
 python macropad_auto.py --agenda "C:\Users\toi\OneDrive\agenda.json"
 ```
+
+**Ou, plus simple : pose un fichier `agenda.json` à côté de
+`macropad_auto.py`.** Sans option, le compagnon le trouve tout seul —
+c'est ce qui fait marcher le double-clic sur `macropad_auto.bat` et le
+démarrage automatique avec Windows, qui ne passent aucune option.
+
+> **C'est le piège qui m'a eu au premier essai sur la carte.** J'avais
+> documenté `--agenda`, mais personne ne lance ce script en tapant une
+> ligne de commande : on double-clique sur le `.bat`. Sans option, aucune
+> ligne `H:` ne partait, et l'écran affichait « le PC ne répond plus » —
+> un message qui envoie chercher un problème de liaison qui n'existe pas.
+>
+> **L'heure part désormais toujours**, même sans fichier d'agenda : elle ne
+> coûte qu'une ligne par minute. « En attente du PC » ne veut donc plus
+> dire qu'une chose — le compagnon ne tourne pas, ou n'est pas connecté.
+>
+> Pour un chemin OneDrive, garde `--agenda` : plus explicite, et le
+> `.bat` transmet les options qu'on lui donne.
 
 > Les noms exacts des actions varient d'une version de Power Automate à
 > l'autre : je te donne la **forme** du flux, pas une suite de clics que je
