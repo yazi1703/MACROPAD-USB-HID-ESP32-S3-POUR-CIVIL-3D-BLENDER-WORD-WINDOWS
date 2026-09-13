@@ -359,6 +359,20 @@ Les trois points sur le nœud → **Renommer** → appelle-le simplement
 >
 > Si la conversion en binaire est encore refusée, essaie
 > `string(body('Calendrier'))`.
+>
+> **Et si tu es déjà tombé dans la boucle :** supprime le « Appliquer à
+> chacun », **puis supprime aussi « Mettre à jour le fichier » et rajoute-en
+> une neuve**. Sinon l'enregistrement échoue avec :
+>
+> ```
+> The repetition action(s) 'For_each' referenced by 'inputs'
+> in action 'Mettre_à_jour_le_fichier' are not defined
+> ```
+>
+> La boucle est bien partie, mais le champ garde son ancien jeton — il se
+> présente comme une petite pastille colorée, et on croit la case vide
+> alors qu'elle ne l'est pas. Une action neuve ne peut pas traîner de
+> référence morte ; la vider à la main fait perdre trois essais de plus.
 
 **Enregistre**, puis **Tester** → *Manuellement*.
 
