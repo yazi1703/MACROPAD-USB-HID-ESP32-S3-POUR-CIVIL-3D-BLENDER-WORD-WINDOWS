@@ -267,10 +267,15 @@ Pour les deux heures, il y a **deux façons de faire**, et la seconde te
 débloque tout de suite si tu ne trouves pas l'éditeur d'expression.
 
 **a) Avec une expression** (propre, sans entretien). Clique dans la case,
-puis sur la petite icône **`fx`** qui apparaît — dans le nouveau
-concepteur, elle ne se montre **que quand le curseur est dans la case**.
-Dans l'ancien, c'est un onglet **Expression** à côté de *Contenu
-dynamique*. Colle exactement :
+puis sur la petite icône **`fx`** qui apparaît à droite — elle ne se montre
+**que quand le curseur est dans la case**. Un panneau s'ouvre avec deux
+onglets : **`Fonction`** et *Contenu dynamique*.
+
+> **C'est « Fonction » qu'il faut**, pas « Expression ». L'interface
+> anglaise dit *Expression*, la française dit **Fonction** : on peut
+> chercher longtemps le mauvais mot.
+
+Colle exactement :
 
 ```
 addDays(startOfDay(utcNow()), -1)
@@ -339,10 +344,18 @@ Les trois points sur le nœud → **Renommer** → appelle-le simplement
 > emballe tout seul l'action dans un « **Appliquer à chacun** ». Et deux
 > champs différents s'appellent `body` :
 >
-> | `body` | Ce que c'est |
+> Dans le panneau français, **deux entrées portent le nom « Corps »**, l'une
+> sous l'autre :
+>
+> | Entrée | Ce que c'est |
 > |---|---|
-> | celui de **l'action** | la réponse entière — la liste des réunions ✅ |
-> | celui d'**une réunion** | le texte de l'invitation, en HTML ❌ |
+> | **Corps** — *Réponse de liste d'entité* | la réponse entière de l'action ✅ |
+> | **Corps** — *Corps du message associé à l'événement* | le texte HTML d'une invitation ❌ |
+> | **body/value** — *Liste de valeurs* | le tableau des réunions — le choisir **recrée le `For each`** |
+>
+> Trois entrées voisines, un seul bon choix, et aucune erreur au moment du
+> clic. C'est pour ça qu'on passe par l'expression : elle ne peut pas se
+> tromper de cible.
 >
 > Prendre le second donne cette erreur, qui ne dit pas son vrai nom :
 >
