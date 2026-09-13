@@ -77,14 +77,6 @@ def texte_depuis_minutes(minute):
     return "%02d:%02d" % (minute // 60, minute % 60)
 
 
-def duree_lisible(minutes):
-    """Un ecart en minutes, en trois caracteres ou presque : 13m, 2h05."""
-    minutes = int(minutes)
-    if minutes < 60:
-        return "%dm" % minutes
-    return "%dh%02d" % (minutes // 60, minutes % 60)
-
-
 class Agenda:
     """Ce que la carte sait de ta journee. Rien de plus."""
 
@@ -251,13 +243,18 @@ class Agenda:
             if self.heure_perimee(now):
                 return ("", "Le PC ne repond plus")
             return ("", "En attente du PC - lance-le avec --agenda")
+        # L'HEURE DE DEBUT, TOUJOURS. Une premiere version montrait la
+        # fin d'une reunion en cours et un compte a rebours pour la
+        # suivante : trois reperes differents sur la meme ligne, qu'il
+        # fallait interpreter a chaque coup d'oeil. Une seule regle se lit
+        # sans y penser, et c'est ce qu'on demande a un ecran qu'on
+        # regarde en travaillant.
         actuel = self.courant(minute)
         if actuel is not None:
-            return (">" + texte_depuis_minutes(actuel[1]), actuel[2])
+            # L'etoile dit "c'est commence" - sans elle, 19:30 affiche a
+            # 19:47 se lirait comme un rendez-vous a venir.
+            return ("*" + texte_depuis_minutes(actuel[0]), actuel[2])
         suivant = self.prochain(minute)
         if suivant is None:
             return ("", "Plus rien aujourd'hui")
-        ecart = suivant[0] - minute
-        if ecart < 60:
-            return (duree_lisible(ecart), suivant[2])
         return (texte_depuis_minutes(suivant[0]), suivant[2])

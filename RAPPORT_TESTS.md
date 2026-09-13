@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 397 tests PC réussis ; 24 fichiers Python compilés avec succès.**
+**Résultat : 396 tests PC réussis ; 24 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, seize corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,7 +14,7 @@
 
 - Compilation syntaxique des **24 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 397 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+- 396 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
   304 pour le firmware, 93 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
@@ -229,15 +229,14 @@ test_le_diagnostic_reclame_agenda ... ok
 --- AgendaDuJour
 test_deux_reunions_en_meme_temps_montrent_la_plus_pressee ... ok
 test_en_cours_et_a_venir ... ok
+test_l_etoile_distingue_ce_qui_a_DEJA_commence ... ok
 test_l_heure_avance_toute_seule_entre_deux_messages ... ok
 test_l_heure_et_le_jour_sont_lus ... ok
 test_la_fenetre_glisse_avec_l_heure ... ok
 test_la_fenetre_ne_sort_jamais_de_la_journee ... ok
 test_la_liste_est_bornee ... ok
 test_la_liste_n_est_adoptee_qu_a_la_fin ... ok
-test_le_resume_compte_a_rebours_quand_ca_approche ... ok
-test_le_resume_dit_la_fin_quand_c_est_en_cours ... ok
-test_le_resume_donne_l_heure_quand_c_est_loin ... ok
+test_le_resume_donne_TOUJOURS_l_heure_de_debut ... ok
 test_le_resume_ne_laisse_jamais_la_ligne_vide ... ok
 test_les_evenements_sont_tries ... ok
 test_minuit_ne_fait_pas_deborder_l_heure ... ok
@@ -710,7 +709,7 @@ test_les_lieux_fouilles_sont_annonces ... ok
 test_un_OneDrive_sans_agenda_ne_donne_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 397 tests
+Ran 396 tests
 
 OK
 ```

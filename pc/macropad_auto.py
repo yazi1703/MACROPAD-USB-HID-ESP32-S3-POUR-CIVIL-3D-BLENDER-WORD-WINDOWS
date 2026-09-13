@@ -849,6 +849,18 @@ class SourceAgenda:
         self._signature = None
         self._erreur_signalee = None
 
+    def _avertir_exemple(self, donnees):
+        """L'exemple livre avec le projet porte une cle _lisez_moi.
+
+        Le trouver la ou on attend le vrai agenda est une panne a soi
+        seul : l'ecran affiche des reunions plausibles qui ne sont pas les
+        tiennes, et rien ne le signale. On le dit donc en toutes lettres.
+        """
+        if isinstance(donnees, dict) and "_lisez_moi" in donnees:
+            print("  ATTENTION : c'est le fichier d'EXEMPLE livre avec le")
+            print("  projet, pas ton agenda. Supprime-le ou renomme-le pour")
+            print("  que celui de OneDrive soit lu a la place.")
+
     def relire(self, aujourdhui):
         """Retourne True si la liste a change depuis le dernier appel."""
         if not self.chemin:
@@ -871,6 +883,7 @@ class SourceAgenda:
             return False
         self._signature = signature
         self._erreur_signalee = None
+        self._avertir_exemple(donnees)
         neufs = evenements_du_jour(donnees, aujourdhui)
         if neufs == self.evenements:
             return False
@@ -2112,6 +2125,15 @@ def main():
     dernier_jour = None
     if fichier_agenda:
         print("Agenda lu dans :", fichier_agenda)
+        # Les AUTRES candidats trouves. Un fichier d'essai oublie a cote du
+        # script masque silencieusement celui de OneDrive : l'ecran montre
+        # alors des reunions plausibles qui ne sont pas les tiennes.
+        autres = [os.path.join(lieu, AGENDA_PAR_DEFAUT)
+                  for lieu in dossiers_agenda()
+                  if os.path.join(lieu, AGENDA_PAR_DEFAUT) != fichier_agenda
+                  and os.path.exists(os.path.join(lieu, AGENDA_PAR_DEFAUT))]
+        for autre in autres:
+            print("  (ignore, moins prioritaire :", autre + ")")
     else:
         print("Aucun %s trouve. Cherche dans :" % AGENDA_PAR_DEFAUT)
         for lieu in dossiers_agenda():

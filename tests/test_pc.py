@@ -798,7 +798,7 @@ class AgendaDuJourCotePC(unittest.TestCase):
                 self.assertTrue(journee.ajouter(ligne[2:]), ligne)
         self.assertEqual(journee.evenements, evenements)
         self.assertEqual(journee.jour, "DIM 13")
-        self.assertEqual(journee.resume(19 * 60 + 47), (">21:00", "tache 1"))
+        self.assertEqual(journee.resume(19 * 60 + 47), ("*19:30", "tache 1"))
 
 
 class FichierAgenda(unittest.TestCase):

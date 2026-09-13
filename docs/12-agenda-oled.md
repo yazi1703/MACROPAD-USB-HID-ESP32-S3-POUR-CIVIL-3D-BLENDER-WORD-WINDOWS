@@ -89,9 +89,8 @@ Elle dit trois choses différentes selon le moment :
 
 | Situation | Ce qui s'affiche |
 |---|---|
-| une réunion est **en cours** | `>21:00` + son intitulé — quand elle finit |
-| la suivante est **proche** (< 1 h) | `19min` + son intitulé |
-| la suivante est **plus loin** | `19:30` + son intitulé |
+| une réunion **à venir** | `19:30` + son intitulé, qui défile |
+| une réunion **en cours** | `*19:30` — l'étoile dit « c'est commencé » |
 | **plus rien** aujourd'hui | `Plus rien aujourd'hui` |
 | le PC **n'a jamais parlé** | `En attente du PC - lance-le avec --agenda` |
 | le PC **s'est tu** | `Le PC ne repond plus` |
@@ -107,6 +106,16 @@ Elle dit trois choses différentes selon le moment :
 > envoyé, et c'est là qu'il faut chercher.
 
 L'intitulé **défile** s'il est trop long, comme le nom de document.
+
+> **C'est toujours l'heure de DÉBUT**, jamais la fin ni un compte à rebours.
+> Une première version montrait la fin d'une réunion en cours et un
+> « dans 13 min » pour la suivante : trois repères différents sur la même
+> ligne, qu'il fallait interpréter à chaque coup d'œil. Sur un écran qu'on
+> regarde en travaillant, c'en est deux de trop.
+>
+> L'étoile porte la seule distinction qui reste — sans elle, `19:30` affiché
+> à 19h47 se lirait comme un rendez-vous à venir, et on croirait avoir le
+> temps.
 
 ---
 
@@ -484,6 +493,21 @@ automatique avec Windows le trouvent donc sans aucune option.
 
 Si rien n'est trouvé, le compagnon **liste les dossiers qu'il a fouillés** —
 un « aucun agenda trouvé » sans cette liste n'aiderait personne.
+
+> ### ⚠️ Un fichier d'essai oublié masque le vrai
+>
+> C'est arrivé, et c'est le pire genre de panne : l'écran affichait des
+> réunions **plausibles** qui n'étaient pas les bonnes. Le fichier
+> d'exemple livré avec le projet, copié en `agenda.json` à côté du script
+> pour un essai, l'emportait sur celui de OneDrive.
+>
+> Deux garde-fous depuis : le compagnon **liste les candidats qu'il
+> ignore**, et il reconnaît l'exemple livré (à sa clé `_lisez_moi`) pour te
+> dire en toutes lettres que ce n'est pas ton agenda.
+>
+> Et dans tous les cas, la première ligne de la console dit
+> **`Agenda lu dans : <chemin>`**. C'est le premier endroit à regarder
+> quand l'écran montre autre chose que ta journée.
 
 L'option reste là pour un chemin ailleurs :
 

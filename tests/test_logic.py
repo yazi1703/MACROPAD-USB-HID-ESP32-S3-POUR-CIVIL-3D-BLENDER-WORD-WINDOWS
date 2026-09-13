@@ -3059,21 +3059,30 @@ class AgendaDuJour(unittest.TestCase):
             self.assertGreaterEqual(depart, 0)
             self.assertLessEqual(depart + C.AGENDA_FENETRE_H, 24)
 
-    def test_le_resume_dit_la_fin_quand_c_est_en_cours(self):
-        self._remplir("19:30|21:00|tache 1")
-        prefixe, titre = self.ag.resume(19 * 60 + 47)
-        self.assertEqual(prefixe, ">21:00")
-        self.assertEqual(titre, "tache 1")
+    def test_le_resume_donne_TOUJOURS_l_heure_de_debut(self):
+        """Une seule regle, pour qu'elle se lise sans y penser.
 
-    def test_le_resume_compte_a_rebours_quand_ca_approche(self):
+        Une premiere version montrait la FIN d'une reunion en cours et un
+        COMPTE A REBOURS pour la suivante : trois reperes differents sur
+        la meme ligne, qu'il fallait interpreter a chaque coup d'oeil. Sur
+        un ecran qu'on regarde en travaillant, c'est une de trop.
+        """
         self._remplir("19:30|21:00|tache 1")
-        prefixe, titre = self.ag.resume(19 * 60 + 17)
-        self.assertEqual(prefixe, "13m")
-        self.assertEqual(titre, "tache 1")
-
-    def test_le_resume_donne_l_heure_quand_c_est_loin(self):
-        self._remplir("19:30|21:00|tache 1")
+        # Loin devant, juste avant, et pendant : toujours 19:30.
         self.assertEqual(self.ag.resume(12 * 60)[0], "19:30")
+        self.assertEqual(self.ag.resume(19 * 60 + 17)[0], "19:30")
+        self.assertEqual(self.ag.resume(19 * 60 + 47)[0], "*19:30")
+        self.assertEqual(self.ag.resume(19 * 60 + 47)[1], "tache 1")
+
+    def test_l_etoile_distingue_ce_qui_a_DEJA_commence(self):
+        """Sans elle, "19:30" affiche a 19:47 se lirait comme un
+        rendez-vous a venir - et on croirait avoir le temps."""
+        self._remplir("19:30|21:00|tache 1")
+        self.assertFalse(self.ag.resume(19 * 60 + 29)[0].startswith("*"))
+        self.assertTrue(self.ag.resume(19 * 60 + 30)[0].startswith("*"))
+        self.assertTrue(self.ag.resume(20 * 60 + 59)[0].startswith("*"))
+        # Une fois finie, elle laisse la place a la suivante - ou a rien.
+        self.assertIn("Plus rien", self.ag.resume(21 * 60)[1])
 
     def test_le_resume_ne_laisse_jamais_la_ligne_vide(self):
         """Un ecran muet ressemble a une panne. Il doit dire pourquoi."""
