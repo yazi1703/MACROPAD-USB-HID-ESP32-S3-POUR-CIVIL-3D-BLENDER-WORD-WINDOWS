@@ -252,13 +252,32 @@ Trois tolérances, pour que ça marche sans rien transformer :
 
 > ### ⚠️ Le piège du fuseau horaire
 >
-> Un calendrier d'entreprise donne très souvent ses heures **en UTC**
-> (`...Z`). Les prendre telles quelles décalerait **tout** l'agenda d'une ou
-> deux heures selon la saison — et **rien ne le signalerait**. Tu arriverais
-> en retard en croyant être en avance.
+> Un calendrier d'entreprise donne très souvent ses heures **en UTC**. Les
+> prendre telles quelles décalerait **tout** l'agenda d'une ou deux heures
+> selon la saison — et **rien ne le signalerait**. Tu arriverais en retard
+> en croyant être en avance.
 >
-> Le compagnon convertit donc explicitement à l'heure locale du PC. Deux
-> tests le vérifient, et retirer la conversion en fait échouer un.
+> Il y a **deux écritures**, et la seconde m'avait échappé :
+>
+> ```json
+> "start": {"dateTime": "2026-09-13T09:00:00Z"}                        ← le Z
+> "start": {"dateTime": "2026-09-13T09:00:00.0000000", "timeZone": "UTC"}
+> ```
+>
+> **La seconde est celle que Microsoft Graph produit par défaut.**
+> L'horodatage n'a ni `Z` ni décalage : la seule mention du fuseau est le
+> champ voisin. Les deux sont maintenant converties, et sept tests les
+> tiennent — dont un sur un vidage brut de flux.
+>
+> Ce défaut a été trouvé par `tools/verifier_agenda.py` (ci-dessous), sur
+> un fichier d'exemple, avant qu'il ne coûte une réunion.
+>
+> **Un fuseau qu'on ne sait pas traduire** (les noms Windows du genre
+> `Romance Standard Time`) n'est **jamais deviné** — un fuseau inventé
+> serait exactement la panne silencieuse qu'on cherche à éviter. L'heure est
+> prise telle quelle, et l'outil de vérification le signale en gros.
+> Demande à ton flux de sortir les heures **en UTC** : c'est le réglage par
+> défaut de Graph, et le seul qu'on traduise à coup sûr.
 
 **Les accents sont convertis avant l'envoi** (`modélisation` → `modelisation`)
 : la police de l'écran est de l'ASCII pur, un caractère accentué y sortirait
@@ -270,6 +289,42 @@ doit ni planter ni dessiner n'importe quoi.
 ## 12.5 Essayer tout de suite, sans rien brancher
 
 Deux choses sont utilisables avant même d'avoir monté la source.
+
+**Le vérificateur de fichier.** C'est l'outil à lancer **dès que ton flux
+produit quelque chose**, avant même de brancher la carte :
+
+```bash
+python3 tools/verifier_agenda.py mon_agenda.json
+```
+
+Il lit le fichier **avec le même code que le compagnon** et dit, entrée par
+entrée : gardée, ou écartée **et pourquoi**. Une réunion qui manque à
+l'écran cesse d'être un mystère.
+
+```
+6 entree(s) lue(s), 2 gardee(s), 4 ecartee(s).
+
+GARDEES
+  11:00 - 12:00   BUGEY II / Point d'equipe Atlas
+  16:00 - 17:30   ELDV - Etude et modelisation 3D
+
+ECARTEES
+  Reunion de demain  [2026-09-14T09:00:00Z]     pas aujourd'hui (2026-09-14)
+    [2026-09-13T11:00:00Z]                      aucun titre (ni 'titre' ni 'subject')
+  Sans date  [?]                                date de debut illisible ou absente
+  'une chaine perdue'                           ce n'est pas un objet JSON
+
+==================================================================
+VERIFIE CES HEURES CONTRE CE QUE TU VOIS DANS TEAMS.
+Un decalage CONSTANT de 1 ou 2 heures sur tout l'agenda est
+un probleme de fuseau, pas un probleme de macropad :
+   fichier 2026-09-13T09:00:00.0000000  ->  affiche 11:00
+==================================================================
+```
+
+Cette dernière vérification est la raison d'être de l'outil : **compare ces
+heures à Teams**. Un décalage constant, c'est le fuseau ; rien d'autre ne
+te le dirait.
 
 **L'aperçu dans le terminal.** Ce n'est pas une maquette dessinée à la
 main : c'est le **vrai code** de `device/display.py` qui tourne, avec un

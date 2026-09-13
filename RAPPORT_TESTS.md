@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 373 tests PC réussis ; 24 fichiers Python compilés avec succès.**
+**Résultat : 382 tests PC réussis ; 24 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, seize corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **24 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 373 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  304 pour le firmware, 69 pour le compagnon Windows.
+- 382 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  304 pour le firmware, 78 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -38,7 +38,7 @@ L'AGENDA DU JOUR SUR L'ECRAN (`AgendaDuJour`, `VueAgendaSurLEcran`, `ProtocoleAg
 
 LE DESSIN est exerce a CHAQUE QUART D'HEURE DES 24 HEURES, sur une journee volontairement penible : un rendez-vous avant la fenetre, un a cheval sur son bord, une reunion eclair de cinq minutes, un intitule trop long et un evenement de nuit. Aucun pixel ne doit sortir des 128 x 64 - un debordement ne se voit pas sur PC, framebuf coupe en silence, mais il efface une partie de l'image sur la vraie dalle. L'economiseur d'ecran est verifie DES DEUX COTES : la vue agenda ne s'eteint jamais (on la regarde sans rien toucher) mais le tableau des macros, lui, garde l'extinction - on ne l'a pas desactivee pour tout le monde en passant.
 
-COTE PC, deux pieges silencieux sont verrouilles. Le fuseau horaire d'abord : un calendrier d'entreprise donne souvent ses heures en UTC, et les prendre telles quelles decalerait TOUT l'agenda d'une ou deux heures selon la saison, sans que rien ne le signale. Les accents ensuite : la police de l'ecran est de l'ASCII pur, un intitule accentue y sortirait en charabia, donc on translittere avant d'envoyer. Le fichier source peut manquer, etre mal forme ou etre en cours d'ecriture par le flux qui le produit : aucun de ces cas n'arrete le compagnon ni n'efface ce qui est affiche. Enfin un test fait l'ALLER-RETOUR COMPLET - ce que le PC fabrique repasse par le protocole puis par device/agenda.py - parce que deux fichiers ecrits a des mois d'intervalle sont exactement la ou un format derive sans que personne ne le voie.
+COTE PC, deux pieges silencieux sont verrouilles. Le fuseau horaire d'abord : un calendrier d'entreprise donne souvent ses heures en UTC, et les prendre telles quelles decalerait TOUT l'agenda d'une ou deux heures selon la saison, sans que rien ne le signale. Il y a DEUX ecritures, et la seconde avait ete manquee : Microsoft Graph n'ecrit pas de Z, il pose le fuseau dans un champ timeZone VOISIN de l'horodatage. Sept tests couvrent maintenant les deux formes, dont un sur un vidage brut de flux, et un fuseau qu'on ne sait pas traduire n'est JAMAIS devine - il est signale par tools/verifier_agenda.py. Ce defaut a ete trouve par cet outil meme, sur un fichier d'exemple, avant d'avoir coute une reunion. Les accents ensuite : la police de l'ecran est de l'ASCII pur, un intitule accentue y sortirait en charabia, donc on translittere avant d'envoyer. Le fichier source peut manquer, etre mal forme ou etre en cours d'ecriture par le flux qui le produit : aucun de ces cas n'arrete le compagnon ni n'efface ce qui est affiche. Enfin un test fait l'ALLER-RETOUR COMPLET - ce que le PC fabrique repasse par le protocole puis par device/agenda.py - parce que deux fichiers ecrits a des mois d'intervalle sont exactement la ou un format derive sans que personne ne le voie.
 
 SEPT MUTATIONS ont ete verifiees, chacune tue un test : supprimer le garde-fou de l'heure perimee, adopter la liste avant la fin de la transmission, rendre n'importe laquelle de deux reunions simultanees, eteindre l'ecran en vue agenda, prendre l'UTC tel quel, laisser passer les accents, afficher hier et demain. La troisieme a SURVECU au premier essai : le cas de test choisi ne discriminait rien, les deux reponses coincidaient. Il a ete refait avec une reunion longue commencant avant une courte. C'est precisement pour cela qu'on mute les tests au lieu de les croire sur parole.
 
@@ -622,6 +622,14 @@ test_un_fichier_mal_forme_garde_la_liste_precedente ... ok
 test_ecrit_dans_les_deux_sorties ... ok
 test_une_console_absente_ne_casse_rien ... ok
 
+--- LeFuseauDeMicrosoftGraph
+test_le_champ_timeZone_a_cote_est_respecte ... ok
+test_les_sept_decimales_de_Graph_passent ... ok
+test_sans_timeZone_l_heure_reste_locale ... ok
+test_un_Z_dans_l_horodatage_marche_toujours ... ok
+test_un_dump_Graph_complet_donne_les_bonnes_heures ... ok
+test_un_fuseau_inconnu_n_est_PAS_devine ... ok
+
 --- LePanneauNeDoitPasFausserLaDetection
 test_None_et_chaine_vide_ne_veulent_pas_dire_la_meme_chose ... ok
 test_notre_propre_fenetre_est_reconnue ... ok
@@ -645,6 +653,11 @@ test_la_raison_survit_au_silence_de_la_console ... ok
 test_port_occupe_le_dit_avec_le_nom_du_port ... ok
 test_pyserial_absent_le_dit ... ok
 test_un_debranchement_en_cours_de_route_est_nomme ... ok
+
+--- PourquoiUneEntreeEstEcartee
+test_chaque_cause_est_nommee ... ok
+test_le_trop_plein_est_signale_aussi ... ok
+test_un_agenda_parfait_n_a_aucun_rejet ... ok
 
 --- RecapitulatifDesCommandes
 test_chaque_touche_a_son_en_tete_puis_ses_gestes ... ok
@@ -676,7 +689,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 373 tests
+Ran 382 tests
 
 OK
 ```

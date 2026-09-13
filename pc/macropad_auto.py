@@ -597,6 +597,12 @@ def sans_accents(texte):
     return "".join(sortie)
 
 
+# Les noms de fuseau qui veulent dire "temps universel". Ce sont ceux que
+# Microsoft Graph emploie par defaut, et les seuls qu'on puisse traduire
+# sans base de donnees de fuseaux.
+_ZONES_UTC = ("UTC", "GMT", "Z", "GMT STANDARD TIME", "UTC+00:00")
+
+
 def _texte_datetime(valeur):
     """Microsoft Graph imbrique ses dates : {"dateTime": "...", ...}."""
     if isinstance(valeur, dict):
@@ -605,6 +611,43 @@ def _texte_datetime(valeur):
                 return valeur[cle]
         return ""
     return valeur
+
+
+def _zone_declaree(valeur):
+    """Le champ timeZone que Graph pose A COTE de dateTime, ou "".
+
+    C'EST LE PIEGE QUE CE PROJET A FAILLI EMBARQUER. La forme standard de
+    Microsoft Graph est :
+
+        {"dateTime": "2026-09-13T09:00:00.0000000", "timeZone": "UTC"}
+
+    L'horodatage n'a NI Z NI DECALAGE : la seule mention du fuseau est ce
+    champ voisin. Le lire comme une heure locale decale tout l'agenda
+    d'une ou deux heures selon la saison, sans que rien ne le signale.
+    """
+    if isinstance(valeur, dict):
+        return str(valeur.get("timeZone", valeur.get("timezone", "")) or "")
+    return ""
+
+
+def _fuseau(nom):
+    """Le fuseau nomme, ou None si on ne sait pas le traduire.
+
+    On ne DEVINE jamais : un fuseau invente serait exactement la panne
+    silencieuse qu'on cherche a eviter. Les noms qu'on ne sait pas lire
+    sont signales par tools/verifier_agenda.py, pas interpretes au hasard.
+    """
+    if not nom:
+        return None
+    if nom.strip().upper() in _ZONES_UTC:
+        return datetime.timezone.utc
+    try:
+        from zoneinfo import ZoneInfo          # "Europe/Paris"
+        return ZoneInfo(nom)
+    except Exception:
+        # Noms Windows ("Romance Standard Time"), ou base de fuseaux
+        # absente : on ne traduit pas, et on ne fait pas semblant.
+        return None
 
 
 def instant(valeur, aujourdhui):
@@ -624,33 +667,59 @@ def instant(valeur, aujourdhui):
         return None
     if "T" not in texte and " " not in texte and ":" in texte:
         texte = "%sT%s" % (aujourdhui.isoformat(), texte)
+    # Graph ecrit sept decimales de seconde ; fromisoformat n'en accepte
+    # que trois ou six selon la version de Python. On les coupe.
+    if "." in texte:
+        tete, _, queue = texte.partition(".")
+        chiffres = ""
+        while queue and queue[0].isdigit():
+            chiffres, queue = chiffres + queue[0], queue[1:]
+        texte = tete + ("." + chiffres[:6] if chiffres else "") + queue
     try:
         moment = datetime.datetime.fromisoformat(texte.replace("Z", "+00:00"))
     except ValueError:
         return None
+    if moment.tzinfo is None:
+        # Pas de Z ni de decalage dans l'horodatage : le fuseau est
+        # peut-etre declare a cote, comme le fait Graph.
+        zone = _fuseau(_zone_declaree(valeur))
+        if zone is not None:
+            moment = moment.replace(tzinfo=zone)
     if moment.tzinfo is not None:
         moment = moment.astimezone().replace(tzinfo=None)
     return moment
 
 
-def evenements_du_jour(donnees, aujourdhui, maximum=16, duree_defaut=30):
-    """Fichier lu -> [(debut, fin, titre), ...] en minutes, trie.
+def examiner_agenda(donnees, aujourdhui, maximum=16, duree_defaut=30):
+    """Fichier lu -> (evenements gardes, [(entree, raison ecartee), ...]).
 
-    Fonction PURE : ni fichier, ni port serie, ni horloge. C'est elle que
-    les tests verifient, avec les cas qui font mal - une heure en UTC, un
-    rendez-vous a cheval sur minuit, une entree sans titre.
+    Fonction PURE : ni fichier, ni port serie, ni horloge.
+
+    Elle rend AUSSI les rejets, et c'est le point : une entree ecartee en
+    silence donne "il manque des reunions" sans dire pourquoi, et on
+    cherche pendant une heure. tools/verifier_agenda.py s'en sert pour
+    nommer chaque ecart - c'est indispensable quand le fichier est produit
+    par un flux qu'on ne voit pas d'ici.
     """
     liste = donnees.get("evenements") if isinstance(donnees, dict) else donnees
     if isinstance(donnees, dict) and liste is None:
         liste = donnees.get("value")          # forme brute de Graph
-    resultat = []
+    gardes, rejets = [], []
     for entree in (liste or []):
         if not isinstance(entree, dict):
+            rejets.append((entree, "ce n'est pas un objet JSON"))
             continue
         debut = instant(entree.get("debut", entree.get("start")), aujourdhui)
         titre = sans_accents(
             entree.get("titre", entree.get("subject", ""))).strip()
-        if debut is None or not titre or debut.date() != aujourdhui:
+        if debut is None:
+            rejets.append((entree, "date de debut illisible ou absente"))
+            continue
+        if not titre:
+            rejets.append((entree, "aucun titre (ni 'titre' ni 'subject')"))
+            continue
+        if debut.date() != aujourdhui:
+            rejets.append((entree, "pas aujourd'hui (%s)" % debut.date()))
             continue
         fin = instant(entree.get("fin", entree.get("end")), aujourdhui)
         if fin is None or fin <= debut:
@@ -660,10 +729,18 @@ def evenements_du_jour(donnees, aujourdhui, maximum=16, duree_defaut=30):
             # l'ecran : cette vue ne montre qu'aujourd'hui.
             fin = datetime.datetime.combine(aujourdhui,
                                             datetime.time(23, 59))
-        resultat.append((debut.hour * 60 + debut.minute,
-                         fin.hour * 60 + fin.minute, titre))
-    resultat.sort()
-    return resultat[:maximum]
+        gardes.append((debut.hour * 60 + debut.minute,
+                       fin.hour * 60 + fin.minute, titre))
+    gardes.sort()
+    for supplementaire in gardes[maximum:]:
+        rejets.append((supplementaire,
+                       "au-dela des %d evenements gardes" % maximum))
+    return gardes[:maximum], rejets
+
+
+def evenements_du_jour(donnees, aujourdhui, maximum=16, duree_defaut=30):
+    """Les evenements d'aujourd'hui, tries. Les rejets sont ignores ici."""
+    return examiner_agenda(donnees, aujourdhui, maximum, duree_defaut)[0]
 
 
 def ligne_heure(moment):

@@ -902,3 +902,115 @@ class OuTrouverLAgenda(unittest.TestCase):
             fichier.write("{}")
         self.assertEqual(MA.chemin_agenda("autre.json", self.dossier),
                          "autre.json")
+
+
+class LeFuseauDeMicrosoftGraph(unittest.TestCase):
+    """La forme que Graph produit VRAIMENT, et le piege qu'elle cache.
+
+        {"dateTime": "2026-09-13T09:00:00.0000000", "timeZone": "UTC"}
+
+    L'horodatage n'a NI Z NI DECALAGE : la seule mention du fuseau est le
+    champ voisin. Le lire comme une heure locale decale tout l'agenda
+    d'une ou deux heures selon la saison, sans que rien ne le signale.
+
+    Ce defaut etait bien present dans la premiere version, et c'est
+    tools/verifier_agenda.py qui l'a fait apparaitre - sur un fichier
+    d'exemple, avant qu'il ne coute une reunion.
+    """
+
+    JOUR = __import__("datetime").date(2026, 9, 13)
+
+    def _attendu(self, iso_utc):
+        import datetime
+        moment = datetime.datetime.fromisoformat(iso_utc).replace(
+            tzinfo=datetime.timezone.utc)
+        return moment.astimezone().replace(tzinfo=None)
+
+    def test_le_champ_timeZone_a_cote_est_respecte(self):
+        valeur = {"dateTime": "2026-09-13T09:00:00", "timeZone": "UTC"}
+        self.assertEqual(MA.instant(valeur, self.JOUR),
+                         self._attendu("2026-09-13T09:00:00"))
+
+    def test_les_sept_decimales_de_Graph_passent(self):
+        """Graph ecrit sept chiffres de seconde ; fromisoformat n'en
+        accepte que trois ou six selon la version de Python. Sur un PC
+        avec un Python plus ancien, tout l'agenda serait rejete."""
+        valeur = {"dateTime": "2026-09-13T09:00:00.0000000",
+                  "timeZone": "UTC"}
+        self.assertEqual(MA.instant(valeur, self.JOUR),
+                         self._attendu("2026-09-13T09:00:00"))
+
+    def test_un_Z_dans_l_horodatage_marche_toujours(self):
+        valeur = {"dateTime": "2026-09-13T09:00:00.0000000Z"}
+        self.assertEqual(MA.instant(valeur, self.JOUR),
+                         self._attendu("2026-09-13T09:00:00"))
+
+    def test_un_fuseau_inconnu_n_est_PAS_devine(self):
+        """Un fuseau invente serait exactement la panne silencieuse qu'on
+        cherche a eviter. Faute de savoir, on prend l'heure telle quelle -
+        et verifier_agenda.py le signale."""
+        import datetime
+        valeur = {"dateTime": "2026-09-13T09:00:00",
+                  "timeZone": "Fuseau Qui N'existe Pas"}
+        self.assertEqual(MA.instant(valeur, self.JOUR),
+                         datetime.datetime(2026, 9, 13, 9, 0))
+
+    def test_sans_timeZone_l_heure_reste_locale(self):
+        import datetime
+        valeur = {"dateTime": "2026-09-13T09:00:00"}
+        self.assertEqual(MA.instant(valeur, self.JOUR),
+                         datetime.datetime(2026, 9, 13, 9, 0))
+
+    def test_un_dump_Graph_complet_donne_les_bonnes_heures(self):
+        """Bout en bout, sur la forme brute d'un flux Power Automate."""
+        evenements = MA.evenements_du_jour({"value": [
+            {"subject": u"Point d'équipe Atlas",
+             "start": {"dateTime": "2026-09-13T09:00:00.0000000",
+                       "timeZone": "UTC"},
+             "end": {"dateTime": "2026-09-13T10:00:00.0000000",
+                     "timeZone": "UTC"}}]}, self.JOUR)
+        attendu = self._attendu("2026-09-13T09:00:00")
+        self.assertEqual(evenements,
+                         [(attendu.hour * 60 + attendu.minute,
+                           attendu.hour * 60 + attendu.minute + 60,
+                           "Point d'equipe Atlas")])
+
+
+class PourquoiUneEntreeEstEcartee(unittest.TestCase):
+    """Une entree ecartee en silence donne "il manque des reunions" sans
+    dire pourquoi. examiner_agenda() nomme chaque ecart."""
+
+    JOUR = __import__("datetime").date(2026, 9, 13)
+
+    def _raisons(self, entrees):
+        _, rejets = MA.examiner_agenda({"evenements": entrees}, self.JOUR)
+        return [raison for _, raison in rejets]
+
+    def test_chaque_cause_est_nommee(self):
+        raisons = self._raisons([
+            {"debut": "2026-09-14T09:00:00", "fin": "2026-09-14T10:00:00",
+             "titre": "Demain"},
+            {"debut": "10:00", "fin": "11:00", "titre": "   "},
+            {"titre": "Sans date"},
+            "pas un objet",
+        ])
+        self.assertIn("pas aujourd'hui (2026-09-14)", raisons)
+        self.assertTrue(any("titre" in r for r in raisons))
+        self.assertTrue(any("debut" in r for r in raisons))
+        self.assertTrue(any("objet" in r for r in raisons))
+
+    def test_le_trop_plein_est_signale_aussi(self):
+        gros = [{"debut": "0%d:00" % (n % 10), "fin": "0%d:30" % (n % 10),
+                 "titre": "R%d" % n} for n in range(20)]
+        gardes, rejets = MA.examiner_agenda({"evenements": gros}, self.JOUR,
+                                            maximum=16)
+        self.assertEqual(len(gardes), 16)
+        self.assertEqual(len(rejets), 4)
+        self.assertTrue(all("au-dela" in r for _, r in rejets))
+
+    def test_un_agenda_parfait_n_a_aucun_rejet(self):
+        gardes, rejets = MA.examiner_agenda(
+            {"evenements": [{"debut": "10:00", "fin": "11:00",
+                             "titre": "Propre"}]}, self.JOUR)
+        self.assertEqual(len(gardes), 1)
+        self.assertEqual(rejets, [])

@@ -285,6 +285,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   ├── page_config.html          la page de configuration, source unique
 │   ├── injecter_page.py          l'injecte dans portal.py et macropad_auto.py
 │   ├── apercu_agenda.py          dessine la vue agenda dans le terminal
+│   ├── verifier_agenda.py        dit ce que le compagnon comprend d'un agenda
 │   └── generer_code_complet.py   régénère CODE_COMPLET.md
 ├── civil3d/                      >>> À CHARGER DANS CIVIL 3D
 │   ├── macropad_tools.lsp        les 4 commandes des combinaisons
@@ -292,7 +293,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 ├── docs/                         documentation détaillée
 ├── tests/
 │   ├── test_logic.py             304 tests du firmware, exécutables sur PC
-│   ├── test_pc.py                69 tests du compagnon Windows
+│   ├── test_pc.py                78 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
 ```
@@ -317,7 +318,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 373 tests ... OK
+→ Ran 382 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport
