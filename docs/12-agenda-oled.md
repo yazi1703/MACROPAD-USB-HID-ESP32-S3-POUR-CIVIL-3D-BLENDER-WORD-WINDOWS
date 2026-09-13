@@ -239,16 +239,21 @@ répétition **toutes les 15 minutes**.
 
 #### Étape 2 — lire le calendrier
 
-**Nouvelle étape** → cherche **Office 365 Outlook** → prends l'action dont le
-nom contient **« vue du calendrier »** (*Get calendar view of events* en
-anglais), la version la plus élevée proposée (V3 ou plus).
+**Nouvelle étape** → cherche **Office 365 Outlook** → prends :
 
-> ### ⚠️ Prends bien « vue du calendrier », pas « obtenir les événements »
+> ### **« Obtenir une vue Calendrier des événements »**
+> (*Get calendar view of events* en anglais)
+
+> ### ⚠️ Trois actions se ressemblent, deux sont des pièges
 >
-> Les deux existent et se ressemblent. **Seule la « vue du calendrier »
-> déroule les réunions récurrentes.** L'autre te rendrait ton « BUGEY II /
-> Point d'équipe Atlas » hebdomadaire **une seule fois**, à sa date de
-> création — c'est-à-dire jamais aujourd'hui.
+> Elles sont voisines dans la liste, et le mauvais choix ne produit aucune
+> erreur — juste un agenda vide ou faux.
+>
+> | Action | Ce qu'elle fait |
+> |---|---|
+> | **Obtenir une vue Calendrier des événements** | ✅ **celle-ci.** Les réunions d'une période, **répétitions déroulées** |
+> | Obtenir des événements (V4) | ❌ ne déroule PAS les répétitions. Ton « Point d'équipe Atlas » hebdomadaire n'apparaîtrait **qu'une fois**, à sa date de création |
+> | Obtenir des calendriers (V2) | ❌ rend la **liste de tes calendriers** (Calendrier, Anniversaires, Jours fériés…), pas leur contenu. Aucune réunion, jamais |
 
 Trois champs à remplir :
 
@@ -258,8 +263,14 @@ Trois champs à remplir :
 | **Heure de début** | l'expression ci-dessous |
 | **Heure de fin** | l'expression ci-dessous |
 
-Pour les deux heures, ne tape pas une date : clique sur l'onglet
-**Expression** (ou *fx*) et colle exactement :
+Pour les deux heures, il y a **deux façons de faire**, et la seconde te
+débloque tout de suite si tu ne trouves pas l'éditeur d'expression.
+
+**a) Avec une expression** (propre, sans entretien). Clique dans la case,
+puis sur la petite icône **`fx`** qui apparaît — dans le nouveau
+concepteur, elle ne se montre **que quand le curseur est dans la case**.
+Dans l'ancien, c'est un onglet **Expression** à côté de *Contenu
+dynamique*. Colle exactement :
 
 ```
 addDays(startOfDay(utcNow()), -1)
@@ -268,6 +279,27 @@ addDays(startOfDay(utcNow()), -1)
 ```
 addDays(startOfDay(utcNow()), 2)
 ```
+
+> Si tu ne trouves ni `fx` ni l'onglet : en haut à droite de l'éditeur, il
+> y a un interrupteur **« Nouveau concepteur »**. Désactive-le — l'ancien
+> affiche « Expression » en toutes lettres.
+
+**b) Avec des dates écrites en clair** (pour démarrer). Tape juste du texte
+dans les deux cases :
+
+```
+2026-09-01T00:00:00Z
+```
+
+```
+2026-12-31T00:00:00Z
+```
+
+Aucune expression, aucune icône à trouver. Ça récupère quatre mois de
+calendrier d'un coup, et **c'est le compagnon qui filtre sur ta date
+locale** — l'écran affichera bien la bonne journée. Il faudra rallonger la
+date de fin un jour, mais tu auras **toute la chaîne qui tourne
+aujourd'hui**. Ne laisse pas un détail d'interface bloquer le reste.
 
 > **Pourquoi une fenêtre de trois jours, et pas la journée ?** Parce que
 > `utcNow()` donne l'heure **UTC**, décalée de 1 ou 2 h par rapport à toi :
