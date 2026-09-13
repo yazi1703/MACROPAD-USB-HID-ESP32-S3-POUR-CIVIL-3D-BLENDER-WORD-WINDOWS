@@ -419,8 +419,21 @@ Les trois points sur le nœud → **Renommer** → appelle-le simplement
 > contenu, **écrire le fichier dans une boucle le réécrirait une fois par
 > réunion**.
 >
-> Si la conversion en binaire est encore refusée, essaie
-> `string(body('Calendrier'))`.
+> ### Écris `@{string(body('Calendrier'))}`, pas `body('Calendrier')`
+>
+> OneDrive tente un « envoi par morceaux » quand le contenu est gros **ou
+> quand il n'en connaît pas la taille**, et échoue alors avec :
+>
+> ```
+> InvalidProtocolResponse
+> The response to initiating partial content upload request
+> must contain a valid location header
+> ```
+>
+> `body('Calendrier')` est un **objet JSON**, pas une chaîne : le
+> connecteur n'en déduit aucune longueur. `string()` force la conversion en
+> texte, donc en longueur connue. Et les accolades `@{ }` évitent d'avoir à
+> manipuler le panneau.
 >
 > **Et si tu es déjà tombé dans la boucle :** supprime le « Appliquer à
 > chacun », **puis supprime aussi « Mettre à jour le fichier » et rajoute-en
