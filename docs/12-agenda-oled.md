@@ -188,47 +188,153 @@ rien ne sort de ton PC.
 > mauvais jours, en silence. Power Automate et Graph, eux, savent
 > **dérouler** les répétitions : c'est leur travail, pas le mien.
 
-### Le chemin recommandé, en trois étapes
+### Power Automate, pas à pas
 
-1. Dans **Power Automate** (inclus dans M365, aucune installation), crée un
-   flux **planifié** — toutes les 15 minutes, par exemple.
-2. Ajoute l'action du connecteur **Office 365 Outlook** qui récupère la
-   **vue de calendrier** entre le début et la fin de la journée. C'est bien
-   celle-là qu'il faut : c'est elle qui **déroule les réunions récurrentes**,
-   contrairement à une simple liste d'événements.
-3. Écris le résultat dans un fichier **JSON sur ton OneDrive**. Comme
-   OneDrive se synchronise sur ton PC, le compagnon n'a qu'à lire le fichier
-   local.
+**Ce que c'est.** Un outil de Microsoft, inclus dans ton abonnement Office,
+qui fait tourner des petites automatisations dans le cloud. Pas
+d'installation, pas de droits d'administrateur : tu ouvres
+[make.powerautomate.com](https://make.powerautomate.com), tu te connectes
+avec ton compte professionnel.
 
-Puis, au choix :
+Ton flux tiendra en **trois blocs** :
+
+```
+  ┌──────────────────────────────────────────────┐
+  │ 1. Toutes les 15 minutes                     │  le déclencheur
+  └──────────────────────────────────────────────┘
+                      ↓
+  ┌──────────────────────────────────────────────┐
+  │ 2. Lire mon calendrier (vue de calendrier)    │  Office 365 Outlook
+  └──────────────────────────────────────────────┘
+                      ↓
+  ┌──────────────────────────────────────────────┐
+  │ 3. Écrire le résultat dans agenda.json         │  OneDrive
+  └──────────────────────────────────────────────┘
+```
+
+---
+
+#### Étape 0 — préparer le fichier de destination (à faire en premier)
+
+Dans **OneDrive**, crée un fichier texte nommé **`agenda.json`** contenant
+juste `{}`. N'importe quel dossier fait l'affaire ; retiens lequel.
+
+> **Pourquoi d'abord ?** Parce qu'on va utiliser l'action **« Mettre à jour
+> le fichier »**, qui a besoin d'un fichier existant à désigner. L'action
+> « Créer un fichier », elle, ne remplace rien : elle ajouterait
+> `agenda-1.json`, `agenda-2.json`… à chaque exécution. Avec un flux qui
+> tourne toutes les 15 minutes, tu aurais quatre-vingt-seize fichiers
+> inutiles par jour et le compagnon lirait toujours le premier, figé.
+>
+> C'est le genre de détail qui coûte une soirée.
+
+---
+
+#### Étape 1 — le déclencheur
+
+**Créer** → **Flux de cloud planifié**. Donne-lui un nom (`Agenda macropad`),
+répétition **toutes les 15 minutes**.
+
+---
+
+#### Étape 2 — lire le calendrier
+
+**Nouvelle étape** → cherche **Office 365 Outlook** → prends l'action dont le
+nom contient **« vue du calendrier »** (*Get calendar view of events* en
+anglais), la version la plus élevée proposée (V3 ou plus).
+
+> ### ⚠️ Prends bien « vue du calendrier », pas « obtenir les événements »
+>
+> Les deux existent et se ressemblent. **Seule la « vue du calendrier »
+> déroule les réunions récurrentes.** L'autre te rendrait ton « BUGEY II /
+> Point d'équipe Atlas » hebdomadaire **une seule fois**, à sa date de
+> création — c'est-à-dire jamais aujourd'hui.
+
+Trois champs à remplir :
+
+| Champ | Quoi mettre |
+|---|---|
+| **Calendrier** | choisis-le dans la liste (`Calendrier` / `Calendar`) |
+| **Heure de début** | l'expression ci-dessous |
+| **Heure de fin** | l'expression ci-dessous |
+
+Pour les deux heures, ne tape pas une date : clique sur l'onglet
+**Expression** (ou *fx*) et colle exactement :
+
+```
+addDays(startOfDay(utcNow()), -1)
+```
+
+```
+addDays(startOfDay(utcNow()), 2)
+```
+
+> **Pourquoi une fenêtre de trois jours, et pas la journée ?** Parce que
+> `utcNow()` donne l'heure **UTC**, décalée de 1 ou 2 h par rapport à toi :
+> viser « aujourd'hui » pile ferait manquer tes réunions du petit matin,
+> selon la saison. On prend donc large — **c'est le compagnon qui filtre sur
+> TA date locale**, et il te dit ce qu'il a écarté. Une fenêtre généreuse ne
+> coûte rien ; une fenêtre trop juste coûte une réunion.
+
+---
+
+#### Étape 3 — écrire le fichier
+
+**Nouvelle étape** → **OneDrive Entreprise** → **Mettre à jour le fichier**.
+
+| Champ | Quoi mettre |
+|---|---|
+| **Fichier** | l'icône dossier, puis choisis le `agenda.json` de l'étape 0 |
+| **Contenu du fichier** | la sortie **`body`** de l'étape 2 |
+
+Pour le contenu : dans le panneau de contenu dynamique, prends l'entrée
+**`body`** de l'action précédente. Si tu ne la trouves pas, va dans
+**Expression** et colle (en remplaçant par le vrai nom de ton action, avec
+des `_` à la place des espaces) :
+
+```
+body('Obtenir_la_vue_du_calendrier_des_événements_(V3)')
+```
+
+**Enregistre**, puis **Tester** → *Manuellement*.
+
+---
+
+#### Étape 4 — vérifier AVANT de toucher au macropad
+
+OneDrive synchronise le fichier sur ton PC en quelques secondes. Puis :
+
+```bash
+python3 tools/verifier_agenda.py "C:\Users\toi\OneDrive\agenda.json"
+```
+
+C'est **là** que tu sauras si ça marche, pas sur l'écran du macropad. L'outil
+te dit combien d'entrées ont été comprises, lesquelles ont été écartées **et
+pourquoi**, et il affiche les heures brutes à côté des heures converties.
+
+**Compare ces heures à ce que tu vois dans Teams.** Un décalage constant de
+1 ou 2 heures, c'est le fuseau — dis-le-moi avec la première entrée du
+fichier, j'adapte.
+
+Quand c'est bon, pointe le compagnon dessus :
 
 ```bat
-REM le chemin explicite
 python macropad_auto.py --agenda "C:\Users\toi\OneDrive\agenda.json"
 ```
 
-**Ou, plus simple : pose un fichier `agenda.json` à côté de
-`macropad_auto.py`.** Sans option, le compagnon le trouve tout seul —
-c'est ce qui fait marcher le double-clic sur `macropad_auto.bat` et le
-démarrage automatique avec Windows, qui ne passent aucune option.
+---
 
-> **C'est le piège qui m'a eu au premier essai sur la carte.** J'avais
-> documenté `--agenda`, mais personne ne lance ce script en tapant une
-> ligne de commande : on double-clique sur le `.bat`. Sans option, aucune
-> ligne `H:` ne partait, et l'écran affichait « le PC ne répond plus » —
-> un message qui envoie chercher un problème de liaison qui n'existe pas.
->
-> **L'heure part désormais toujours**, même sans fichier d'agenda : elle ne
-> coûte qu'une ligne par minute. « En attente du PC » ne veut donc plus
-> dire qu'une chose — le compagnon ne tourne pas, ou n'est pas connecté.
->
-> Pour un chemin OneDrive, garde `--agenda` : plus explicite, et le
-> `.bat` transmet les options qu'on lui donne.
+#### Si un libellé ne correspond pas à ce que tu vois
 
-> Les noms exacts des actions varient d'une version de Power Automate à
-> l'autre : je te donne la **forme** du flux, pas une suite de clics que je
-> ne peux pas vérifier d'ici. Si tu me dis ce que tu vois à l'écran, on le
-> finit ensemble.
+Les noms d'actions changent selon la version de Power Automate et la langue
+de ton compte. **Je te donne la forme du flux, pas une suite de clics que je
+ne peux pas vérifier d'ici.** Si tu bloques sur une étape, envoie-moi ce que
+tu vois — la liste des actions proposées, ou le message d'erreur — et on
+finit ensemble.
+
+Et si ton organisation bloque Power Automate, dis-le-moi aussi : le
+compagnon lit un simple fichier JSON, donc **n'importe quoi** capable d'en
+écrire un fera l'affaire.
 
 ### Le format du fichier
 
