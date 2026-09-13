@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 382 tests PC réussis ; 24 fichiers Python compilés avec succès.**
+**Résultat : 388 tests PC réussis ; 24 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, seize corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **24 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 382 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  304 pour le firmware, 78 pour le compagnon Windows.
+- 388 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  304 pour le firmware, 84 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -635,6 +635,14 @@ test_None_et_chaine_vide_ne_veulent_pas_dire_la_meme_chose ... ok
 test_notre_propre_fenetre_est_reconnue ... ok
 test_une_vraie_fenetre_est_lue_normalement ... ok
 
+--- LesFormesPossiblesDUnFluxPowerAutomate
+test_la_forme_imbriquee_de_Graph_marche_toujours ... ok
+test_le_fichier_ecrit_a_la_main_reste_en_heure_locale ... ok
+test_le_fuseau_annonce_au_niveau_de_l_entree ... ok
+test_le_fuseau_est_bien_decale_pendant_ces_tests ... ok
+test_summary_est_accepte_comme_titre ... ok
+test_un_champ_qui_porte_deja_son_fuseau_l_emporte ... ok
+
 --- NomDeDocument
 test_chemin_complet_reduit_au_nom_de_fichier ... ok
 test_coupe_a_ce_que_l_ecran_retient ... ok
@@ -689,7 +697,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 382 tests
+Ran 388 tests
 
 OK
 ```

@@ -1014,3 +1014,117 @@ class PourquoiUneEntreeEstEcartee(unittest.TestCase):
                              "titre": "Propre"}]}, self.JOUR)
         self.assertEqual(len(gardes), 1)
         self.assertEqual(rejets, [])
+
+
+class LesFormesPossiblesDUnFluxPowerAutomate(unittest.TestCase):
+    """On ne peut pas verifier d'ici la forme exacte que produit le flux.
+
+    Le connecteur Office 365 Outlook a plusieurs versions, et son vidage
+    n'a pas la meme allure que celui de Microsoft Graph. Plutot que de
+    parier sur une forme, on accepte celles qui sont plausibles : ca ne
+    coute rien, et ca evite de dependre de ce qu'on ne peut pas voir.
+
+    =================================================================
+    POURQUOI CES TESTS FORCENT UN FUSEAU
+    =================================================================
+    Sur une machine reglee en UTC, "lire une heure comme locale" et "la
+    lire comme UTC" sont LA MEME OPERATION. Un test ecrit sans precaution
+    y passe donc meme si la conversion a ete supprimee - et c'est arrive :
+    deux mutations ont survecu a la premiere version de cette classe.
+
+    On impose donc un fuseau decale pendant ces tests. La ou c'est
+    impossible - time.tzset() n'existe pas sous Windows - ils s'annoncent
+    ignores plutot que de passer sans rien prouver.
+    """
+
+    JOUR = __import__("datetime").date(2026, 9, 13)
+    FUSEAU = "Asia/Tokyo"          # UTC+9, sans heure d'ete : ecart stable
+
+    @classmethod
+    def setUpClass(cls):
+        import time
+        if not hasattr(time, "tzset"):
+            raise unittest.SkipTest(
+                "time.tzset() absent (Windows) : sans fuseau impose, ces "
+                "tests ne prouveraient rien. Utilise tools/verifier_agenda.py")
+        cls._tz_avant = os.environ.get("TZ")
+        os.environ["TZ"] = cls.FUSEAU
+        time.tzset()
+        import datetime
+        if datetime.datetime.now().astimezone().utcoffset() == \
+                datetime.timedelta(0):
+            raise unittest.SkipTest("le fuseau impose n'a pas pris")
+
+    @classmethod
+    def tearDownClass(cls):
+        import time
+        if cls._tz_avant is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = cls._tz_avant
+        time.tzset()
+
+    def _minutes(self, entree):
+        gardes, rejets = MA.examiner_agenda({"evenements": [entree]},
+                                            self.JOUR)
+        self.assertEqual(rejets, [], "entree refusee : %s" % (rejets,))
+        return gardes[0]
+
+    def _utc_en_local(self, heure):
+        """L'heure attendue a l'ecran pour une heure donnee en UTC."""
+        import datetime
+        moment = datetime.datetime(2026, 9, 13, heure, 0,
+                                   tzinfo=datetime.timezone.utc).astimezone()
+        return moment.hour * 60 + moment.minute
+
+    def test_le_fuseau_est_bien_decale_pendant_ces_tests(self):
+        """Le garde-fou du garde-fou : si cette assertion tombe, toutes
+        les autres de cette classe ne prouvent plus rien."""
+        self.assertNotEqual(self._utc_en_local(9), 9 * 60,
+                            "fuseau non decale : les tests sont aveugles")
+
+    def test_le_fuseau_annonce_au_niveau_de_l_entree(self):
+        """Forme aplatie : start et end sont des chaines nues, et le
+        fuseau est annonce UNE FOIS, a cote d'elles."""
+        debut, fin, titre = self._minutes({
+            "subject": "Atlas",
+            "start": "2026-09-13T09:00:00.0000000",
+            "end": "2026-09-13T10:00:00.0000000",
+            "timeZone": "UTC"})
+        self.assertEqual(debut, self._utc_en_local(9))
+        self.assertEqual(fin, self._utc_en_local(10))
+        self.assertEqual(titre, "Atlas")
+
+    def test_un_champ_qui_porte_deja_son_fuseau_l_emporte(self):
+        """startWithTimeZone porte son decalage : il n'y a plus rien a
+        deviner, donc il passe AVANT le champ nu, qui lui est ambigu."""
+        debut, _, _ = self._minutes({
+            "subject": "Atlas",
+            "start": "2026-09-13T09:00:00",
+            "startWithTimeZone": "2026-09-13T09:00:00+00:00",
+            "end": "2026-09-13T10:00:00",
+            "endWithTimeZone": "2026-09-13T10:00:00+00:00"})
+        self.assertEqual(debut, self._utc_en_local(9))
+
+    def test_la_forme_imbriquee_de_Graph_marche_toujours(self):
+        debut, _, _ = self._minutes({
+            "subject": "Atlas",
+            "start": {"dateTime": "2026-09-13T09:00:00.0000000",
+                      "timeZone": "UTC"},
+            "end": {"dateTime": "2026-09-13T10:00:00.0000000",
+                    "timeZone": "UTC"}})
+        self.assertEqual(debut, self._utc_en_local(9))
+
+    def test_le_fichier_ecrit_a_la_main_reste_en_heure_locale(self):
+        """Le cas le plus simple ne doit pas etre casse par les autres :
+        sans aucune mention de fuseau, 09:00 veut dire 09:00 chez toi."""
+        debut, fin, titre = self._minutes({
+            "debut": "09:00", "fin": "10:00", "titre": "A la main"})
+        self.assertEqual((debut, fin, titre), (540, 600, "A la main"))
+
+    def test_summary_est_accepte_comme_titre(self):
+        """Le nom qu'emploient les formats de calendrier ouverts."""
+        _, _, titre = self._minutes({
+            "summary": "Depuis un autre outil",
+            "start": "09:00", "end": "10:00"})
+        self.assertEqual(titre, "Depuis un autre outil")

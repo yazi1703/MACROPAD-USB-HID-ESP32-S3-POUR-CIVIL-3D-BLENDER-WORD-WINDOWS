@@ -650,7 +650,29 @@ def _fuseau(nom):
         return None
 
 
-def instant(valeur, aujourdhui):
+# Les noms de champ qu'on accepte pour une heure, DU PLUS EXPLICITE AU
+# PLUS VAGUE. Un champ qui porte deja son fuseau ("...WithTimeZone") est
+# preferable a un champ nu : le fuseau n'a alors rien a deviner.
+#
+# On ne sait pas d'avance lesquels un flux Power Automate produira - le
+# connecteur Office 365 a plusieurs formes selon sa version. Les accepter
+# tous ne coute rien, et evite de dependre d'une forme qu'on ne peut pas
+# verifier d'ici.
+_CHAMPS_DEBUT = ("debut", "startWithTimeZone", "start", "startTime")
+_CHAMPS_FIN = ("fin", "endWithTimeZone", "end", "endTime")
+_CHAMPS_TITRE = ("titre", "subject", "summary")
+
+
+def _champ(entree, noms):
+    """La premiere valeur non vide parmi ces noms de champ."""
+    for nom in noms:
+        valeur = entree.get(nom)
+        if valeur:
+            return valeur
+    return None
+
+
+def instant(valeur, aujourdhui, zone_repli=""):
     """Texte ISO -> datetime LOCAL naif, ou None si c'est illisible.
 
     LE PIEGE A DESAMORCER : un calendrier d'entreprise donne tres souvent
@@ -682,7 +704,11 @@ def instant(valeur, aujourdhui):
     if moment.tzinfo is None:
         # Pas de Z ni de decalage dans l'horodatage : le fuseau est
         # peut-etre declare a cote, comme le fait Graph.
-        zone = _fuseau(_zone_declaree(valeur))
+        # Le fuseau peut etre annonce a trois endroits : dans la valeur
+        # elle-meme (Microsoft Graph), a cote d'elle dans l'entree (forme
+        # aplatie de certains connecteurs), ou nulle part. On prend le
+        # plus proche de la date, et on ne devine jamais le reste.
+        zone = _fuseau(_zone_declaree(valeur) or zone_repli)
         if zone is not None:
             moment = moment.replace(tzinfo=zone)
     if moment.tzinfo is not None:
@@ -709,9 +735,10 @@ def examiner_agenda(donnees, aujourdhui, maximum=16, duree_defaut=30):
         if not isinstance(entree, dict):
             rejets.append((entree, "ce n'est pas un objet JSON"))
             continue
-        debut = instant(entree.get("debut", entree.get("start")), aujourdhui)
-        titre = sans_accents(
-            entree.get("titre", entree.get("subject", ""))).strip()
+        zone_entree = str(entree.get("timeZone",
+                                     entree.get("timezone", "")) or "")
+        debut = instant(_champ(entree, _CHAMPS_DEBUT), aujourdhui, zone_entree)
+        titre = sans_accents(_champ(entree, _CHAMPS_TITRE) or "").strip()
         if debut is None:
             rejets.append((entree, "date de debut illisible ou absente"))
             continue
@@ -721,7 +748,7 @@ def examiner_agenda(donnees, aujourdhui, maximum=16, duree_defaut=30):
         if debut.date() != aujourdhui:
             rejets.append((entree, "pas aujourd'hui (%s)" % debut.date()))
             continue
-        fin = instant(entree.get("fin", entree.get("end")), aujourdhui)
+        fin = instant(_champ(entree, _CHAMPS_FIN), aujourdhui, zone_entree)
         if fin is None or fin <= debut:
             fin = debut + datetime.timedelta(minutes=duree_defaut)
         if fin.date() != aujourdhui:

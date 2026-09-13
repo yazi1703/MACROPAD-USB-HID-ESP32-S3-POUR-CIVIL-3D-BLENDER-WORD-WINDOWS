@@ -41,7 +41,7 @@ import macropad_auto as MA                                   # noqa: E402
 
 def _brut(entree):
     """L'heure de debut telle qu'elle est ECRITE dans le fichier."""
-    valeur = MA._texte_datetime(entree.get("debut", entree.get("start")))
+    valeur = MA._texte_datetime(MA._champ(entree, MA._CHAMPS_DEBUT))
     return str(valeur or "?")
 
 
@@ -49,7 +49,7 @@ def _resume_entree(entree):
     """De quoi reconnaitre une entree ecartee, sans vomir tout le JSON."""
     if not isinstance(entree, dict):
         return repr(entree)[:60]
-    titre = entree.get("titre", entree.get("subject", "(sans titre)"))
+    titre = MA._champ(entree, MA._CHAMPS_TITRE) or "(sans titre)"
     return "%s  [%s]" % (str(titre)[:40], _brut(entree))
 
 
@@ -108,8 +108,10 @@ def main():
     for entree in (brut or []):
         if not isinstance(entree, dict):
             continue
-        for cle in ("debut", "start", "fin", "end"):
-            nom = MA._zone_declaree(entree.get(cle))
+        noms = [str(entree.get("timeZone", entree.get("timezone", "")) or "")]
+        for cle in MA._CHAMPS_DEBUT + MA._CHAMPS_FIN:
+            noms.append(MA._zone_declaree(entree.get(cle)))
+        for nom in noms:
             if nom and MA._fuseau(nom) is None:
                 inconnus.add(nom)
     if inconnus:
@@ -135,7 +137,9 @@ def main():
         for entree in brut[:3]:
             if isinstance(entree, dict):
                 converti = MA.instant(
-                    entree.get("debut", entree.get("start")), aujourdhui)
+                    MA._champ(entree, MA._CHAMPS_DEBUT), aujourdhui,
+                    str(entree.get("timeZone",
+                                   entree.get("timezone", "")) or ""))
                 if converti is not None:
                     print("   fichier %-26s ->  affiche %02d:%02d"
                           % (_brut(entree), converti.hour, converti.minute))
