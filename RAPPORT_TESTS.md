@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 293 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 305 tests PC réussis ; 23 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, neuf corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,8 +14,8 @@
 
 - Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 293 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  263 pour le firmware, 30 pour le compagnon Windows.
+- 305 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  263 pour le firmware, 42 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -146,7 +146,9 @@ avait.
 
 **Ajouts V1.** Les six touches et leurs libellés ; la machine à états des trois gestes (appui court immédiat quand aucun double appui n'est défini, appui court retardé quand il y en a un, double appui, deux appuis trop espacés, appui long déclenché au seuil sans deuxième envoi au relâchement, touches indépendantes) ; l'aller-retour complet de la configuration par page web sans perte ; le refus d'une macro intapable et d'un libellé trop long ; le repli sur les valeurs d'usine pour un fichier corrompu ou incohérent ; **la relecture d'un `profils.json` de version 1**, dont la macro devient l'appui court ; le protocole série ligne par ligne, y compris une ligne coupée en deux envois, la lecture bornée par tour de boucle et une configuration trop volumineuse ; l'absence de séquence à deux actions dans les valeurs d'usine (que la page web tronquerait) ; **l'écran, qui ne doit jamais écrire hors des 128×64 pixels** — quatre profils, splash, surlignage de chaque touche, nom de fichier de 48 caractères en défilement, page WiFi.
 
-**Compagnon Windows** (`tests/test_pc.py`, 30 tests). D'abord la correction 13 : quand la page dit « macropad non connecte », elle doit dire POURQUOI. Les trois causes - aucun port Espressif, port deja pris par Thonny, pyserial absent - donnent trois messages distincts, le debranchement en cours de route est nomme lui aussi, et la raison survit au silence de la console : celle-ci ne se repete pas, mais la page la redemande a chaque rafraichissement. Puis le nettoyage du titre de fenêtre dans ses trois formes (tiret, crochets, chemin complet) ; troncature à ce que l'écran retient ; table de secours à deux ou trois champs, abrégé déduit et coupé à sept caractères, casse, commentaires, relecture à chaud, ligne incomplète ; priorité de la table lue sur la carte, repli sur le fichier quand la carte se tait ou n'annonce aucun logiciel, conservation de la dernière table connue ; le raccourci de démarrage automatique (chemin `shell:startup`, échappement PowerShell des apostrophes sans toucher aux antislash des chemins, script complet, refus propre hors Windows) ; le journal, y compris sans console utilisable.
+**Compagnon Windows** (`tests/test_pc.py`, 42 tests). D'abord LE RECAPITULATIF DES COMMANDES, ne d'un constat mesurable : l'ecran OLED fait 16 caracteres sur 4 lignes visibles, le profil CIVIL3D compte 19 entrees, il manque un facteur cinq. La mise en forme est PURE - ni fenetre, ni port serie - et c'est elle qui est testee : une suite de trois etapes se lit d'un trait, le nom d'une touche ne se repete pas d'une ligne a l'autre, un geste vide ne prend pas de ligne, les combinaisons et le bouton ESC y figurent, un profil inconnu ne garde que ce qui est global, et l'ancienne forme a une seule action par geste se lit encore.
+
+Trois tests de plus gardent LA propriete de surete de ce panneau, et elle n'est pas evidente : c'est une fenetre DU MEME PROGRAMME. Si elle passait au premier plan, la detection croirait a un changement de logiciel et basculerait le profil - regarder ses propres raccourcis les changerait. lire() reconnait donc nos fenetres a leur PID et rend (None, None), que la boucle distingue de la chaine vide : la premiere ne touche a rien, la seconde bascule sur le profil de repli. Retirer cette garde fait echouer deux tests. Un dernier verifie que sans tkinter, le compagnon continue exactement comme avant. Puis la correction 13 : D'abord la correction quand la page dit « macropad non connecte », elle doit dire POURQUOI. Les trois causes - aucun port Espressif, port deja pris par Thonny, pyserial absent - donnent trois messages distincts, le debranchement en cours de route est nomme lui aussi, et la raison survit au silence de la console : celle-ci ne se repete pas, mais la page la redemande a chaque rafraichissement. Puis le nettoyage du titre de fenêtre dans ses trois formes (tiret, crochets, chemin complet) ; troncature à ce que l'écran retient ; table de secours à deux ou trois champs, abrégé déduit et coupé à sept caractères, casse, commentaires, relecture à chaud, ligne incomplète ; priorité de la table lue sur la carte, repli sur le fichier quand la carte se tait ou n'annonce aucun logiciel, conservation de la dernière table connue ; le raccourci de démarrage automatique (chemin `shell:startup`, échappement PowerShell des apostrophes sans toucher aux antislash des chemins, script complet, refus propre hors Windows) ; le journal, y compris sans console utilisable.
 
 Les GPIO, l'horloge, le PWM et le transport USB sont simulés. Le test d'absence d'OLED exerce le chemin d'initialisation indisponible ; le test de déconnexion OLED injecte une OSError lors d'une écriture. Le test des octets HID appelle le sérialiseur officiel mais remplace la transmission USB.
 
@@ -423,7 +425,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 293 tests
+Ran 305 tests
 
 OK
 ```

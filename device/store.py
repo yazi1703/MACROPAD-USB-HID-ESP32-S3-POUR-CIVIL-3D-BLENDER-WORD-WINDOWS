@@ -440,6 +440,13 @@ def vers_json(nb_touches, stats=None):
         },
         "touches": nb_touches,
         "gestes": list(P.GESTES),
+        # Le gros bouton ESC ne fait partie d'aucun profil, mais il fait
+        # partie de ce qu'on doit POUVOIR LIRE : sans lui, un recapitulatif
+        # des commandes serait incomplet. En lecture seule pour l'instant.
+        "esc": {
+            "court": actions_vers_json([("key", "ESC")]),
+            "maintien": actions_vers_json(getattr(P, "ESC_MAINTIEN", None)),
+        },
         "origine": origine,
     }
 

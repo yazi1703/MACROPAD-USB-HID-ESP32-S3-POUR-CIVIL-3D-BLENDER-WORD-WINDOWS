@@ -150,6 +150,59 @@ tait, il espace les tentatives et garde la dernière table connue.
 
 ---
 
+## 8.3 bis Le récapitulatif des commandes
+
+L'écran OLED fait **16 caractères sur 4 lignes visibles**. Le profil
+CIVIL 3D compte à lui seul **19 entrées** — 13 gestes et 6 combinaisons.
+Il n'y a pas de réglage à trouver : il manque un facteur cinq.
+
+Le compagnon affiche donc, **à chaque changement de profil**, une petite
+fenêtre en bas à droite avec **tout** ce que fait le pad :
+
+```
+  CIVIL 3D                                    epingler  x
+  B1     CTRL     appui court   maintenir CTRL
+                  double appui  maintenir MAJ
+  B2     COPIER   appui court   CTRL+C
+                  appui long    CTRL+X
+                  double appui  CTRL+V
+  B3     F3       appui court   F3
+                  appui long    taper _ZOOM E puis Entree
+  ...
+  B5+B6  VUE PREC.  ensemble    taper MPVIEWPREV puis Entree
+  ESC             appui court   ESC
+                  maintenu      CTRL+Z
+```
+
+Elle disparaît seule au bout de quelques secondes. **« epingler »** la
+garde ouverte ; on la déplace en tirant sur son bandeau.
+
+| Réglage | Effet |
+|---|---|
+| `--panneau 5` | durée d'affichage en secondes (défaut) |
+| `--panneau 0` | ne pas l'afficher du tout |
+
+Les combinaisons et le bouton ESC y figurent **aussi** : ce sont
+justement ceux qu'on ne retient pas.
+
+> ### Pourquoi cette fenêtre n'a pas de barre de titre
+>
+> Ce n'est pas une coquetterie. **C'est une fenêtre de ce même
+> programme** : si elle passait au premier plan, la détection croirait que
+> tu viens de changer de logiciel et **basculerait le profil**. Regarder
+> ses propres raccourcis les changerait.
+>
+> D'où deux protections : la fenêtre ne prend jamais le focus (pas de
+> barre de titre, donc pas d'activation), et si Windows la mettait quand
+> même au premier plan, le compagnon la **reconnaît à son PID** et ne
+> touche à rien. Trois tests gardent cette propriété.
+
+**Sans `tkinter`, le compagnon fonctionne exactement comme avant** : le
+panneau se désactive en le disant, et rien d'autre ne change. C'est un
+confort, il n'a pas le droit d'être la raison d'une panne.
+
+---
+
 ## 8.4 Le verrouillage de profil
 
 La détection automatique est une **suggestion**, pas une contrainte. Tu es

@@ -22,6 +22,230 @@ sys.path.insert(0, str(RACINE / "pc"))
 import macropad_auto as MA          # noqa: E402
 
 
+class RecapitulatifDesCommandes(unittest.TestCase):
+    """L'ecran OLED fait 16 caracteres sur 4 lignes visibles.
+
+    Le profil CIVIL3D compte a lui seul 19 entrees. Il n'y a pas de
+    reglage a trouver : il manque un facteur cinq. Le recapitulatif
+    complet vit donc sur l'ecran du PC, et c'est cette mise en forme -
+    pure, sans fenetre ni port serie - que ces tests verifient.
+    """
+
+    CONFIG = {
+        "gestes": ["court", "long", "double"],
+        "profils": {
+            "CIVIL3D": {
+                "titre": "CIVIL 3D",
+                "touches": [
+                    {"label": "CTRL",
+                     "court": [{"type": "maintien", "valeur": "CTRL"}],
+                     "long": [],
+                     "double": [{"type": "maintien", "valeur": "MAJ"}]},
+                    {"label": "COPIER",
+                     "court": [{"type": "combo", "valeur": "CTRL+C"}],
+                     "long": [{"type": "text_enter", "valeur": "_PURGE"},
+                              {"type": "pause", "valeur": "500"},
+                              {"type": "combo", "valeur": "CTRL+S"}],
+                     "double": [{"type": "combo", "valeur": "CTRL+V"}]},
+                    {"label": "VIDE",
+                     "court": [{"type": "none", "valeur": ""}],
+                     "long": [], "double": []},
+                ],
+                "combos": [
+                    {"touches": [5, 6], "label": "VUE PREC.",
+                     "actions": [{"type": "text_enter",
+                                  "valeur": "MPVIEWPREV"}]},
+                ],
+            },
+        },
+        "esc": {"court": [{"type": "key", "valeur": "ESC"}],
+                "maintien": [{"type": "combo", "valeur": "CTRL+Z"}]},
+    }
+
+    def _lignes(self):
+        return MA.lignes_du_profil(self.CONFIG, "CIVIL3D")
+
+    def test_chaque_geste_donne_une_ligne_lisible(self):
+        lignes = self._lignes()
+        self.assertIn(("B1", "CTRL", "appui court", "maintenir CTRL"), lignes)
+        self.assertIn(("", "", "double appui", "maintenir MAJ"), lignes)
+        self.assertIn(("B2", "COPIER", "appui court", "CTRL+C"), lignes)
+
+    def test_une_suite_d_etapes_se_lit_d_un_trait(self):
+        """Le cas qui justifie ce recapitulatif : une macro en trois temps
+        est illisible sur un ecran de 16 caracteres."""
+        lignes = self._lignes()
+        self.assertIn(
+            ("", "", "appui long",
+             "taper _PURGE puis Entree, puis attendre 500 ms, puis CTRL+S"),
+            lignes)
+
+    def test_le_nom_de_la_touche_ne_se_repete_pas(self):
+        """L'oeil doit retrouver les touches d'un coup : le numero et le
+        libelle ne figurent que sur la PREMIERE ligne de chaque touche."""
+        lignes = self._lignes()
+        b2 = [i for i, l in enumerate(lignes) if l[0] == "B2"]
+        self.assertEqual(len(b2), 1)
+        # Les deux lignes suivantes appartiennent a B2 et sont anonymes.
+        self.assertEqual(lignes[b2[0] + 1][0], "")
+        self.assertEqual(lignes[b2[0] + 2][0], "")
+
+    def test_un_geste_vide_ne_prend_pas_de_ligne(self):
+        lignes = self._lignes()
+        self.assertNotIn("VIDE", [l[1] for l in lignes])
+
+    def test_les_combinaisons_et_ESC_y_sont_aussi(self):
+        """Un recapitulatif qui les oublierait ne servirait a rien : ce
+        sont justement celles qu'on ne retient pas."""
+        lignes = self._lignes()
+        self.assertIn(("B5+B6", "VUE PREC.", "ensemble",
+                       "taper MPVIEWPREV puis Entree"), lignes)
+        self.assertIn(("ESC", "", "appui court", "ESC"), lignes)
+        self.assertIn(("", "", "maintenu", "CTRL+Z"), lignes)
+
+    def test_un_profil_inconnu_ne_garde_que_ce_qui_est_global(self):
+        """ESC ne fait partie d'aucun profil : il fonctionne dans TOUS.
+
+        Il doit donc figurer dans chaque recapitulatif, meme celui d'un
+        profil qu'on ne connait pas.
+        """
+        lignes = MA.lignes_du_profil(self.CONFIG, "INEXISTANT")
+        self.assertEqual([l[0] for l in lignes], ["ESC", ""])
+
+    def test_une_configuration_absente_ne_plante_pas(self):
+        self.assertEqual(MA.lignes_du_profil(None, "CIVIL3D"), [])
+        self.assertEqual(MA.lignes_du_profil({}, "CIVIL3D"), [])
+
+    def test_l_ancienne_forme_a_une_seule_action_se_lit_encore(self):
+        """Un profils.json ecrit avant les suites d'etapes range un SEUL
+        objet par geste. Le recapitulatif ne doit pas s'y casser."""
+        self.assertEqual(
+            MA.texte_actions({"type": "combo", "valeur": "CTRL+C"}), "CTRL+C")
+
+    def test_le_panneau_absent_ne_casse_rien(self):
+        """Sans tkinter, le compagnon doit continuer comme avant.
+
+        Le panneau est un confort : il n'a pas le droit d'etre la raison
+        d'une panne.
+        """
+        panneau = MA.Panneau(5.0)
+        vrai = sys.modules.pop("tkinter", None)
+        sys.modules["tkinter"] = None          # provoque l'ImportError
+        try:
+            sortie = io.StringIO()
+            with unittest.mock.patch("sys.stdout", sortie):
+                self.assertFalse(panneau.demarrer())
+            self.assertIn("indisponible", sortie.getvalue())
+        finally:
+            if vrai is not None:
+                sys.modules["tkinter"] = vrai
+            else:
+                sys.modules.pop("tkinter", None)
+        # Et les appels suivants ne font rien, sans lever.
+        panneau.montrer("CIVIL3D", [])
+        panneau.fermer()
+        self.assertTrue(panneau.file.empty())
+
+
+class LePanneauNeDoitPasFausserLaDetection(unittest.TestCase):
+    """LE piege de ce panneau, et la raison de la garde au niveau du PID.
+
+    Le recapitulatif est une fenetre DE CE MEME PROGRAMME. S'il passait au
+    premier plan - un clic dessus pour l'epingler, par exemple - la
+    detection croirait que tu viens de changer de logiciel et basculerait
+    le profil. Regarder ses propres raccourcis les changerait : absurde.
+
+    La fenetre est donc sans barre de titre et ne prend jamais le focus ;
+    et si Windows la donnait quand meme au premier plan, lire() la
+    reconnait a son PID et rend (None, None), que la boucle traite comme
+    « ne touche a rien ».
+    """
+
+    class _Ref:
+        def __init__(self, cible):
+            self.cible = cible
+
+    class _Tampon:
+        def __init__(self):
+            self.value = ""
+
+    def _fenetre(self, pid, titre="Civil 3D - Projet.dwg"):
+        """Une FenetreActive branchee sur un faux Windows."""
+        essai = self
+
+        class FauxCtypes:
+            @staticmethod
+            def byref(objet):
+                return essai._Ref(objet)
+
+            @staticmethod
+            def create_unicode_buffer(taille):
+                tampon = essai._Tampon()
+                tampon.value = titre
+                return tampon
+
+        class FauxDWORD:
+            def __init__(self):
+                self.value = 0
+
+        class FauxWintypes:
+            DWORD = FauxDWORD
+
+        class FauxUser32:
+            @staticmethod
+            def GetForegroundWindow():
+                return 4321
+
+            @staticmethod
+            def GetWindowThreadProcessId(poignee, reference):
+                reference.cible.value = pid
+                return 1
+
+            @staticmethod
+            def GetWindowTextLengthW(poignee):
+                return len(titre)
+
+            @staticmethod
+            def GetWindowTextW(poignee, tampon, taille):
+                return len(titre)
+
+        class FauxKernel32:
+            @staticmethod
+            def OpenProcess(*a):
+                return 0            # on s'arrete la : le titre suffit
+
+        objet = MA.FenetreActive.__new__(MA.FenetreActive)
+        objet.disponible = True
+        objet.ctypes = FauxCtypes
+        objet.wintypes = FauxWintypes
+        objet.user32 = FauxUser32
+        objet.kernel32 = FauxKernel32
+        return objet
+
+    def test_notre_propre_fenetre_est_reconnue(self):
+        """Le panneau au premier plan ne doit RIEN changer."""
+        programme, titre = self._fenetre(os.getpid()).lire()
+        self.assertIsNone(programme)
+        self.assertIsNone(titre)
+
+    def test_une_vraie_fenetre_est_lue_normalement(self):
+        """Et le cas courant continue de marcher, evidemment."""
+        programme, titre = self._fenetre(os.getpid() + 1).lire()
+        self.assertIsNotNone(programme)
+        self.assertEqual(titre, "Civil 3D - Projet.dwg")
+
+    def test_None_et_chaine_vide_ne_veulent_pas_dire_la_meme_chose(self):
+        """« aucune fenetre » et « la notre » appellent deux reactions
+        differentes : la premiere bascule sur le profil de repli, la
+        seconde ne doit rien toucher du tout."""
+        class SansFenetre(MA.FenetreActive):
+            def __init__(self):
+                self.disponible = False
+
+        self.assertEqual(SansFenetre().lire(), ("", ""))
+        self.assertEqual(self._fenetre(os.getpid()).lire(), (None, None))
+
+
 class PourquoiLeMacropadEstInjoignable(unittest.TestCase):
     """La page web doit dire POURQUOI, pas seulement QUE.
 

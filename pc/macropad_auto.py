@@ -77,6 +77,7 @@ import argparse
 import json
 import os
 import sys
+import queue
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -225,13 +226,27 @@ class FenetreActive:
         self.disponible = True
 
     def lire(self):
-        """Retourne (nom_du_programme, titre_de_la_fenetre)."""
+        """Retourne (nom_du_programme, titre_de_la_fenetre).
+
+        Retourne (None, None) quand la fenetre active est L'UNE DES
+        NOTRES. Ce n'est pas un detail : le panneau recapitulatif est une
+        fenetre de ce meme programme. S'il prenait le premier plan ne
+        serait-ce qu'un instant, la detection croirait que tu as change de
+        logiciel et basculerait le profil. L'appelant doit donc distinguer
+        « aucune fenetre » de « la notre », et garder sa valeur precedente
+        dans le second cas.
+        """
         if not self.disponible:
             return "", ""
         ctypes, wintypes = self.ctypes, self.wintypes
         fenetre = self.user32.GetForegroundWindow()
         if not fenetre:
             return "", ""
+
+        pid = wintypes.DWORD()
+        self.user32.GetWindowThreadProcessId(fenetre, ctypes.byref(pid))
+        if pid.value == os.getpid():
+            return None, None
 
         # --- titre de la fenetre ---
         longueur = self.user32.GetWindowTextLengthW(fenetre)
@@ -240,8 +255,6 @@ class FenetreActive:
         titre = tampon.value
 
         # --- nom de l'executable ---
-        pid = wintypes.DWORD()
-        self.user32.GetWindowThreadProcessId(fenetre, ctypes.byref(pid))
         # 0x1000 = PROCESS_QUERY_LIMITED_INFORMATION : le droit minimal,
         # il fonctionne sans etre administrateur.
         poignee = self.kernel32.OpenProcess(0x1000, False, pid.value)
@@ -265,6 +278,91 @@ def _abrege(texte, profil):
     """Nettoie un abrege, et en fabrique un si le champ est vide."""
     texte = (texte or "").strip()[:ABREGE_MAX]
     return texte or (profil or "")[:ABREGE_MAX]
+
+
+# =====================================================================
+# 1 bis. LE RECAPITULATIF DES COMMANDES
+# =====================================================================
+# L'ecran OLED fait 16 caracteres sur 4 lignes visibles. Le profil CIVIL3D
+# compte a lui seul 19 entrees - 13 gestes et 6 combinaisons. Il n'y a pas
+# de reglage a trouver : il manque un facteur cinq. Le recapitulatif
+# complet doit donc vivre ailleurs, et l'ecran du PC est le seul endroit
+# qui soit a la fois assez grand et toujours a jour.
+#
+# Tout ce qui suit jusqu'a la classe Panneau est PUR : aucune fenetre,
+# aucun port serie. C'est cette partie que les tests verifient.
+
+GESTES_LISIBLES = {"court": "appui court",
+                   "long": "appui long",
+                   "double": "double appui",
+                   "maintien": "maintenu"}
+
+
+def texte_etape(etape):
+    """Une etape de macro -> une phrase lisible."""
+    genre = str((etape or {}).get("type", "none"))
+    valeur = str((etape or {}).get("valeur", ""))
+    if genre == "none" or (not valeur and genre != "none"):
+        return ""
+    if genre == "maintien":
+        return "maintenir " + valeur
+    if genre == "pause":
+        return "attendre %s ms" % valeur
+    if genre == "text":
+        return "taper %s" % valeur
+    if genre == "text_enter":
+        return "taper %s puis Entree" % valeur
+    return valeur                       # key et combo se lisent tels quels
+
+
+def texte_actions(etapes):
+    """Une suite d'etapes -> une seule phrase, ou "" si elle est vide."""
+    if isinstance(etapes, dict):        # ancienne forme : une seule etape
+        etapes = [etapes]
+    morceaux = [texte_etape(e) for e in (etapes or [])]
+    return ", puis ".join(m for m in morceaux if m)
+
+
+def lignes_du_profil(config, profil):
+    """[(touche, libelle, geste, description), ...] pour l'affichage.
+
+    Fonction PURE : ni fenetre, ni port serie. Le panneau ne fait que la
+    dessiner, et c'est elle que les tests verifient.
+
+    Une touche occupe autant de lignes qu'elle a de gestes ; son nom et son
+    libelle ne sont repetes que sur la premiere, pour que l'oeil retrouve
+    les touches d'un coup.
+    """
+    bloc = ((config or {}).get("profils") or {}).get(profil) or {}
+    gestes = (config or {}).get("gestes") or ["court", "long", "double"]
+    lignes = []
+
+    for index, touche in enumerate(bloc.get("touches") or []):
+        premiere = True
+        for geste in gestes:
+            description = texte_actions((touche or {}).get(geste))
+            if not description:
+                continue
+            lignes.append(("B%d" % (index + 1) if premiere else "",
+                           str((touche or {}).get("label", "")) if premiere else "",
+                           GESTES_LISIBLES.get(geste, geste),
+                           description))
+            premiere = False
+
+    for combo in bloc.get("combos") or []:
+        touches = "+".join("B%s" % n for n in (combo.get("touches") or []))
+        description = texte_actions(combo.get("actions"))
+        if touches and description:
+            lignes.append((touches, str(combo.get("label", "")),
+                           "ensemble", description))
+
+    esc = (config or {}).get("esc") or {}
+    for geste in ("court", "maintien"):
+        description = texte_actions(esc.get(geste))
+        if description:
+            lignes.append(("ESC" if geste == "court" else "", "",
+                           GESTES_LISIBLES.get(geste, geste), description))
+    return lignes
 
 
 class TableApplications:
@@ -441,6 +539,159 @@ def nom_document(titre, programme=""):
 # =====================================================================
 # 3. Le dialogue avec le macropad
 # =====================================================================
+class Panneau:
+    """La fenetre qui montre les commandes du profil courant.
+
+    ELLE NE DOIT JAMAIS PRENDRE LE FOCUS. C'est une fenetre de ce meme
+    programme : si elle passait au premier plan, la detection croirait
+    que tu as change de logiciel. D'ou overrideredirect (aucune barre de
+    titre, donc aucune activation) et l'absence totale de focus_force.
+    FenetreActive.lire() tient le second filet, en reconnaissant nos
+    propres fenetres a leur PID.
+
+    Tkinter n'est pas fait pour etre pilote depuis plusieurs fils : tout
+    ce qui touche a Tk vit donc dans SON fil, et le reste du compagnon lui
+    parle par une file d'attente. Si tkinter manque ou refuse de demarrer,
+    le panneau se desactive tout seul et le compagnon continue exactement
+    comme avant : il ne doit jamais etre la raison d'une panne.
+    """
+
+    def __init__(self, secondes=5.0):
+        self.secondes = secondes
+        self.actif = False
+        self.file = queue.Queue()
+        self._fil = None
+
+    def demarrer(self):
+        try:
+            import tkinter                      # noqa: F401
+        except Exception as exc:
+            print("Panneau des commandes indisponible (%s)." % exc)
+            print("  Le compagnon fonctionne normalement sans lui.")
+            return False
+        self.actif = True
+        self._fil = threading.Thread(target=self._tourner, daemon=True)
+        self._fil.start()
+        return True
+
+    def montrer(self, profil, lignes):
+        """Demande l'affichage. Ne bloque jamais, ne leve jamais."""
+        if self.actif:
+            self.file.put(("montrer", profil, lignes))
+
+    def fermer(self):
+        if self.actif:
+            self.file.put(("fin", None, None))
+
+    # ------------------------------------------------------------------
+    # Tout ce qui suit tourne DANS le fil de tkinter, et nulle part ailleurs
+    # ------------------------------------------------------------------
+    def _tourner(self):
+        try:
+            import tkinter as tk
+            self._tk = tk
+            self._racine = tk.Tk()
+            self._racine.withdraw()
+            self._racine.overrideredirect(True)     # ni barre de titre, ni focus
+            self._racine.attributes("-topmost", True)
+            self._racine.configure(bg="#0e1014")
+            self._epingle = False
+            self._cache = None
+            self._construire()
+            self._racine.after(100, self._pomper)
+            self._racine.mainloop()
+        except Exception as exc:
+            self.actif = False
+            print("Panneau des commandes arrete (%s)." % exc)
+
+    def _construire(self):
+        tk = self._tk
+        cadre = tk.Frame(self._racine, bg="#151922", padx=1, pady=1)
+        cadre.pack(fill="both", expand=True)
+
+        entete = tk.Frame(cadre, bg="#1d2330")
+        entete.pack(fill="x")
+        self._titre = tk.Label(entete, text="", bg="#1d2330", fg="#e8eaee",
+                               font=("Segoe UI", 10, "bold"), anchor="w",
+                               padx=8, pady=4)
+        self._titre.pack(side="left", fill="x", expand=True)
+        self._bouton = tk.Label(entete, text="epingler", bg="#1d2330",
+                                fg="#6f7788", font=("Segoe UI", 8),
+                                padx=8, cursor="hand2")
+        self._bouton.pack(side="right")
+        self._bouton.bind("<Button-1>", self._basculer_epingle)
+        tk.Label(entete, text="x", bg="#1d2330", fg="#6f7788",
+                 font=("Segoe UI", 9), padx=8, cursor="hand2"
+                 ).pack(side="right")
+
+        # La fenetre se deplace en tirant sur son entete : sans barre de
+        # titre, c'est le seul moyen de la pousser ailleurs.
+        for objet in (entete, self._titre):
+            objet.bind("<Button-1>", self._prise, add="+")
+            objet.bind("<B1-Motion>", self._glisse)
+
+        self._texte = tk.Label(cadre, text="", bg="#151922", fg="#c9cfdb",
+                               font=("Consolas", 9), justify="left",
+                               anchor="nw", padx=10, pady=8)
+        self._texte.pack(fill="both", expand=True)
+
+    def _prise(self, evenement):
+        self._depart = (evenement.x_root, evenement.y_root,
+                        self._racine.winfo_x(), self._racine.winfo_y())
+
+    def _glisse(self, evenement):
+        x0, y0, fx, fy = self._depart
+        self._racine.geometry("+%d+%d" % (fx + evenement.x_root - x0,
+                                          fy + evenement.y_root - y0))
+
+    def _basculer_epingle(self, _evenement=None):
+        self._epingle = not self._epingle
+        self._bouton.configure(text="epinglee" if self._epingle else "epingler",
+                               fg="#3d7bfd" if self._epingle else "#6f7788")
+        if self._epingle:
+            self._racine.deiconify()
+
+    def _pomper(self):
+        try:
+            while True:
+                ordre, profil, lignes = self.file.get_nowait()
+                if ordre == "fin":
+                    self._racine.destroy()
+                    return
+                self._afficher(profil, lignes)
+        except queue.Empty:
+            pass
+        except Exception:
+            pass
+        self._racine.after(100, self._pomper)
+
+    def _afficher(self, profil, lignes):
+        largeur = max([len(t) for t, _, _, _ in lignes] + [3])
+        libelle = max([len(l) for _, l, _, _ in lignes] + [3])
+        geste = max([len(g) for _, _, g, _ in lignes] + [3])
+        corps = "\n".join(
+            "%-*s  %-*s  %-*s  %s" % (largeur, t, libelle, l, geste, g, d)
+            for t, l, g, d in lignes)
+        self._titre.configure(text="  " + profil)
+        self._texte.configure(text=corps or "(aucune commande)")
+        self._racine.deiconify()
+        self._racine.update_idletasks()
+        # En bas a droite, au-dessus de la barre des taches.
+        ecran_x = self._racine.winfo_screenwidth()
+        ecran_y = self._racine.winfo_screenheight()
+        if self._cache is None:
+            self._racine.geometry(
+                "+%d+%d" % (ecran_x - self._racine.winfo_width() - 24,
+                            ecran_y - self._racine.winfo_height() - 80))
+        self._cache = True
+        if not self._epingle:
+            self._racine.after(int(self.secondes * 1000), self._cacher)
+
+    def _cacher(self):
+        if not self._epingle:
+            self._racine.withdraw()
+
+
 class Macropad:
     """Port serie vers la carte, protege par un verrou.
 
@@ -461,6 +712,10 @@ class Macropad:
         # web affiche "macropad non connecte" et te laisse deviner entre
         # trois causes tres differentes.
         self.raison_absence = "pas encore de tentative de connexion"
+        # La derniere configuration lue. Le panneau des commandes s'en
+        # sert : la relire a chaque tour de boucle prendrait le port
+        # serie plusieurs fois par seconde pour rien.
+        self.derniere_config = None
 
     def _sans_carte(self):
         """Le message a montrer quand la carte manque, raison comprise."""
@@ -611,7 +866,9 @@ class Macropad:
             self._lire_reponse("#CFGBEGIN")
             morceaux = self._lire_reponse("#CFGEND")
         texte = "".join(m[3:] for m in morceaux if m.startswith("#C:"))
-        return json.loads(texte)
+        config = json.loads(texte)
+        self.derniere_config = config
+        return config
 
     def compteurs_a_zero(self):
         """Demande au macropad d'effacer ses compteurs d'usage.
@@ -1392,6 +1649,11 @@ def main():
                            help="afficher ce qui serait envoye, sans macropad")
     analyseur.add_argument("--periode", type=float, default=0.4,
                            help="intervalle de detection en secondes")
+    analyseur.add_argument("--panneau", type=float, default=5.0,
+                           metavar="SECONDES",
+                           help="duree d'affichage du recapitulatif des "
+                                "commandes au changement de profil "
+                                "(0 pour ne pas l'afficher)")
     analyseur.add_argument("--journal", action="store_true",
                            help="ecrire aussi dans macropad_auto.log "
                                 "(utilise par le demarrage automatique)")
@@ -1412,6 +1674,11 @@ def main():
     table = TableApplications(FICHIER_APPS)
     macropad = Macropad(options.port, options.simuler)
     table.synchroniser(macropad)        # la carte a le dernier mot
+
+    panneau = Panneau(options.panneau)
+    if options.panneau > 0 and panneau.demarrer():
+        print("Recapitulatif des commandes : %.0f s a chaque changement de "
+              "profil" % options.panneau)
 
     serveur = creer_serveur(macropad, table)
     threading.Thread(target=serveur.serve_forever, daemon=True).start()
@@ -1446,6 +1713,13 @@ def main():
             table.recharger()
 
             programme, titre = fenetre.lire()
+            if programme is None:
+                # C'est UNE DE NOS FENETRES qui est au premier plan - le
+                # panneau des commandes, par exemple. On ne change surtout
+                # rien : sinon regarder son propre recapitulatif ferait
+                # basculer le profil.
+                time.sleep(options.periode)
+                continue
             profil, abrege = table.regle(programme)
             document = nom_document(titre, programme)
 
@@ -1455,6 +1729,12 @@ def main():
                 # le cable est debranche, il repartira a la reconnexion.
                 if macropad.envoyer("P:" + profil):
                     dernier_profil = profil
+                # Le recapitulatif suit le profil : c'est le moment ou on
+                # a besoin de le voir, et le seul ou il change.
+                if macropad.derniere_config:
+                    panneau.montrer(
+                        profil,
+                        lignes_du_profil(macropad.derniere_config, profil))
 
             # L'ecran recoit "abrege|nom du fichier". L'abrege reste fixe en
             # bas a gauche, le nom defile a cote. On n'envoie que si quelque
@@ -1468,6 +1748,7 @@ def main():
     except KeyboardInterrupt:
         print("\nArret.")
     finally:
+        panneau.fermer()
         serveur.shutdown()
     return 0
 

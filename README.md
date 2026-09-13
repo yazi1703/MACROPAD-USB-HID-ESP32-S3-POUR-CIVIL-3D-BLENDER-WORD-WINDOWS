@@ -29,6 +29,7 @@ ouvert, compte les appuis, et se configure entièrement depuis une page web
 | **câbler les LED RGB sans faire redémarrer la carte** | [`docs/10-led-rgb.md`](docs/10-led-rgb.md) + [`SCHEMA_LED_RGB.svg`](SCHEMA_LED_RGB.svg) |
 | savoir ce qui a été corrigé et pourquoi | [`docs/06-corrections.md`](docs/06-corrections.md) |
 | **que le macropad suive le logiciel actif** | [`docs/08-detection-auto.md`](docs/08-detection-auto.md) — le script PC |
+| **voir TOUTES les commandes d'un coup d'œil** | le compagnon PC affiche le récapitulatif à chaque changement de profil — voir [`docs/08.3 bis`](docs/08-detection-auto.md) |
 | **modifier les macros depuis le PC** | lancer `pc/macropad_auto.bat`, puis `http://127.0.0.1:8765` |
 | **que le compagnon démarre avec Windows** | `pc/demarrage_windows.bat`, choix 1 — voir [`docs/08.7`](docs/08-detection-auto.md) |
 | modifier les macros sans PC (téléphone) | maintenir B2 au RESET, puis `http://192.168.4.1` — voir [`docs/07`](docs/07-mode-configuration.md) |
@@ -287,7 +288,7 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 ├── docs/                         documentation détaillée
 ├── tests/
 │   ├── test_logic.py             263 tests du firmware, exécutables sur PC
-│   ├── test_pc.py                30 tests du compagnon Windows
+│   ├── test_pc.py                42 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
 ```
@@ -312,7 +313,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 293 tests ... OK
+→ Ran 305 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport
