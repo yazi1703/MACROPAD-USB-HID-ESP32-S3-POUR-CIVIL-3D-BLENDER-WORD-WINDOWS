@@ -310,6 +310,17 @@ aujourd'hui**. Ne laisse pas un détail d'interface bloquer le reste.
 
 ---
 
+#### Étape 2 bis — renomme l'action Outlook
+
+Les trois points sur le nœud → **Renommer** → appelle-le simplement
+**`Calendrier`**.
+
+> Ça paraît cosmétique, ça ne l'est pas. L'expression de l'étape suivante
+> doit nommer l'action **exactement** — accents, espaces devenus `_`, et
+> suffixe `(V3)` compris. Un nom court et sans accent supprime toute une
+> classe d'erreurs de frappe, et le message qu'elles produisent est
+> illisible.
+
 #### Étape 3 — écrire le fichier
 
 **Nouvelle étape** → **OneDrive Entreprise** → **Mettre à jour le fichier**.
@@ -317,16 +328,37 @@ aujourd'hui**. Ne laisse pas un détail d'interface bloquer le reste.
 | Champ | Quoi mettre |
 |---|---|
 | **Fichier** | l'icône dossier, puis choisis le `agenda.json` de l'étape 0 |
-| **Contenu du fichier** | la sortie **`body`** de l'étape 2 |
+| **Contenu du fichier** | l'icône **`fx`**, puis `body('Calendrier')` |
 
-Pour le contenu : dans le panneau de contenu dynamique, prends l'entrée
-**`body`** de l'action précédente. Si tu ne la trouves pas, va dans
-**Expression** et colle (en remplaçant par le vrai nom de ton action, avec
-des `_` à la place des espaces) :
-
-```
-body('Obtenir_la_vue_du_calendrier_des_événements_(V3)')
-```
+> ### ⚠️ LE PIÈGE QUI COÛTE LE PLUS DE TEMPS
+>
+> **Ne clique sur RIEN dans la liste de contenu dynamique** pour ce champ.
+> Uniquement l'expression.
+>
+> Dès qu'on choisit un élément venant d'une **liste**, Power Automate
+> emballe tout seul l'action dans un « **Appliquer à chacun** ». Et deux
+> champs différents s'appellent `body` :
+>
+> | `body` | Ce que c'est |
+> |---|---|
+> | celui de **l'action** | la réponse entière — la liste des réunions ✅ |
+> | celui d'**une réunion** | le texte de l'invitation, en HTML ❌ |
+>
+> Prendre le second donne cette erreur, qui ne dit pas son vrai nom :
+>
+> ```
+> Input parameter 'body' validation failed ...
+> The parameter with value '@items('For_each')?['body']' ...
+> with type/format 'String/html' is not convertible to 'String/binary'
+> ```
+>
+> `items('For_each')` est la preuve de la boucle ; `String/html` est la
+> preuve qu'on a pris la description de la réunion. Et même avec le bon
+> contenu, **écrire le fichier dans une boucle le réécrirait une fois par
+> réunion**.
+>
+> Si la conversion en binaire est encore refusée, essaie
+> `string(body('Calendrier'))`.
 
 **Enregistre**, puis **Tester** → *Manuellement*.
 
