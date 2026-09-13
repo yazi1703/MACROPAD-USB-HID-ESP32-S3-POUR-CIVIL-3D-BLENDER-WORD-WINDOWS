@@ -623,3 +623,243 @@ class JournalDuCompagnon(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class AgendaDuJourCotePC(unittest.TestCase):
+    """Ce que le compagnon lit dans le fichier, et ce qu'il en envoie.
+
+    Fonctions PURES : ni fichier, ni port serie, ni horloge. Ce sont
+    elles qui portent les deux pieges de cette fonctionnalite - le fuseau
+    horaire et les accents - et un piege muet est le pire genre.
+    """
+
+    JOUR = __import__("datetime").date(2026, 9, 13)
+
+    def _du_jour(self, donnees):
+        return MA.evenements_du_jour(donnees, self.JOUR)
+
+    # --- le fuseau horaire ------------------------------------------
+    def test_une_heure_en_UTC_est_ramenee_a_l_heure_locale(self):
+        """LE PIEGE PRINCIPAL, et il est silencieux.
+
+        Un calendrier d'entreprise donne tres souvent ses heures en UTC.
+        Les prendre telles quelles decalerait TOUT l'agenda d'une ou deux
+        heures selon la saison, sans que rien ne le signale : on arriverait
+        en retard en croyant etre en avance.
+        """
+        import datetime
+        utc = MA.instant("2026-09-13T14:00:00Z", self.JOUR)
+        attendu = datetime.datetime(2026, 9, 13, 14, 0,
+                                    tzinfo=datetime.timezone.utc)
+        attendu = attendu.astimezone().replace(tzinfo=None)
+        self.assertEqual(utc, attendu)
+
+    def test_un_decalage_explicite_est_respecte(self):
+        avec = MA.instant("2026-09-13T16:00:00+02:00", self.JOUR)
+        sans = MA.instant("2026-09-13T14:00:00Z", self.JOUR)
+        self.assertEqual(avec, sans)
+
+    def test_une_heure_seule_est_prise_pour_aujourd_hui(self):
+        """Pratique pour ecrire un fichier d'essai a la main."""
+        import datetime
+        self.assertEqual(MA.instant("16:00", self.JOUR),
+                         datetime.datetime(2026, 9, 13, 16, 0))
+
+    def test_une_date_illisible_vaut_None(self):
+        for mauvaise in ("", None, "demain", "25:00", {}):
+            self.assertIsNone(MA.instant(mauvaise, self.JOUR), repr(mauvaise))
+
+    # --- les accents ------------------------------------------------
+    def test_les_accents_sont_translitteres(self):
+        """L'ecran n'a que la police ASCII de MicroPython : un caractere
+        accentue y sortirait en charabia. On convertit AVANT d'envoyer."""
+        self.assertEqual(MA.sans_accents(u"Etude et modélisation 3D"),
+                         "Etude et modelisation 3D")
+        self.assertEqual(MA.sans_accents(u"Réunion à côté"),
+                         "Reunion a cote")
+        self.assertEqual(MA.sans_accents(u"l’Européenne"),
+                         "l'Europeenne")
+
+    def test_un_caractere_inconnu_devient_un_point_d_interrogation(self):
+        """Un emoji dans un intitule de reunion, ca arrive. Il ne doit
+        ni planter, ni dessiner n'importe quoi."""
+        self.assertEqual(MA.sans_accents(u"Point \U0001F600 equipe"),
+                         "Point ? equipe")
+
+    # --- le filtrage ------------------------------------------------
+    def test_seuls_les_evenements_du_jour_sont_gardes(self):
+        evenements = self._du_jour({"evenements": [
+            {"debut": "2026-09-12T10:00:00", "fin": "2026-09-12T11:00:00",
+             "titre": "Hier"},
+            {"debut": "2026-09-13T16:00:00", "fin": "2026-09-13T17:00:00",
+             "titre": "Aujourd'hui"},
+            {"debut": "2026-09-14T09:00:00", "fin": "2026-09-14T10:00:00",
+             "titre": "Demain"},
+        ]})
+        self.assertEqual([e[2] for e in evenements], ["Aujourd'hui"])
+
+    def test_les_evenements_sont_tries_et_convertis_en_minutes(self):
+        evenements = self._du_jour({"evenements": [
+            {"debut": "19:30", "fin": "21:00", "titre": "tache 1"},
+            {"debut": "16:00", "fin": "17:00", "titre": "ELDV"},
+        ]})
+        self.assertEqual(evenements, [(16 * 60, 17 * 60, "ELDV"),
+                                      (19 * 60 + 30, 21 * 60, "tache 1")])
+
+    def test_une_reunion_qui_deborde_sur_demain_s_arrete_a_minuit(self):
+        """Cette vue ne montre qu'aujourd'hui : une reunion de nuit ne
+        doit pas produire une heure de fin situee hors de l'ecran."""
+        evenements = self._du_jour({"evenements": [
+            {"debut": "2026-09-13T23:00:00", "fin": "2026-09-14T01:00:00",
+             "titre": "Astreinte"},
+        ]})
+        self.assertEqual(evenements[0][1], 23 * 60 + 59)
+
+    def test_une_fin_absente_donne_une_duree_par_defaut(self):
+        evenements = self._du_jour({"evenements": [
+            {"debut": "16:00", "titre": "Sans fin"}]})
+        self.assertEqual(evenements[0], (16 * 60, 16 * 60 + 30, "Sans fin"))
+
+    def test_une_entree_sans_titre_est_ignoree(self):
+        self.assertEqual(self._du_jour({"evenements": [
+            {"debut": "16:00", "fin": "17:00", "titre": "   "},
+            {"debut": "16:00", "fin": "17:00"},
+            "pas un objet",
+        ]}), [])
+
+    def test_la_forme_brute_de_Microsoft_Graph_est_acceptee(self):
+        """Pour qu'un export brut fonctionne SANS transformation : Graph
+        imbrique ses dates et utilise des noms anglais."""
+        evenements = self._du_jour({"value": [
+            {"subject": u"Point d'équipe Atlas",
+             "start": {"dateTime": "2026-09-13T11:00:00", "timeZone": "UTC"},
+             "end": {"dateTime": "2026-09-13T12:00:00", "timeZone": "UTC"}},
+        ]})
+        self.assertEqual(evenements,
+                         [(11 * 60, 12 * 60, "Point d'equipe Atlas")])
+
+    def test_une_liste_nue_est_acceptee(self):
+        self.assertEqual(
+            self._du_jour([{"debut": "16:00", "fin": "17:00", "titre": "X"}]),
+            [(16 * 60, 17 * 60, "X")])
+
+    def test_la_liste_est_bornee(self):
+        gros = [{"debut": "0%d:00" % (n % 10), "fin": "0%d:30" % (n % 10),
+                 "titre": "R%d" % n} for n in range(40)]
+        self.assertEqual(len(MA.evenements_du_jour(gros, self.JOUR,
+                                                   maximum=16)), 16)
+
+    # --- les lignes envoyees ----------------------------------------
+    def test_les_lignes_du_protocole(self):
+        lignes = MA.lignes_agenda([(16 * 60, 17 * 60, "ELDV"),
+                                   (19 * 60 + 30, 21 * 60, "tache 1")])
+        self.assertEqual(lignes, ["!AGBEGIN",
+                                  "A:16:00|17:00|ELDV",
+                                  "A:19:30|21:00|tache 1",
+                                  "!AGEND"])
+
+    def test_une_liste_vide_envoie_quand_meme_les_bornes(self):
+        """Sinon la carte garderait l'agenda d'hier : une journee libre
+        doit s'afficher comme libre."""
+        self.assertEqual(MA.lignes_agenda([]), ["!AGBEGIN", "!AGEND"])
+
+    def test_la_ligne_d_heure(self):
+        import datetime
+        self.assertEqual(
+            MA.ligne_heure(datetime.datetime(2026, 9, 13, 19, 47)),
+            "H:19:47|DIM 13")
+
+    def test_les_lignes_produites_sont_relues_par_le_firmware(self):
+        """Le controle qui compte : ce que le PC envoie, la carte le lit.
+
+        Deux fichiers distincts, deux auteurs a des mois d'intervalle -
+        c'est exactement la ou un format derive sans que personne ne le
+        voie. On fait donc l'aller-retour complet.
+        """
+        sys.path.insert(0, str(RACINE / "device"))
+        import time as _t
+        _t.ticks_ms = getattr(_t, "ticks_ms", lambda: 0)
+        _t.ticks_diff = getattr(_t, "ticks_diff", lambda a, b: a - b)
+        import agenda as AG
+        journee = AG.Agenda()
+        evenements = self._du_jour({"evenements": [
+            {"debut": "16:00", "fin": "17:30",
+             "titre": u"ELDV - Etude et modélisation 3D"},
+            {"debut": "19:30", "fin": "21:00", "titre": "tache 1"}]})
+        import datetime
+        self.assertTrue(journee.set_heure(
+            MA.ligne_heure(datetime.datetime(2026, 9, 13, 19, 47))[2:], 0))
+        for ligne in MA.lignes_agenda(evenements):
+            if ligne == "!AGBEGIN":
+                journee.commencer()
+            elif ligne == "!AGEND":
+                journee.terminer()
+            else:
+                self.assertTrue(journee.ajouter(ligne[2:]), ligne)
+        self.assertEqual(journee.evenements, evenements)
+        self.assertEqual(journee.jour, "DIM 13")
+        self.assertEqual(journee.resume(19 * 60 + 47), (">21:00", "tache 1"))
+
+
+class FichierAgenda(unittest.TestCase):
+    """Le fichier peut manquer, etre illisible, ou etre en train d'etre
+    reecrit par le flux qui le produit. Aucun de ces cas n'a le droit
+    d'arreter le compagnon, ni d'effacer ce qui est deja affiche."""
+
+    JOUR = __import__("datetime").date(2026, 9, 13)
+
+    def setUp(self):
+        self.dossier = tempfile.mkdtemp()
+        self.chemin = os.path.join(self.dossier, "agenda.json")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.dossier, ignore_errors=True)
+
+    def _ecrire(self, texte):
+        with io.open(self.chemin, "w", encoding="utf-8") as fichier:
+            fichier.write(texte)
+        # Deux ecritures dans la meme milliseconde auraient la meme
+        # signature : on force une date differente, comme le ferait le
+        # temps reel entre deux mises a jour du flux.
+        ancien = os.stat(self.chemin)
+        os.utime(self.chemin, (ancien.st_atime, ancien.st_mtime + 10))
+
+    def test_un_fichier_absent_ne_plante_pas(self):
+        source = MA.SourceAgenda(self.chemin)
+        self.assertFalse(source.relire(self.JOUR))
+        self.assertEqual(source.evenements, [])
+
+    def test_un_fichier_mal_forme_garde_la_liste_precedente(self):
+        """Le flux est peut-etre en train d'ecrire : on reessaiera au
+        tour suivant, sans effacer ce qui est affiche."""
+        self._ecrire('{"evenements":[{"debut":"16:00","fin":"17:00",'
+                     '"titre":"ELDV"}]}')
+        source = MA.SourceAgenda(self.chemin)
+        self.assertTrue(source.relire(self.JOUR))
+        self._ecrire('{"evenements": [ceci n est pas du JSON')
+        self.assertFalse(source.relire(self.JOUR))
+        self.assertEqual([e[2] for e in source.evenements], ["ELDV"])
+
+    def test_un_fichier_inchange_ne_declenche_rien(self):
+        """Inutile de renvoyer le meme agenda deux fois par seconde."""
+        self._ecrire('{"evenements":[{"debut":"16:00","fin":"17:00",'
+                     '"titre":"ELDV"}]}')
+        source = MA.SourceAgenda(self.chemin)
+        self.assertTrue(source.relire(self.JOUR))
+        self.assertFalse(source.relire(self.JOUR))
+
+    def test_un_changement_est_detecte(self):
+        self._ecrire('{"evenements":[{"debut":"16:00","fin":"17:00",'
+                     '"titre":"ELDV"}]}')
+        source = MA.SourceAgenda(self.chemin)
+        source.relire(self.JOUR)
+        self._ecrire('{"evenements":[{"debut":"19:30","fin":"21:00",'
+                     '"titre":"tache 1"}]}')
+        self.assertTrue(source.relire(self.JOUR))
+        self.assertEqual([e[2] for e in source.evenements], ["tache 1"])
+
+    def test_sans_chemin_la_source_ne_fait_rien(self):
+        """Sans --agenda, le compagnon se comporte exactement comme avant."""
+        source = MA.SourceAgenda(None)
+        self.assertFalse(source.relire(self.JOUR))

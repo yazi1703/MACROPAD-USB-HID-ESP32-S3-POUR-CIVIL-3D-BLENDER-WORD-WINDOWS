@@ -409,6 +409,41 @@ DOC_SCROLL_MS = 70          # millisecondes par pixel (plus grand = plus lent)
 DOC_SCROLL_PAUSE_MS = 1600  # pause en début et en fin de course
 
 # =====================================================================
+# 5 bis. L'AGENDA DU JOUR SUR L'ECRAN
+# =====================================================================
+# L'ecran n'a plus a afficher les commandes : le compagnon PC les montre
+# en entier dans sa fenetre. Il peut donc servir a ce qu'on ne voit pas
+# ailleurs quand Civil 3D occupe tout l'ecran : LA JOURNEE QUI VIENT.
+#
+# La carte N'A AUCUNE HORLOGE SAUVEGARDEE. Sans le PC, elle ne sait ni
+# l'heure ni la date, et elle affiche "--:--" plutot qu'une heure fausse.
+# C'est le compagnon qui envoie l'heure toutes les minutes et l'agenda
+# quand il change.
+AGENDA_ENABLED = False      # False = l'ecran garde le tableau des macros
+
+# Hauteur de la fenetre de temps, en heures. Cinq lignes de 8 pixels :
+# une heure par ligne, de "maintenant moins une heure" a "plus quatre".
+# Le passe proche sert a se reperer, le futur proche est ce qui compte.
+AGENDA_FENETRE_H = 5
+AGENDA_AVANT_H = 1          # heures montrees AVANT l'instant present
+
+# Nombre d'evenements gardes en memoire. La carte a 224 Ko de RAM et une
+# journee chargee en compte rarement plus d'une dizaine.
+AGENDA_MAX = 16
+AGENDA_TITRE_MAX = 40       # un intitule plus long est coupe
+
+# Si le compagnon se tait plus longtemps que ca, l'heure extrapolee n'est
+# plus digne de confiance : on affiche "--:--" et on efface la ligne
+# "maintenant". Mieux vaut pas d'heure qu'une heure fausse.
+AGENDA_HEURE_PERIMEE_MS = 300000        # 5 minutes
+
+# Defilement de l'intitule de la prochaine tache, meme principe que le
+# nom de document.
+AGENDA_SCROLL_MS = 70
+AGENDA_SCROLL_PAUSE_MS = 1600
+
+
+# =====================================================================
 # 6. LED RESPIRANTE
 # =====================================================================
 PWM_FREQ = 2000         # 2 kHz : aucun scintillement visible à l'oeil

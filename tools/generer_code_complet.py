@@ -36,6 +36,7 @@ ORDRE = [
     "link.py",
     "hid_keyboard.py",
     "display.py",
+    "agenda.py",
     "led.py",
     "rgb.py",
     "diag.py",

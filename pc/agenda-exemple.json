@@ -1,0 +1,45 @@
+{
+  "_lisez_moi": [
+    "Fichier d'exemple de l'agenda du jour. Le compagnon le relit des",
+    "qu'il change, et n'envoie a la carte que les evenements D'AUJOURD'HUI.",
+    "",
+    "    python macropad_auto.py --agenda agenda-exemple.json",
+    "",
+    "Deux ecritures d'heure sont acceptees :",
+    "  \"16:00\"                     -> aujourd'hui, heure locale. Pour essayer.",
+    "  \"2026-09-13T16:00:00Z\"      -> date complete. C'est ce que produisent",
+    "                                 Power Automate et Microsoft Graph, et le",
+    "                                 Z (= UTC) est converti a ton heure locale.",
+    "",
+    "Les cles anglaises de Microsoft Graph sont acceptees telles quelles",
+    "(subject / start / end), pour qu'un export brut fonctionne sans",
+    "transformation. Voir docs/12-agenda-oled.md pour brancher ton vrai",
+    "calendrier.",
+    "",
+    "Les heures ci-dessous sont volontairement ecrites en heure seule :",
+    "remplace-les par celles de ton apres-midi pour voir la vue bouger."
+  ],
+
+  "evenements": [
+    {
+      "debut": "11:00",
+      "fin": "12:00",
+      "titre": "BUGEY II / Point d'équipe Atlas"
+    },
+    {
+      "debut": "14:00",
+      "fin": "14:30",
+      "titre": "Point de Briefing - l'Européenne"
+    },
+    {
+      "debut": "16:00",
+      "fin": "17:30",
+      "titre": "ELDV - Etude et modélisation 3D"
+    },
+    {
+      "debut": "19:30",
+      "fin": "21:00",
+      "titre": "tache 1"
+    }
+  ]
+}

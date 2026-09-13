@@ -66,6 +66,13 @@ instantanement.
 
 from time import ticks_ms, ticks_diff, ticks_add
 import config as C
+try:
+    import agenda as agenda_mod
+except ImportError:
+    # Une carte dont on n'a televerse qu'une partie des fichiers doit
+    # AFFICHER QUAND MEME. Sans ce filet, un agenda.py oublie emportait
+    # tout l'ecran - y compris le tableau des macros, qui n'a rien a voir.
+    agenda_mod = None
 
 # Geometrie
 _ENTETE_Y = 12                      # ligne des titres de colonnes
@@ -80,6 +87,21 @@ _BAS_Y = 55                         # ligne du document
 # que tu as le droit d'ecrire sur 6 caracteres (LABEL_MAX).
 _COL_X = (8, 58, 92)                # colonnes court / long / double
 _COL_LARGEUR = (6, 4, 4)            # caracteres par colonne
+
+# --- Geometrie de la vue AGENDA --------------------------------------
+# Une heure = une ligne de 8 pixels, comme une ligne de texte. Un rendez-
+# vous d'une heure occupe donc exactement la hauteur de son intitule.
+_AG_Y0 = 12                 # premiere heure de la timeline
+_AG_LIGNE_H = 8             # pixels par heure
+_AG_GOUTTIERE = 24          # largeur reservee aux heures, en pixels
+_AG_TEXTE_X = _AG_GOUTTIERE + 4
+_AG_SEPARATEUR_Y = 53
+_AG_BAS_Y = 56
+# Combien d'heures tiennent reellement entre l'entete et le separateur.
+# Un reglage plus genereux dans config.py ne doit pas deborder sur la
+# ligne du bas : c'est ce plafond qui decide, pas le reglage.
+_AG_LIGNES_MAX = (_AG_SEPARATEUR_Y - _AG_Y0) // _AG_LIGNE_H
+_AG_TITRE_CAR = (128 - _AG_TEXTE_X) // 8        # 12 caracteres dans un bloc
 
 # Etats de l'economiseur d'ecran
 _VEILLE_NORMALE = 0
@@ -109,6 +131,20 @@ class Display:
 
         self.splash_until = None
         self.pending_page = 8       # 8 = rien a envoyer ; 0 = tout a renvoyer
+
+        # --- vue AGENDA ---------------------------------------------
+        # self.agenda reste None tant que personne ne nous en donne un :
+        # sans lui, la vue agenda se comporte comme un ecran vide plutot
+        # que de lever une exception au milieu d'un dessin.
+        self.vue = "macros"         # "macros" ou "agenda"
+        self.agenda = None
+        self._ag_prefixe = ""
+        self._ag_titre = ""
+        self._ag_minute = None      # minute deja dessinee, pour ne pas
+        self._ag_defil_x = 0        # redessiner soixante fois par minute
+        self._ag_defil_sens = 1
+        self._ag_defil_max = 0
+        self._ag_defil_t = 0
 
         self._veille = _VEILLE_NORMALE
         self._activite = 0
@@ -269,13 +305,147 @@ class Display:
         o.text(bas, max(0, (128 - len(bas) * 8) // 2), 44, 1)
 
     # ==================================================================
+    # LA VUE AGENDA
+    # ==================================================================
+    # Une transposition de la vue "jour" de Teams sur 128 x 64 pixels :
+    # les heures a gauche, les rendez-vous en blocs a droite, et la ligne
+    # pointillee de l'instant present qui traverse tout.
+    #
+    # Un bloc est dessine comme Teams les dessine : un CONTOUR clair avec
+    # une BARRE PLEINE sur son bord gauche. Sur un ecran monochrome c'est
+    # la traduction fidele du petit trait de couleur, et ca laisse
+    # l'interieur libre pour l'intitule et pour la ligne "maintenant".
+    #
+    # LIMITE ASSUMEE : l'ecran fait 16 caracteres de large, un bloc en
+    # accepte 12. "BUGEY II / Point d'equipe Atlas" devient "BUGEY II / P".
+    # La timeline donne la FORME de la journee ; c'est la ligne du bas qui
+    # donne le NOM complet, en le faisant defiler.
+    def _ag_y(self, minute, depart):
+        """Ordonnee d'une minute du jour dans la fenetre affichee."""
+        return _AG_Y0 + (minute - depart * 60) * _AG_LIGNE_H // 60
+
+    def _bandeau_agenda(self, minute):
+        """Le jour a gauche, l'heure a droite. "--:--" si on ne sait pas."""
+        o = self.oled
+        o.fill_rect(0, 0, 128, 11, 1)
+        o.text((self.agenda.jour if self.agenda else "")[:8], 2, 2, 0)
+        heure = (agenda_mod.texte_depuis_minutes(minute)
+                 if agenda_mod else "--:--")
+        o.text(heure, 128 - 8 * len(heure) - 2, 2, 0)
+
+    def _zone_agenda(self):
+        """Ou commence l'intitule de la ligne du bas, et sa largeur."""
+        depart = 2
+        if self._ag_prefixe:
+            depart = 2 + len(self._ag_prefixe) * 8 + 5
+        return depart, max(0, 128 - depart - 2)
+
+    def _dessiner_agenda_bas(self):
+        """La derniere ligne seule : prefixe fixe + intitule qui defile."""
+        o = self.oled
+        o.fill_rect(0, 56, 128, 8, 0)
+        if not self._ag_titre and not self._ag_prefixe:
+            return
+        depart, _ = self._zone_agenda()
+        if self._ag_titre:
+            o.text(self._ag_titre, depart - self._ag_defil_x, _AG_BAS_Y, 1)
+        if self._ag_prefixe:
+            o.fill_rect(0, 56, depart - 2, 8, 0)
+            o.text(self._ag_prefixe, 2, _AG_BAS_Y, 1)
+
+    def _vue_agenda(self):
+        o = self.oled
+        o.fill(0)
+        minute = self.agenda.minute() if self.agenda else None
+        self._bandeau_agenda(minute)
+
+        depart, visibles = (self.agenda.fenetre(minute) if self.agenda
+                            else (8, []))
+        lignes = min(getattr(C, "AGENDA_FENETRE_H", 5), _AG_LIGNES_MAX)
+        bas = _AG_Y0 + lignes * _AG_LIGNE_H
+
+        for rang in range(lignes):
+            o.text("%02d" % ((depart + rang) % 24), 0,
+                   _AG_Y0 + rang * _AG_LIGNE_H, 1)
+        o.vline(_AG_GOUTTIERE - 3, _AG_Y0, bas - _AG_Y0, 1)
+
+        for debut, fin, titre in visibles:
+            haut = self._ag_y(debut, depart)
+            pied = self._ag_y(fin, depart)
+            if pied <= _AG_Y0 or haut >= bas:
+                continue                       # entierement hors fenetre
+            haut = max(haut, _AG_Y0)
+            pied = min(pied, bas)
+            hauteur = max(2, pied - haut)      # une reunion eclair reste vue
+            o.rect(_AG_GOUTTIERE, haut, 128 - _AG_GOUTTIERE, hauteur, 1)
+            o.fill_rect(_AG_GOUTTIERE, haut, 2, hauteur, 1)
+            o.text(titre[:_AG_TITRE_CAR], _AG_TEXTE_X, haut + 1, 1)
+
+        # La ligne de l'instant present, en pointilles, comme dans Teams.
+        # Elle n'existe QUE si l'heure est sure : une ligne posee au hasard
+        # ferait croire qu'on a le temps.
+        if minute is not None:
+            y = self._ag_y(minute, depart)
+            if _AG_Y0 <= y < bas:
+                o.fill_rect(0, y, 5, 1, 1)
+                for x in range(6, 128, 3):
+                    o.pixel(x, y, 1)
+
+        o.hline(0, _AG_SEPARATEUR_Y, 128, 1)
+        self._dessiner_agenda_bas()
+
+    def _ag_resume(self, minute):
+        """Recalcule la ligne du bas et relance son defilement."""
+        if not self.agenda:
+            return
+        prefixe, titre = self.agenda.resume(minute)
+        if prefixe == self._ag_prefixe and titre == self._ag_titre:
+            return
+        self._ag_prefixe, self._ag_titre = prefixe, titre
+        _, dispo = self._zone_agenda()
+        self._ag_defil_max = max(0, len(titre) * 8 - dispo)
+        self._ag_defil_x = 0
+        self._ag_defil_sens = 1
+        self._ag_defil_t = ticks_add(ticks_ms(),
+                                     getattr(C, "AGENDA_SCROLL_PAUSE_MS", 1600))
+
+    def _rafraichir_agenda_bas(self):
+        if not self.oled or self.splash_until is not None:
+            return
+        try:
+            self._dessiner_agenda_bas()
+            if self.pending_page >= 8:
+                self.pending_page = 7
+        except Exception as exc:
+            self.disable(exc)
+
+    def set_agenda(self, agenda):
+        """Branche l'agenda et bascule l'ecran dessus."""
+        self.agenda = agenda
+        self.vue = "agenda"
+        self._ag_minute = None          # force un premier dessin complet
+        self.rafraichir_agenda()
+
+    def rafraichir_agenda(self, now=None):
+        """A appeler quand l'agenda ou l'heure viennent de changer."""
+        if self.vue != "agenda" or not self.agenda:
+            return
+        minute = self.agenda.minute(now)
+        self._ag_minute = minute
+        self._ag_resume(minute)
+        self._redessiner()
+
+    # ==================================================================
     # Rafraichissements
     # ==================================================================
     def _redessiner(self):
         if not self.oled or self.splash_until is not None:
             return
         try:
-            self._vue_principale()
+            if self.vue == "agenda":
+                self._vue_agenda()
+            else:
+                self._vue_principale()
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
@@ -456,7 +626,15 @@ class Display:
             if self._veille == _VEILLE_NORMALE and inactif > C.SCREEN_DIM_MS:
                 self.oled.contrast(C.SCREEN_DIM_CONTRAST)
                 self._veille = _VEILLE_ATTENUEE
-            elif self._veille == _VEILLE_ATTENUEE and inactif > C.SCREEN_OFF_MS:
+            elif (self._veille == _VEILLE_ATTENUEE
+                  and inactif > C.SCREEN_OFF_MS
+                  and self.vue != "agenda"):
+                # UN AGENDA, ON LE REGARDE SANS RIEN TOUCHER. L'eteindre au
+                # bout d'un quart d'heure d'inactivite le rendrait inutile :
+                # c'est justement quand on ne tape pas qu'on veut le voir.
+                # Il reste donc ATTENUE, jamais eteint - le contraste
+                # minimal use bien moins les pixels que le plein eclat, et
+                # son contenu bouge de toute facon toutes les minutes.
                 self.oled.sleep(True)
                 self._veille = _VEILLE_ETEINTE
         except Exception as exc:
@@ -477,7 +655,10 @@ class Display:
         if self._veille == _VEILLE_ETEINTE:
             return          # ecran eteint : plus rien a animer ni a envoyer
 
-        if self.splash_until is None:
+        if self.splash_until is None and self.vue == "agenda":
+            self._tick_agenda(now)
+
+        elif self.splash_until is None:
             # --- fin du surlignage ------------------------------------
             if (self.surbrillance >= 0
                     and ticks_diff(now, self._surbrillance_t) >= 0):
@@ -524,6 +705,38 @@ class Display:
         except Exception as exc:
             # Un ecran arrache en cours de route ne doit pas arreter le clavier.
             self.disable(exc)
+
+    def _tick_agenda(self, now):
+        """Anime la vue agenda : la minute qui tourne, l'intitule qui defile.
+
+        On ne redessine tout QU'AU CHANGEMENT DE MINUTE - soixante fois
+        moins souvent qu'a chaque tour de boucle. Entre deux, seule la
+        derniere ligne bouge, et elle ne coute qu'une page sur huit.
+        """
+        minute = self.agenda.minute(now) if self.agenda else None
+        if minute != self._ag_minute:
+            self._ag_minute = minute
+            self._ag_resume(minute)
+            self._redessiner()
+            return
+
+        # Meme va-et-vient que le nom de document : une pause a chaque
+        # bout, pour laisser le temps de lire le debut puis la fin.
+        if self._ag_defil_max > 0 and ticks_diff(now, self._ag_defil_t) >= 0:
+            self._ag_defil_x += self._ag_defil_sens
+            pause = getattr(C, "AGENDA_SCROLL_PAUSE_MS", 1600)
+            if self._ag_defil_x >= self._ag_defil_max:
+                self._ag_defil_x = self._ag_defil_max
+                self._ag_defil_sens = -1
+                self._ag_defil_t = ticks_add(now, pause)
+            elif self._ag_defil_x <= 0:
+                self._ag_defil_x = 0
+                self._ag_defil_sens = 1
+                self._ag_defil_t = ticks_add(now, pause)
+            else:
+                self._ag_defil_t = ticks_add(
+                    now, getattr(C, "AGENDA_SCROLL_MS", 70))
+            self._rafraichir_agenda_bas()
 
     def flush_startup(self):
         """Envoie l'image entiere d'un coup.

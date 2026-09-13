@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 316 tests PC réussis ; 23 fichiers Python compilés avec succès.**
+**Résultat : 368 tests PC réussis ; 24 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, seize corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -12,10 +12,10 @@
 
 ## Exécuté réellement dans cet environnement
 
-- Compilation syntaxique des **22 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
+- Compilation syntaxique des **24 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 316 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
-  274 pour le firmware, 42 pour le compagnon Windows.
+- 368 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+  303 pour le firmware, 65 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
 - Schéma SVG rendu en PNG et inspecté visuellement.
@@ -33,6 +33,14 @@ L'ENREGISTREMENT A LA SOURIS est verifie sous deux angles, parce qu'un DOM minim
 LE NOM COMPLET des touches et des combinaisons (`NomCompletDesTouches`, 8 tests) fait l'aller-retour complet : saisi dans la page, il part dans le JSON, revient par store.charger - dont le tuple est passe de neuf a dix elements - et ressort dans le recapitulatif du compagnon PC. Les tests verifient qu'un nom trop long est tronque a NOM_MAX - le fichier vit sur la flash de la carte -, qu'un nom absent laisse le libelle court faire office de nom sans rien casser, et que le recapitulatif produit bien une ligne d'en-tete par touche portant ce nom.
 
 UN DEFAUT A ETE TROUVE ET CORRIGE PAR CES TESTS, avant toute mise en service. Le repli "aucun nom dans le fichier -> on remet ceux d'usine" est indispensable pour relire un profils.json ecrit AVANT les noms complets : sans lui, une mise a jour du firmware les ferait disparaitre. Mais applique tel quel, il rendait l'effacement IMPOSSIBLE : vider toutes les cases, enregistrer, et les noms d'usine revenaient au rechargement suivant. depuis_json distingue desormais "le fichier ne parle pas des noms" de "le fichier dit qu'ils sont vides", exactement comme il le fait deja pour les combinaisons et pour la seconde couleur. Deux tests tiennent les deux moities de la regle, et cinq mutations ont ete verifiees : remettre l'ancien repli, retirer la troncature, cesser d'envoyer le nom a la page, supprimer les noms d'usine, et retirer le tri de la cle d'une combinaison - chacune fait echouer un test. Ce dernier tri compte : la page accepte "4 3" comme "3 4", et sans tri le nom partait sous une cle que plus personne ne relit.
+
+L'AGENDA DU JOUR SUR L'ECRAN (`AgendaDuJour`, `VueAgendaSurLEcran`, `ProtocoleAgenda`, `AgendaDuJourCotePC`, `FichierAgenda` - 48 tests). La logique vit dans device/agenda.py, qui ne connait NI l'ecran NI le port serie : tous les cas penibles s'y verifient en une milliseconde. Deux regles y sont tenues dans les deux sens. UN : au-dela de AGENDA_HEURE_PERIMEE_MS sans nouvelle du PC, l'heure extrapolee n'est plus digne de confiance et minute() rend None - l'ecran affiche alors --:-- et efface la ligne maintenant, parce qu'une heure fausse ferait rater une reunion en croyant etre a l'heure. DEUX : la liste d'evenements n'est adoptee qu'au !AGEND, jamais avant - une transmission coupee laisse l'agenda PRECEDENT affiche plutot qu'une journee qui parait libre.
+
+LE DESSIN est exerce a CHAQUE QUART D'HEURE DES 24 HEURES, sur une journee volontairement penible : un rendez-vous avant la fenetre, un a cheval sur son bord, une reunion eclair de cinq minutes, un intitule trop long et un evenement de nuit. Aucun pixel ne doit sortir des 128 x 64 - un debordement ne se voit pas sur PC, framebuf coupe en silence, mais il efface une partie de l'image sur la vraie dalle. L'economiseur d'ecran est verifie DES DEUX COTES : la vue agenda ne s'eteint jamais (on la regarde sans rien toucher) mais le tableau des macros, lui, garde l'extinction - on ne l'a pas desactivee pour tout le monde en passant.
+
+COTE PC, deux pieges silencieux sont verrouilles. Le fuseau horaire d'abord : un calendrier d'entreprise donne souvent ses heures en UTC, et les prendre telles quelles decalerait TOUT l'agenda d'une ou deux heures selon la saison, sans que rien ne le signale. Les accents ensuite : la police de l'ecran est de l'ASCII pur, un intitule accentue y sortirait en charabia, donc on translittere avant d'envoyer. Le fichier source peut manquer, etre mal forme ou etre en cours d'ecriture par le flux qui le produit : aucun de ces cas n'arrete le compagnon ni n'efface ce qui est affiche. Enfin un test fait l'ALLER-RETOUR COMPLET - ce que le PC fabrique repasse par le protocole puis par device/agenda.py - parce que deux fichiers ecrits a des mois d'intervalle sont exactement la ou un format derive sans que personne ne le voie.
+
+SEPT MUTATIONS ont ete verifiees, chacune tue un test : supprimer le garde-fou de l'heure perimee, adopter la liste avant la fin de la transmission, rendre n'importe laquelle de deux reunions simultanees, eteindre l'ecran en vue agenda, prendre l'UTC tel quel, laisser passer les accents, afficher hier et demain. La troisieme a SURVECU au premier essai : le cas de test choisi ne discriminait rien, les deux reponses coincidaient. Il a ete refait avec une reunion longue commencant avant une courte. C'est precisement pour cela qu'on mute les tests au lieu de les croire sur parole.
 
 Ces tests sont nes du bug de la correction 11 : un antislash mal interprete cassait tout le script, et la page restait vide sans le moindre message.
 
@@ -214,6 +222,29 @@ Ces tests ne nécessitent pas de carte et ne tapent aucune touche sur le PC. Ils
 ## Sortie des tests
 
 ```text
+--- AgendaAbsentDeLaCarte
+test_l_ecran_fonctionne_sans_agenda_py ... ok
+test_le_diagnostic_reclame_agenda ... ok
+
+--- AgendaDuJour
+test_deux_reunions_en_meme_temps_montrent_la_plus_pressee ... ok
+test_en_cours_et_a_venir ... ok
+test_l_heure_avance_toute_seule_entre_deux_messages ... ok
+test_l_heure_et_le_jour_sont_lus ... ok
+test_la_fenetre_glisse_avec_l_heure ... ok
+test_la_fenetre_ne_sort_jamais_de_la_journee ... ok
+test_la_liste_est_bornee ... ok
+test_la_liste_n_est_adoptee_qu_a_la_fin ... ok
+test_le_resume_compte_a_rebours_quand_ca_approche ... ok
+test_le_resume_dit_la_fin_quand_c_est_en_cours ... ok
+test_le_resume_donne_l_heure_quand_c_est_loin ... ok
+test_le_resume_ne_laisse_jamais_la_ligne_vide ... ok
+test_les_evenements_sont_tries ... ok
+test_minuit_ne_fait_pas_deborder_l_heure ... ok
+test_une_heure_illisible_est_refusee ... ok
+test_une_heure_trop_vieille_devient_inconnue ... ok
+test_une_ligne_illisible_n_annule_pas_les_autres ... ok
+
 --- AncienFichierDeConfiguration
 test_version_1_relue_comme_appui_court ... ok
 test_version_2_non_touchee_par_la_conversion ... ok
@@ -346,6 +377,10 @@ test_deux_appuis_trop_espaces_font_deux_courts ... ok
 test_double_appui ... ok
 test_maintien_sans_macro_longue_reste_un_court ... ok
 test_touches_independantes ... ok
+
+--- InventaireDesFichiers
+test_code_complet_contient_tous_les_modules_de_device ... ok
+test_le_generateur_connait_tous_les_modules_de_device ... ok
 
 --- LaPagePeutToutRegler
 test_echanger_les_deux_modificateurs_depuis_la_page ... ok
@@ -484,6 +519,11 @@ test_remise_a_zero_des_compteurs ... ok
 test_remise_a_zero_sans_compteurs_est_refusee_proprement ... ok
 test_retour_usine ... ok
 
+--- ProtocoleAgenda
+test_les_lignes_remplissent_l_agenda ... ok
+test_sans_agenda_les_lignes_sont_ignorees_proprement ... ok
+test_une_heure_invalide_ne_produit_aucun_evenement ... ok
+
 --- SecondeCouleurDansLaConfiguration
 test_aller_retour_par_le_fichier ... ok
 test_la_page_lit_et_ecrit_couleur2 ... ok
@@ -536,12 +576,46 @@ test_toutes_les_macros_usine_sont_tapables ... ok
 test_aller_retour_complet_sans_perte ... ok
 test_les_suites_d_actions_traversent_la_page_web ... ok
 
+--- VueAgendaSurLEcran
+test_aucun_debordement_a_aucune_heure_du_jour ... ok
+test_l_ecran_ne_s_eteint_jamais_en_vue_agenda ... ok
+test_la_vue_macros_s_eteint_toujours ... ok
+test_sans_heure_l_ecran_dessine_quand_meme ... ok
+test_un_agenda_vide_ne_plante_pas ... ok
+
+--- AgendaDuJourCotePC
+test_la_forme_brute_de_Microsoft_Graph_est_acceptee ... ok
+test_la_ligne_d_heure ... ok
+test_la_liste_est_bornee ... ok
+test_les_accents_sont_translitteres ... ok
+test_les_evenements_sont_tries_et_convertis_en_minutes ... ok
+test_les_lignes_du_protocole ... ok
+test_les_lignes_produites_sont_relues_par_le_firmware ... ok
+test_seuls_les_evenements_du_jour_sont_gardes ... ok
+test_un_caractere_inconnu_devient_un_point_d_interrogation ... ok
+test_un_decalage_explicite_est_respecte ... ok
+test_une_date_illisible_vaut_None ... ok
+test_une_entree_sans_titre_est_ignoree ... ok
+test_une_fin_absente_donne_une_duree_par_defaut ... ok
+test_une_heure_en_UTC_est_ramenee_a_l_heure_locale ... ok
+test_une_heure_seule_est_prise_pour_aujourd_hui ... ok
+test_une_liste_nue_est_acceptee ... ok
+test_une_liste_vide_envoie_quand_meme_les_bornes ... ok
+test_une_reunion_qui_deborde_sur_demain_s_arrete_a_minuit ... ok
+
 --- DemarrageAutomatiqueWindows
 test_apostrophes_doublees_pas_les_antislash ... ok
 test_dossier_de_demarrage ... ok
 test_hors_windows_ne_touche_a_rien ... ok
 test_sans_appdata_message_clair ... ok
 test_script_powershell_complet ... ok
+
+--- FichierAgenda
+test_sans_chemin_la_source_ne_fait_rien ... ok
+test_un_changement_est_detecte ... ok
+test_un_fichier_absent_ne_plante_pas ... ok
+test_un_fichier_inchange_ne_declenche_rien ... ok
+test_un_fichier_mal_forme_garde_la_liste_precedente ... ok
 
 --- JournalDuCompagnon
 test_ecrit_dans_les_deux_sorties ... ok
@@ -595,7 +669,7 @@ test_table_vide_sur_la_carte_laisse_le_fichier_travailler ... ok
 test_une_table_identique_ne_change_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 316 tests
+Ran 368 tests
 
 OK
 ```

@@ -56,7 +56,7 @@ from stats import Stats
 from display import Display
 from hid_keyboard import HIDKeyboard
 from layouts import compile_actions
-from link import Link, EVT_PROFIL, EVT_DOCUMENT, EVT_RECHARGER
+from link import Link, EVT_PROFIL, EVT_DOCUMENT, EVT_RECHARGER, EVT_AGENDA
 
 NB_TOUCHES = len(C.BUTTON_PINS)
 
@@ -269,7 +269,25 @@ def run():
     from rgb import Rgb
     rgb = Rgb()
 
-    lien = Link(NB_TOUCHES, stats=stats) if C.LINK_ENABLED else None
+    # --- L'agenda du jour sur l'ecran -----------------------------
+    # Livre a False : l'ecran garde le tableau des macros tant que tu n'as
+    # pas dit le contraire. Sans compagnon PC, cette vue n'aurait de toute
+    # facon rien a montrer - la carte n'a aucune horloge sauvegardee.
+    journee = None
+    if getattr(C, "AGENDA_ENABLED", False):
+        try:
+            from agenda import Agenda
+            journee = Agenda()
+            display.set_agenda(journee)
+        except Exception as exc:
+            # Meme regle que partout ailleurs : un fichier manquant se
+            # signale, il n'empeche pas le macropad de TAPER. On garde le
+            # tableau des macros et on continue.
+            print("Agenda indisponible (%s) : l'ecran garde les macros."
+                  % exc)
+
+    lien = (Link(NB_TOUCHES, stats=stats, agenda=journee)
+            if C.LINK_ENABLED else None)
     verrouille = False          # True = l'auto ne peut plus changer de profil
     dernier_auto = None
 
@@ -427,6 +445,11 @@ def run():
                     elif genre == EVT_DOCUMENT:
                         dernier_auto = now
                         display.set_document(valeur)
+                    elif genre == EVT_AGENDA:
+                        # L'heure ou la liste viennent de changer : la ligne
+                        # "maintenant" et le compte a rebours doivent suivre.
+                        dernier_auto = now
+                        display.rafraichir_agenda(now)
                     elif genre == EVT_RECHARGER:
                         recharger_profils()
 

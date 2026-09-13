@@ -30,6 +30,7 @@ ouvert, compte les appuis, et se configure entièrement depuis une page web
 | savoir ce qui a été corrigé et pourquoi | [`docs/06-corrections.md`](docs/06-corrections.md) |
 | **que le macropad suive le logiciel actif** | [`docs/08-detection-auto.md`](docs/08-detection-auto.md) — le script PC |
 | **voir TOUTES les commandes d'un coup d'œil** | le compagnon PC affiche le récapitulatif à chaque changement de profil — voir [`docs/08.3 bis`](docs/08-detection-auto.md) |
+| **afficher l'agenda du jour sur l'écran** | [`docs/12-agenda-oled.md`](docs/12-agenda-oled.md) — la journée et la tâche à venir |
 | **modifier les macros depuis le PC** | lancer `pc/macropad_auto.bat`, puis `http://127.0.0.1:8765` |
 | **que le compagnon démarre avec Windows** | `pc/demarrage_windows.bat`, choix 1 — voir [`docs/08.7`](docs/08-detection-auto.md) |
 | modifier les macros sans PC (téléphone) | maintenir B2 au RESET, puis `http://192.168.4.1` — voir [`docs/07`](docs/07-mode-configuration.md) |
@@ -264,7 +265,8 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   ├── layouts.py                AZERTY / QWERTY, traduction des caractères
 │   ├── hid_keyboard.py           envoi des rapports USB, file d'attente
 │   ├── inputs.py                 anti-rebond des entrées
-│   ├── display.py                écran : tableau, défilement, veille
+│   ├── display.py                écran : tableau, agenda, défilement, veille
+│   ├── agenda.py                 la journée du jour (logique pure)
 │   ├── sh1106.py                 pilote de l'écran (MIT, robert-hh)
 │   ├── led.py                    respiration et flash du bouton ESC
 │   ├── rgb.py                    LED RGB des touches (WS2812 ou PWM)
@@ -276,19 +278,21 @@ branché et se reconnecte tout seul s'il est débranché. Voir
 │   ├── macropad_auto.bat         lanceur Windows (double-clic)
 │   ├── demarrage_windows.py      installe/retire le démarrage automatique
 │   ├── demarrage_windows.bat     le même, en double-clic
+│   ├── agenda-exemple.json       journée d'exemple pour l'écran OLED
 │   ├── macropad_apps.txt         table de secours (créée au 1er lancement)
 │   └── macropad_auto.log         journal (créé si --journal)
 ├── tools/                        >>> OUTILS DE DÉVELOPPEMENT (PC)
 │   ├── page_config.html          la page de configuration, source unique
 │   ├── injecter_page.py          l'injecte dans portal.py et macropad_auto.py
+│   ├── apercu_agenda.py          dessine la vue agenda dans le terminal
 │   └── generer_code_complet.py   régénère CODE_COMPLET.md
 ├── civil3d/                      >>> À CHARGER DANS CIVIL 3D
 │   ├── macropad_tools.lsp        les 4 commandes des combinaisons
 │   └── README.md                 comment les charger au démarrage
 ├── docs/                         documentation détaillée
 ├── tests/
-│   ├── test_logic.py             274 tests du firmware, exécutables sur PC
-│   ├── test_pc.py                42 tests du compagnon Windows
+│   ├── test_logic.py             303 tests du firmware, exécutables sur PC
+│   ├── test_pc.py                65 tests du compagnon Windows
 │   └── page_smoke.js             fait tourner la page web hors navigateur
 └── licenses/                     licences des composants tiers
 ```
@@ -313,7 +317,7 @@ dossier `device` lui-même. `docs/`, `tests/` et les `.md` restent sur le PC.
 
 ```
 python3 -m unittest discover -s tests
-→ Ran 316 tests ... OK
+→ Ran 368 tests ... OK
 ```
 
 Ces tests remplacent le temps, les GPIO, le PWM, l'écran et le transport

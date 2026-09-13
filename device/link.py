@@ -68,6 +68,7 @@ import store
 EVT_PROFIL = "profil"        # le PC demande un profil
 EVT_DOCUMENT = "document"    # nom du document a afficher
 EVT_RECHARGER = "recharger"  # la configuration a change, il faut la relire
+EVT_AGENDA = "agenda"        # l'heure ou la journee viennent de changer
 
 _MAX_PAR_TOUR = 256          # caracteres lus au maximum par tour de boucle
 _MAX_LIGNE = 512             # au-dela, la ligne est jetee (protection RAM)
@@ -98,9 +99,14 @@ class SourceStdin:
 class Link:
     """Analyse les lignes venant du PC et repond."""
 
-    def __init__(self, nb_touches, source=None, sortie=None, stats=None):
+    def __init__(self, nb_touches, source=None, sortie=None, stats=None,
+                 agenda=None):
         self.nb_touches = nb_touches
         self.stats = stats            # pour joindre les compteurs d'usage
+        # None = la vue agenda est desactivee. Les lignes H:, A: et !AG*
+        # sont alors ignorees proprement, sans erreur : un compagnon plus
+        # recent que le firmware ne doit rien casser.
+        self.agenda = agenda
         self.actif = False
         self.source = source
         self.sortie = sortie or print
@@ -157,6 +163,33 @@ class Link:
         if ligne.startswith("T:"):
             self.document = ligne[2:].strip()
             return (EVT_DOCUMENT, self.document)
+
+        # --- l'agenda du jour -----------------------------------------
+        # La carte n'a pas d'horloge sauvegardee : c'est le PC qui donne
+        # l'heure, toutes les minutes. Voir agenda.py pour ce qui arrive
+        # quand il cesse de parler.
+        if ligne.startswith("H:"):
+            if self.agenda is not None and self.agenda.set_heure(ligne[2:]):
+                return (EVT_AGENDA, None)
+            return None
+
+        if ligne == "!AGBEGIN":
+            if self.agenda is not None:
+                self.agenda.commencer()
+            return None
+
+        if ligne.startswith("A:"):
+            if self.agenda is not None:
+                self.agenda.ajouter(ligne[2:])
+            return None
+
+        if ligne == "!AGEND":
+            # La liste ne remplace l'ancienne qu'ICI : une transmission
+            # coupee en deux laisse l'agenda precedent affiche, jamais un
+            # agenda a moitie efface.
+            if self.agenda is not None and self.agenda.terminer():
+                return (EVT_AGENDA, None)
+            return None
 
         if ligne == "?VER":
             self.sortie("#VER:macropad %d touches, layout %s"

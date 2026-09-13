@@ -26,6 +26,7 @@ de `device/`, pas ce document.
 - [`device/link.py`](#devicelinkpy)
 - [`device/hid_keyboard.py`](#devicehidkeyboardpy)
 - [`device/display.py`](#devicedisplaypy)
+- [`device/agenda.py`](#deviceagendapy)
 - [`device/led.py`](#deviceledpy)
 - [`device/rgb.py`](#devicergbpy)
 - [`device/diag.py`](#devicediagpy)
@@ -40,7 +41,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`421 lignes - sha256 6cc5a20c29cf29c5`
+`456 lignes - sha256 67e8f89b4c74b343`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -452,6 +453,41 @@ HIGHLIGHT_MS = 1300         # durée du surlignage de la touche utilisée
 # laisser le temps de lire le début puis la fin.
 DOC_SCROLL_MS = 70          # millisecondes par pixel (plus grand = plus lent)
 DOC_SCROLL_PAUSE_MS = 1600  # pause en début et en fin de course
+
+# =====================================================================
+# 5 bis. L'AGENDA DU JOUR SUR L'ECRAN
+# =====================================================================
+# L'ecran n'a plus a afficher les commandes : le compagnon PC les montre
+# en entier dans sa fenetre. Il peut donc servir a ce qu'on ne voit pas
+# ailleurs quand Civil 3D occupe tout l'ecran : LA JOURNEE QUI VIENT.
+#
+# La carte N'A AUCUNE HORLOGE SAUVEGARDEE. Sans le PC, elle ne sait ni
+# l'heure ni la date, et elle affiche "--:--" plutot qu'une heure fausse.
+# C'est le compagnon qui envoie l'heure toutes les minutes et l'agenda
+# quand il change.
+AGENDA_ENABLED = False      # False = l'ecran garde le tableau des macros
+
+# Hauteur de la fenetre de temps, en heures. Cinq lignes de 8 pixels :
+# une heure par ligne, de "maintenant moins une heure" a "plus quatre".
+# Le passe proche sert a se reperer, le futur proche est ce qui compte.
+AGENDA_FENETRE_H = 5
+AGENDA_AVANT_H = 1          # heures montrees AVANT l'instant present
+
+# Nombre d'evenements gardes en memoire. La carte a 224 Ko de RAM et une
+# journee chargee en compte rarement plus d'une dizaine.
+AGENDA_MAX = 16
+AGENDA_TITRE_MAX = 40       # un intitule plus long est coupe
+
+# Si le compagnon se tait plus longtemps que ca, l'heure extrapolee n'est
+# plus digne de confiance : on affiche "--:--" et on efface la ligne
+# "maintenant". Mieux vaut pas d'heure qu'une heure fausse.
+AGENDA_HEURE_PERIMEE_MS = 300000        # 5 minutes
+
+# Defilement de l'intitule de la prochaine tache, meme principe que le
+# nom de document.
+AGENDA_SCROLL_MS = 70
+AGENDA_SCROLL_PAUSE_MS = 1600
+
 
 # =====================================================================
 # 6. LED RESPIRANTE
@@ -1003,7 +1039,7 @@ else:
 
 ## device/main.py
 
-`638 lignes - sha256 f62fdf2ebae2c88c`
+`661 lignes - sha256 ef44668afa5edc29`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1064,7 +1100,7 @@ from stats import Stats
 from display import Display
 from hid_keyboard import HIDKeyboard
 from layouts import compile_actions
-from link import Link, EVT_PROFIL, EVT_DOCUMENT, EVT_RECHARGER
+from link import Link, EVT_PROFIL, EVT_DOCUMENT, EVT_RECHARGER, EVT_AGENDA
 
 NB_TOUCHES = len(C.BUTTON_PINS)
 
@@ -1277,7 +1313,25 @@ def run():
     from rgb import Rgb
     rgb = Rgb()
 
-    lien = Link(NB_TOUCHES, stats=stats) if C.LINK_ENABLED else None
+    # --- L'agenda du jour sur l'ecran -----------------------------
+    # Livre a False : l'ecran garde le tableau des macros tant que tu n'as
+    # pas dit le contraire. Sans compagnon PC, cette vue n'aurait de toute
+    # facon rien a montrer - la carte n'a aucune horloge sauvegardee.
+    journee = None
+    if getattr(C, "AGENDA_ENABLED", False):
+        try:
+            from agenda import Agenda
+            journee = Agenda()
+            display.set_agenda(journee)
+        except Exception as exc:
+            # Meme regle que partout ailleurs : un fichier manquant se
+            # signale, il n'empeche pas le macropad de TAPER. On garde le
+            # tableau des macros et on continue.
+            print("Agenda indisponible (%s) : l'ecran garde les macros."
+                  % exc)
+
+    lien = (Link(NB_TOUCHES, stats=stats, agenda=journee)
+            if C.LINK_ENABLED else None)
     verrouille = False          # True = l'auto ne peut plus changer de profil
     dernier_auto = None
 
@@ -1435,6 +1489,11 @@ def run():
                     elif genre == EVT_DOCUMENT:
                         dernier_auto = now
                         display.set_document(valeur)
+                    elif genre == EVT_AGENDA:
+                        # L'heure ou la liste viennent de changer : la ligne
+                        # "maintenant" et le compte a rebours doivent suivre.
+                        dernier_auto = now
+                        display.rafraichir_agenda(now)
                     elif genre == EVT_RECHARGER:
                         recharger_profils()
 
@@ -4458,7 +4517,7 @@ class Portail:
 
 ## device/link.py
 
-`243 lignes - sha256 f3b8a54a9718792b`
+`276 lignes - sha256 8014f97c1b6cf096`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -4531,6 +4590,7 @@ import store
 EVT_PROFIL = "profil"        # le PC demande un profil
 EVT_DOCUMENT = "document"    # nom du document a afficher
 EVT_RECHARGER = "recharger"  # la configuration a change, il faut la relire
+EVT_AGENDA = "agenda"        # l'heure ou la journee viennent de changer
 
 _MAX_PAR_TOUR = 256          # caracteres lus au maximum par tour de boucle
 _MAX_LIGNE = 512             # au-dela, la ligne est jetee (protection RAM)
@@ -4561,9 +4621,14 @@ class SourceStdin:
 class Link:
     """Analyse les lignes venant du PC et repond."""
 
-    def __init__(self, nb_touches, source=None, sortie=None, stats=None):
+    def __init__(self, nb_touches, source=None, sortie=None, stats=None,
+                 agenda=None):
         self.nb_touches = nb_touches
         self.stats = stats            # pour joindre les compteurs d'usage
+        # None = la vue agenda est desactivee. Les lignes H:, A: et !AG*
+        # sont alors ignorees proprement, sans erreur : un compagnon plus
+        # recent que le firmware ne doit rien casser.
+        self.agenda = agenda
         self.actif = False
         self.source = source
         self.sortie = sortie or print
@@ -4620,6 +4685,33 @@ class Link:
         if ligne.startswith("T:"):
             self.document = ligne[2:].strip()
             return (EVT_DOCUMENT, self.document)
+
+        # --- l'agenda du jour -----------------------------------------
+        # La carte n'a pas d'horloge sauvegardee : c'est le PC qui donne
+        # l'heure, toutes les minutes. Voir agenda.py pour ce qui arrive
+        # quand il cesse de parler.
+        if ligne.startswith("H:"):
+            if self.agenda is not None and self.agenda.set_heure(ligne[2:]):
+                return (EVT_AGENDA, None)
+            return None
+
+        if ligne == "!AGBEGIN":
+            if self.agenda is not None:
+                self.agenda.commencer()
+            return None
+
+        if ligne.startswith("A:"):
+            if self.agenda is not None:
+                self.agenda.ajouter(ligne[2:])
+            return None
+
+        if ligne == "!AGEND":
+            # La liste ne remplace l'ancienne qu'ICI : une transmission
+            # coupee en deux laisse l'agenda precedent affiche, jamais un
+            # agenda a moitie efface.
+            if self.agenda is not None and self.agenda.terminer():
+                return (EVT_AGENDA, None)
+            return None
 
         if ligne == "?VER":
             self.sortie("#VER:macropad %d touches, layout %s"
@@ -5154,7 +5246,7 @@ def create_interface():
 
 ## device/display.py
 
-`535 lignes - sha256 cf62658b9fec284c`
+`748 lignes - sha256 b78af3e858fd9949`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -5225,6 +5317,13 @@ instantanement.
 
 from time import ticks_ms, ticks_diff, ticks_add
 import config as C
+try:
+    import agenda as agenda_mod
+except ImportError:
+    # Une carte dont on n'a televerse qu'une partie des fichiers doit
+    # AFFICHER QUAND MEME. Sans ce filet, un agenda.py oublie emportait
+    # tout l'ecran - y compris le tableau des macros, qui n'a rien a voir.
+    agenda_mod = None
 
 # Geometrie
 _ENTETE_Y = 12                      # ligne des titres de colonnes
@@ -5239,6 +5338,21 @@ _BAS_Y = 55                         # ligne du document
 # que tu as le droit d'ecrire sur 6 caracteres (LABEL_MAX).
 _COL_X = (8, 58, 92)                # colonnes court / long / double
 _COL_LARGEUR = (6, 4, 4)            # caracteres par colonne
+
+# --- Geometrie de la vue AGENDA --------------------------------------
+# Une heure = une ligne de 8 pixels, comme une ligne de texte. Un rendez-
+# vous d'une heure occupe donc exactement la hauteur de son intitule.
+_AG_Y0 = 12                 # premiere heure de la timeline
+_AG_LIGNE_H = 8             # pixels par heure
+_AG_GOUTTIERE = 24          # largeur reservee aux heures, en pixels
+_AG_TEXTE_X = _AG_GOUTTIERE + 4
+_AG_SEPARATEUR_Y = 53
+_AG_BAS_Y = 56
+# Combien d'heures tiennent reellement entre l'entete et le separateur.
+# Un reglage plus genereux dans config.py ne doit pas deborder sur la
+# ligne du bas : c'est ce plafond qui decide, pas le reglage.
+_AG_LIGNES_MAX = (_AG_SEPARATEUR_Y - _AG_Y0) // _AG_LIGNE_H
+_AG_TITRE_CAR = (128 - _AG_TEXTE_X) // 8        # 12 caracteres dans un bloc
 
 # Etats de l'economiseur d'ecran
 _VEILLE_NORMALE = 0
@@ -5268,6 +5382,20 @@ class Display:
 
         self.splash_until = None
         self.pending_page = 8       # 8 = rien a envoyer ; 0 = tout a renvoyer
+
+        # --- vue AGENDA ---------------------------------------------
+        # self.agenda reste None tant que personne ne nous en donne un :
+        # sans lui, la vue agenda se comporte comme un ecran vide plutot
+        # que de lever une exception au milieu d'un dessin.
+        self.vue = "macros"         # "macros" ou "agenda"
+        self.agenda = None
+        self._ag_prefixe = ""
+        self._ag_titre = ""
+        self._ag_minute = None      # minute deja dessinee, pour ne pas
+        self._ag_defil_x = 0        # redessiner soixante fois par minute
+        self._ag_defil_sens = 1
+        self._ag_defil_max = 0
+        self._ag_defil_t = 0
 
         self._veille = _VEILLE_NORMALE
         self._activite = 0
@@ -5428,13 +5556,147 @@ class Display:
         o.text(bas, max(0, (128 - len(bas) * 8) // 2), 44, 1)
 
     # ==================================================================
+    # LA VUE AGENDA
+    # ==================================================================
+    # Une transposition de la vue "jour" de Teams sur 128 x 64 pixels :
+    # les heures a gauche, les rendez-vous en blocs a droite, et la ligne
+    # pointillee de l'instant present qui traverse tout.
+    #
+    # Un bloc est dessine comme Teams les dessine : un CONTOUR clair avec
+    # une BARRE PLEINE sur son bord gauche. Sur un ecran monochrome c'est
+    # la traduction fidele du petit trait de couleur, et ca laisse
+    # l'interieur libre pour l'intitule et pour la ligne "maintenant".
+    #
+    # LIMITE ASSUMEE : l'ecran fait 16 caracteres de large, un bloc en
+    # accepte 12. "BUGEY II / Point d'equipe Atlas" devient "BUGEY II / P".
+    # La timeline donne la FORME de la journee ; c'est la ligne du bas qui
+    # donne le NOM complet, en le faisant defiler.
+    def _ag_y(self, minute, depart):
+        """Ordonnee d'une minute du jour dans la fenetre affichee."""
+        return _AG_Y0 + (minute - depart * 60) * _AG_LIGNE_H // 60
+
+    def _bandeau_agenda(self, minute):
+        """Le jour a gauche, l'heure a droite. "--:--" si on ne sait pas."""
+        o = self.oled
+        o.fill_rect(0, 0, 128, 11, 1)
+        o.text((self.agenda.jour if self.agenda else "")[:8], 2, 2, 0)
+        heure = (agenda_mod.texte_depuis_minutes(minute)
+                 if agenda_mod else "--:--")
+        o.text(heure, 128 - 8 * len(heure) - 2, 2, 0)
+
+    def _zone_agenda(self):
+        """Ou commence l'intitule de la ligne du bas, et sa largeur."""
+        depart = 2
+        if self._ag_prefixe:
+            depart = 2 + len(self._ag_prefixe) * 8 + 5
+        return depart, max(0, 128 - depart - 2)
+
+    def _dessiner_agenda_bas(self):
+        """La derniere ligne seule : prefixe fixe + intitule qui defile."""
+        o = self.oled
+        o.fill_rect(0, 56, 128, 8, 0)
+        if not self._ag_titre and not self._ag_prefixe:
+            return
+        depart, _ = self._zone_agenda()
+        if self._ag_titre:
+            o.text(self._ag_titre, depart - self._ag_defil_x, _AG_BAS_Y, 1)
+        if self._ag_prefixe:
+            o.fill_rect(0, 56, depart - 2, 8, 0)
+            o.text(self._ag_prefixe, 2, _AG_BAS_Y, 1)
+
+    def _vue_agenda(self):
+        o = self.oled
+        o.fill(0)
+        minute = self.agenda.minute() if self.agenda else None
+        self._bandeau_agenda(minute)
+
+        depart, visibles = (self.agenda.fenetre(minute) if self.agenda
+                            else (8, []))
+        lignes = min(getattr(C, "AGENDA_FENETRE_H", 5), _AG_LIGNES_MAX)
+        bas = _AG_Y0 + lignes * _AG_LIGNE_H
+
+        for rang in range(lignes):
+            o.text("%02d" % ((depart + rang) % 24), 0,
+                   _AG_Y0 + rang * _AG_LIGNE_H, 1)
+        o.vline(_AG_GOUTTIERE - 3, _AG_Y0, bas - _AG_Y0, 1)
+
+        for debut, fin, titre in visibles:
+            haut = self._ag_y(debut, depart)
+            pied = self._ag_y(fin, depart)
+            if pied <= _AG_Y0 or haut >= bas:
+                continue                       # entierement hors fenetre
+            haut = max(haut, _AG_Y0)
+            pied = min(pied, bas)
+            hauteur = max(2, pied - haut)      # une reunion eclair reste vue
+            o.rect(_AG_GOUTTIERE, haut, 128 - _AG_GOUTTIERE, hauteur, 1)
+            o.fill_rect(_AG_GOUTTIERE, haut, 2, hauteur, 1)
+            o.text(titre[:_AG_TITRE_CAR], _AG_TEXTE_X, haut + 1, 1)
+
+        # La ligne de l'instant present, en pointilles, comme dans Teams.
+        # Elle n'existe QUE si l'heure est sure : une ligne posee au hasard
+        # ferait croire qu'on a le temps.
+        if minute is not None:
+            y = self._ag_y(minute, depart)
+            if _AG_Y0 <= y < bas:
+                o.fill_rect(0, y, 5, 1, 1)
+                for x in range(6, 128, 3):
+                    o.pixel(x, y, 1)
+
+        o.hline(0, _AG_SEPARATEUR_Y, 128, 1)
+        self._dessiner_agenda_bas()
+
+    def _ag_resume(self, minute):
+        """Recalcule la ligne du bas et relance son defilement."""
+        if not self.agenda:
+            return
+        prefixe, titre = self.agenda.resume(minute)
+        if prefixe == self._ag_prefixe and titre == self._ag_titre:
+            return
+        self._ag_prefixe, self._ag_titre = prefixe, titre
+        _, dispo = self._zone_agenda()
+        self._ag_defil_max = max(0, len(titre) * 8 - dispo)
+        self._ag_defil_x = 0
+        self._ag_defil_sens = 1
+        self._ag_defil_t = ticks_add(ticks_ms(),
+                                     getattr(C, "AGENDA_SCROLL_PAUSE_MS", 1600))
+
+    def _rafraichir_agenda_bas(self):
+        if not self.oled or self.splash_until is not None:
+            return
+        try:
+            self._dessiner_agenda_bas()
+            if self.pending_page >= 8:
+                self.pending_page = 7
+        except Exception as exc:
+            self.disable(exc)
+
+    def set_agenda(self, agenda):
+        """Branche l'agenda et bascule l'ecran dessus."""
+        self.agenda = agenda
+        self.vue = "agenda"
+        self._ag_minute = None          # force un premier dessin complet
+        self.rafraichir_agenda()
+
+    def rafraichir_agenda(self, now=None):
+        """A appeler quand l'agenda ou l'heure viennent de changer."""
+        if self.vue != "agenda" or not self.agenda:
+            return
+        minute = self.agenda.minute(now)
+        self._ag_minute = minute
+        self._ag_resume(minute)
+        self._redessiner()
+
+    # ==================================================================
     # Rafraichissements
     # ==================================================================
     def _redessiner(self):
         if not self.oled or self.splash_until is not None:
             return
         try:
-            self._vue_principale()
+            if self.vue == "agenda":
+                self._vue_agenda()
+            else:
+                self._vue_principale()
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
@@ -5615,7 +5877,15 @@ class Display:
             if self._veille == _VEILLE_NORMALE and inactif > C.SCREEN_DIM_MS:
                 self.oled.contrast(C.SCREEN_DIM_CONTRAST)
                 self._veille = _VEILLE_ATTENUEE
-            elif self._veille == _VEILLE_ATTENUEE and inactif > C.SCREEN_OFF_MS:
+            elif (self._veille == _VEILLE_ATTENUEE
+                  and inactif > C.SCREEN_OFF_MS
+                  and self.vue != "agenda"):
+                # UN AGENDA, ON LE REGARDE SANS RIEN TOUCHER. L'eteindre au
+                # bout d'un quart d'heure d'inactivite le rendrait inutile :
+                # c'est justement quand on ne tape pas qu'on veut le voir.
+                # Il reste donc ATTENUE, jamais eteint - le contraste
+                # minimal use bien moins les pixels que le plein eclat, et
+                # son contenu bouge de toute facon toutes les minutes.
                 self.oled.sleep(True)
                 self._veille = _VEILLE_ETEINTE
         except Exception as exc:
@@ -5636,7 +5906,10 @@ class Display:
         if self._veille == _VEILLE_ETEINTE:
             return          # ecran eteint : plus rien a animer ni a envoyer
 
-        if self.splash_until is None:
+        if self.splash_until is None and self.vue == "agenda":
+            self._tick_agenda(now)
+
+        elif self.splash_until is None:
             # --- fin du surlignage ------------------------------------
             if (self.surbrillance >= 0
                     and ticks_diff(now, self._surbrillance_t) >= 0):
@@ -5684,6 +5957,38 @@ class Display:
             # Un ecran arrache en cours de route ne doit pas arreter le clavier.
             self.disable(exc)
 
+    def _tick_agenda(self, now):
+        """Anime la vue agenda : la minute qui tourne, l'intitule qui defile.
+
+        On ne redessine tout QU'AU CHANGEMENT DE MINUTE - soixante fois
+        moins souvent qu'a chaque tour de boucle. Entre deux, seule la
+        derniere ligne bouge, et elle ne coute qu'une page sur huit.
+        """
+        minute = self.agenda.minute(now) if self.agenda else None
+        if minute != self._ag_minute:
+            self._ag_minute = minute
+            self._ag_resume(minute)
+            self._redessiner()
+            return
+
+        # Meme va-et-vient que le nom de document : une pause a chaque
+        # bout, pour laisser le temps de lire le debut puis la fin.
+        if self._ag_defil_max > 0 and ticks_diff(now, self._ag_defil_t) >= 0:
+            self._ag_defil_x += self._ag_defil_sens
+            pause = getattr(C, "AGENDA_SCROLL_PAUSE_MS", 1600)
+            if self._ag_defil_x >= self._ag_defil_max:
+                self._ag_defil_x = self._ag_defil_max
+                self._ag_defil_sens = -1
+                self._ag_defil_t = ticks_add(now, pause)
+            elif self._ag_defil_x <= 0:
+                self._ag_defil_x = 0
+                self._ag_defil_sens = 1
+                self._ag_defil_t = ticks_add(now, pause)
+            else:
+                self._ag_defil_t = ticks_add(
+                    now, getattr(C, "AGENDA_SCROLL_MS", 70))
+            self._rafraichir_agenda_bas()
+
     def flush_startup(self):
         """Envoie l'image entiere d'un coup.
 
@@ -5692,6 +5997,269 @@ class Display:
         """
         for _ in range(9):
             self.tick(ticks_ms())
+```
+
+---
+
+## device/agenda.py
+
+`254 lignes - sha256 c814019a9c1f63aa`
+
+```python
+# -*- coding: utf-8 -*-
+"""
+agenda.py - La journee du jour, telle que le PC la raconte a la carte.
+
+=====================================================================
+CE FICHIER NE DESSINE RIEN
+=====================================================================
+Il ne connait ni l'ecran, ni le port serie. Il repond a quatre questions,
+et rien d'autre :
+
+    quelle heure est-il ?           minute(now)
+    qu'est-ce qui est en cours ?    courant(minute)
+    qu'est-ce qui vient ensuite ?   prochain(minute)
+    que montrer dans la fenetre ?   fenetre(minute)
+
+C'est ce qui le rend testable sur un PC, sans carte et sans ecran : tous
+les cas penibles - un evenement a cheval sur minuit, une heure perimee,
+deux reunions qui se chevauchent - se verifient en une milliseconde.
+
+=====================================================================
+LA CARTE N'A PAS D'HORLOGE, ET C'EST IMPORTANT
+=====================================================================
+L'ESP32-S3 n'a aucune pile de sauvegarde : au branchement, il ne sait ni
+l'heure ni la date. C'est le compagnon PC qui les lui envoie, toutes les
+minutes.
+
+Entre deux messages, on extrapole avec ticks_ms() - c'est fiable a la
+seconde pres sur quelques minutes. Mais si le compagnon se TAIT (PC en
+veille, cable debranche, programme ferme), cette extrapolation derive
+sans que rien ne le signale.
+
+D'ou la regle, et elle est absolue : au-dela de AGENDA_HEURE_PERIMEE_MS
+sans nouvelle, minute() renvoie None. L'ecran affiche alors "--:--" et
+efface la ligne "maintenant". UNE HEURE FAUSSE EST PIRE QUE PAS D'HEURE :
+elle te ferait rater une reunion en te croyant a l'heure.
+
+=====================================================================
+LE FORMAT RECU
+=====================================================================
+    H:19:47|DIM 13              l'heure et le libelle du jour
+    !AGBEGIN                    debut de la liste
+    A:16:00|17:00|ELDV - Etude et modelisation 3D
+    A:19:30|21:00|tache 1
+    !AGEND                      fin : la liste remplace l'ancienne
+
+La liste n'est adoptee qu'a !AGEND : une transmission coupee en deux ne
+laisse jamais un agenda a moitie efface a l'ecran.
+"""
+
+from time import ticks_ms, ticks_diff
+import config as C
+
+MINUTES_PAR_JOUR = 24 * 60
+
+
+def minutes_depuis_texte(texte):
+    """'19:47' -> 1187. None si ce n'est pas une heure valable.
+
+    On ne devine rien : une entree illisible vaut None, et l'appelant
+    decide quoi en faire. Une heure inventee serait pire que pas d'heure.
+    """
+    try:
+        heures, minutes = str(texte).strip().split(":")
+        heures, minutes = int(heures), int(minutes)
+    except Exception:
+        return None
+    if not (0 <= heures <= 23 and 0 <= minutes <= 59):
+        return None
+    return heures * 60 + minutes
+
+
+def texte_depuis_minutes(minute):
+    """1187 -> '19:47'. '--:--' si on ne sait pas."""
+    if minute is None:
+        return "--:--"
+    minute = int(minute) % MINUTES_PAR_JOUR
+    return "%02d:%02d" % (minute // 60, minute % 60)
+
+
+def duree_lisible(minutes):
+    """Un ecart en minutes, en trois caracteres ou presque : 13m, 2h05."""
+    minutes = int(minutes)
+    if minutes < 60:
+        return "%dm" % minutes
+    return "%dh%02d" % (minutes // 60, minutes % 60)
+
+
+class Agenda:
+    """Ce que la carte sait de ta journee. Rien de plus."""
+
+    def __init__(self):
+        self.jour = ""              # "DIM 13", tel que le PC l'envoie
+        self.evenements = []        # [(debut, fin, titre), ...] tries
+        self._minute = None         # minute du jour au dernier message
+        self._recu = 0              # ticks_ms de ce message
+        self._en_cours = None       # liste en cours de reception
+
+    # ------------------------------------------------------------------
+    # L'heure
+    # ------------------------------------------------------------------
+    def set_heure(self, texte, now=None):
+        """Traite 'H:19:47|DIM 13'. Retourne True si c'est exploitable."""
+        texte = str(texte or "")
+        if "|" in texte:
+            heure, jour = texte.split("|", 1)
+        else:
+            heure, jour = texte, self.jour
+        minute = minutes_depuis_texte(heure)
+        if minute is None:
+            return False
+        self._minute = minute
+        self._recu = ticks_ms() if now is None else now
+        self.jour = str(jour).strip()[:10]
+        return True
+
+    def minute(self, now=None):
+        """La minute du jour, ou None si on ne peut plus la garantir.
+
+        Entre deux messages du PC on extrapole avec l'horloge interne.
+        Au-dela de AGENDA_HEURE_PERIMEE_MS, on ne garantit plus rien et on
+        le dit, plutot que d'afficher une heure qui a derive.
+        """
+        if self._minute is None:
+            return None
+        now = ticks_ms() if now is None else now
+        ecart = ticks_diff(now, self._recu)
+        if ecart < 0:
+            ecart = 0
+        if ecart > getattr(C, "AGENDA_HEURE_PERIMEE_MS", 300000):
+            return None
+        return (self._minute + ecart // 60000) % MINUTES_PAR_JOUR
+
+    def heure_perimee(self, now=None):
+        """A-t-on deja eu l'heure, mais plus assez recemment ?
+
+        Sert a distinguer deux messages a l'ecran : "le PC ne m'a jamais
+        parle" et "le PC s'est taise". Ce n'est pas la meme panne.
+        """
+        return self._minute is not None and self.minute(now) is None
+
+    # ------------------------------------------------------------------
+    # La liste des evenements
+    # ------------------------------------------------------------------
+    def commencer(self):
+        """!AGBEGIN : on ouvre une liste neuve, sans toucher a l'ancienne."""
+        self._en_cours = []
+
+    def ajouter(self, texte):
+        """A:16:00|17:00|ELDV - Etude : une ligne de la liste en cours.
+
+        Une ligne illisible est ignoree en silence - une reunion perdue
+        vaut mieux qu'un agenda refuse en entier - mais elle n'annule pas
+        la transmission.
+        """
+        if self._en_cours is None:
+            return False
+        if len(self._en_cours) >= getattr(C, "AGENDA_MAX", 16):
+            return False
+        morceaux = str(texte or "").split("|", 2)
+        if len(morceaux) < 3:
+            return False
+        debut = minutes_depuis_texte(morceaux[0])
+        fin = minutes_depuis_texte(morceaux[1])
+        titre = morceaux[2].strip()[:getattr(C, "AGENDA_TITRE_MAX", 40)]
+        if debut is None or fin is None or not titre:
+            return False
+        # Une reunion qui finit avant de commencer passe minuit. On la
+        # borne a la fin de la journee : l'ecran ne montre qu'aujourd'hui.
+        if fin <= debut:
+            fin = MINUTES_PAR_JOUR - 1
+        self._en_cours.append((debut, fin, titre))
+        return True
+
+    def terminer(self):
+        """!AGEND : la liste recue remplace l'ancienne, d'un seul coup.
+
+        C'est ici, et nulle part avant, que l'ecran change. Une liaison
+        coupee au milieu d'une transmission laisse donc l'agenda PRECEDENT
+        affiche, pas un agenda a moitie vide.
+        """
+        if self._en_cours is None:
+            return False
+        self.evenements = sorted(self._en_cours)
+        self._en_cours = None
+        return True
+
+    # ------------------------------------------------------------------
+    # Les questions que l'ecran pose
+    # ------------------------------------------------------------------
+    def courant(self, minute):
+        """L'evenement en cours a cette minute, ou None.
+
+        Si deux se chevauchent - ca arrive, on est invite a deux reunions
+        en meme temps - on rend celui qui finit le plus tot : c'est celui
+        dont l'echeance presse.
+        """
+        if minute is None:
+            return None
+        en_cours = [e for e in self.evenements if e[0] <= minute < e[1]]
+        if not en_cours:
+            return None
+        return min(en_cours, key=lambda e: e[1])
+
+    def prochain(self, minute):
+        """Le premier evenement qui n'a pas encore commence, ou None."""
+        if minute is None:
+            return None
+        for evenement in self.evenements:
+            if evenement[0] > minute:
+                return evenement
+        return None
+
+    def fenetre(self, minute):
+        """(heure_de_depart, evenements visibles) pour la vue timeline.
+
+        La fenetre glisse avec l'heure : une heure de passe, le reste en
+        avenir. On n'a rien a regler, et le passe s'en va tout seul.
+        """
+        heures = getattr(C, "AGENDA_FENETRE_H", 5)
+        avant = getattr(C, "AGENDA_AVANT_H", 1)
+        if minute is None:
+            # Sans heure, on montre le debut de la journee plutot que rien :
+            # la liste reste lisible, seule la ligne "maintenant" manque.
+            depart = self.evenements[0][0] // 60 if self.evenements else 8
+        else:
+            depart = minute // 60 - avant
+        if depart < 0:
+            depart = 0
+        if depart + heures > 24:
+            depart = 24 - heures
+        debut, fin = depart * 60, (depart + heures) * 60
+        visibles = [e for e in self.evenements if e[1] > debut and e[0] < fin]
+        return depart, visibles
+
+    def resume(self, minute):
+        """La ligne du bas : (prefixe fixe, intitule qui defile).
+
+        Trois situations, trois reponses :
+          - une reunion est EN COURS  -> quand finit-elle
+          - une reunion approche      -> dans combien de temps
+          - plus rien aujourd'hui     -> le dire, et ne pas laisser vide
+        """
+        if minute is None:
+            return ("", "Heure inconnue - le PC ne repond plus")
+        actuel = self.courant(minute)
+        if actuel is not None:
+            return (">" + texte_depuis_minutes(actuel[1]), actuel[2])
+        suivant = self.prochain(minute)
+        if suivant is None:
+            return ("", "Plus rien aujourd'hui")
+        ecart = suivant[0] - minute
+        if ecart < 60:
+            return (duree_lisible(ecart), suivant[2])
+        return (texte_depuis_minutes(suivant[0]), suivant[2])
 ```
 
 ---
@@ -6234,7 +6802,7 @@ def limiter(couleur):
 
 ## device/diag.py
 
-`739 lignes - sha256 ba3118177db84e29`
+`740 lignes - sha256 c08edec85f252b48`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -6290,7 +6858,8 @@ import config as C
 # Les fichiers que le firmware attend sur la carte.
 MODULES_ATTENDUS = ("config", "profiles", "runtime", "inputs", "gestures",
                     "combos", "layouts", "store", "stats", "link",
-                    "hid_keyboard", "display", "led", "rgb", "sh1106")
+                    "hid_keyboard", "display", "agenda", "led", "rgb",
+                    "sh1106")
 
 # Les reglages ajoutes au fil des versions. Un config.py conserve d'une
 # version precedente ne les a pas : le firmware se rabat sur une valeur

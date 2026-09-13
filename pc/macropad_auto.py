@@ -74,6 +74,7 @@ modifie.
 """
 
 import argparse
+import datetime
 import json
 import os
 import sys
@@ -546,6 +547,192 @@ def nom_document(titre, programme=""):
 # =====================================================================
 # 3. Le dialogue avec le macropad
 # =====================================================================
+# =====================================================================
+# L'AGENDA DU JOUR
+# =====================================================================
+# La carte n'a AUCUNE horloge sauvegardee : c'est ce script qui lui donne
+# l'heure, toutes les minutes, et la journee quand elle change.
+#
+# POURQUOI UN FICHIER, ET PAS UNE CONNEXION AU CALENDRIER
+# Le "nouvel Outlook" n'expose plus d'automatisation locale, et une
+# inscription d'application Azure est souvent refusee en entreprise. On
+# lit donc un FICHIER que quelqu'un d'autre remplit : un flux Power
+# Automate, un script maison, ou toi a la main pour essayer. Le compagnon
+# se moque de sa provenance, et aucun identifiant ne traverse ce code.
+#
+# Format attendu (les cles anglaises de Microsoft Graph sont acceptees
+# telles quelles, pour qu'un export brut fonctionne sans transformation) :
+#
+#     {"evenements": [
+#        {"debut": "2026-09-13T16:00:00", "fin": "2026-09-13T17:00:00",
+#         "titre": "ELDV - Etude et modelisation 3D"}
+#     ]}
+
+_JOURS = ("LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM")
+
+# L'ecran n'a que la police ASCII 8x8 de MicroPython : un caractere
+# accentue y sortirait en charabia. On translittere donc AVANT d'envoyer,
+# plutot que de laisser la carte afficher n'importe quoi.
+_SANS_ACCENT = {
+    "\u00e0": "a", "\u00e2": "a", "\u00e4": "a", "\u00e7": "c",
+    "\u00e9": "e", "\u00e8": "e", "\u00ea": "e", "\u00eb": "e",
+    "\u00ee": "i", "\u00ef": "i", "\u00f4": "o", "\u00f6": "o",
+    "\u00f9": "u", "\u00fb": "u", "\u00fc": "u", "\u0153": "oe",
+    "\u00e6": "ae", "\u2019": "'", "\u2018": "'", "\u2013": "-",
+    "\u2014": "-", "\u00a0": " ", "\u20ac": "EUR",
+}
+
+
+def sans_accents(texte):
+    """Rend un texte affichable par la police ASCII de l'ecran."""
+    sortie = []
+    for caractere in str(texte or ""):
+        remplace = _SANS_ACCENT.get(caractere.lower())
+        if remplace is not None:
+            sortie.append(remplace.upper() if caractere.isupper() else remplace)
+        elif 32 <= ord(caractere) < 127:
+            sortie.append(caractere)
+        else:
+            sortie.append("?")
+    return "".join(sortie)
+
+
+def _texte_datetime(valeur):
+    """Microsoft Graph imbrique ses dates : {"dateTime": "...", ...}."""
+    if isinstance(valeur, dict):
+        for cle in ("dateTime", "datetime", "date", "value"):
+            if valeur.get(cle):
+                return valeur[cle]
+        return ""
+    return valeur
+
+
+def instant(valeur, aujourdhui):
+    """Texte ISO -> datetime LOCAL naif, ou None si c'est illisible.
+
+    LE PIEGE A DESAMORCER : un calendrier d'entreprise donne tres souvent
+    ses heures en UTC ("...Z") ou avec un decalage. Les prendre telles
+    quelles decalerait TOUT l'agenda d'une ou deux heures selon la saison,
+    sans que rien ne le signale - le pire genre de panne. On convertit
+    donc a l'heure locale du PC, explicitement.
+
+    "16:00" tout court est accepte aussi : c'est ce qu'on ecrit dans un
+    fichier d'essai, et c'est alors l'heure locale d'aujourd'hui.
+    """
+    texte = str(_texte_datetime(valeur) or "").strip()
+    if not texte:
+        return None
+    if "T" not in texte and " " not in texte and ":" in texte:
+        texte = "%sT%s" % (aujourdhui.isoformat(), texte)
+    try:
+        moment = datetime.datetime.fromisoformat(texte.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if moment.tzinfo is not None:
+        moment = moment.astimezone().replace(tzinfo=None)
+    return moment
+
+
+def evenements_du_jour(donnees, aujourdhui, maximum=16, duree_defaut=30):
+    """Fichier lu -> [(debut, fin, titre), ...] en minutes, trie.
+
+    Fonction PURE : ni fichier, ni port serie, ni horloge. C'est elle que
+    les tests verifient, avec les cas qui font mal - une heure en UTC, un
+    rendez-vous a cheval sur minuit, une entree sans titre.
+    """
+    liste = donnees.get("evenements") if isinstance(donnees, dict) else donnees
+    if isinstance(donnees, dict) and liste is None:
+        liste = donnees.get("value")          # forme brute de Graph
+    resultat = []
+    for entree in (liste or []):
+        if not isinstance(entree, dict):
+            continue
+        debut = instant(entree.get("debut", entree.get("start")), aujourdhui)
+        titre = sans_accents(
+            entree.get("titre", entree.get("subject", ""))).strip()
+        if debut is None or not titre or debut.date() != aujourdhui:
+            continue
+        fin = instant(entree.get("fin", entree.get("end")), aujourdhui)
+        if fin is None or fin <= debut:
+            fin = debut + datetime.timedelta(minutes=duree_defaut)
+        if fin.date() != aujourdhui:
+            # Une reunion qui deborde sur demain s'arrete au bord de
+            # l'ecran : cette vue ne montre qu'aujourd'hui.
+            fin = datetime.datetime.combine(aujourdhui,
+                                            datetime.time(23, 59))
+        resultat.append((debut.hour * 60 + debut.minute,
+                         fin.hour * 60 + fin.minute, titre))
+    resultat.sort()
+    return resultat[:maximum]
+
+
+def ligne_heure(moment):
+    """La ligne H: envoyee chaque minute : heure et libelle du jour."""
+    return "H:%02d:%02d|%s %02d" % (moment.hour, moment.minute,
+                                    _JOURS[moment.weekday()], moment.day)
+
+
+def lignes_agenda(evenements, titre_max=40):
+    """Les lignes du protocole. La liste n'est adoptee qu'au !AGEND."""
+    lignes = ["!AGBEGIN"]
+    for debut, fin, titre in evenements:
+        lignes.append("A:%02d:%02d|%02d:%02d|%s"
+                      % (debut // 60, debut % 60, fin // 60, fin % 60,
+                         titre[:titre_max]))
+    lignes.append("!AGEND")
+    return lignes
+
+
+class SourceAgenda:
+    """Le fichier d'agenda, relu quand il change.
+
+    Il peut disparaitre, etre illisible, ou etre en train d'etre reecrit
+    par le flux qui le produit : aucun de ces cas n'a le droit d'arreter
+    le compagnon. On garde alors la derniere liste valable, et on le dit
+    UNE fois - pas a chaque tour de boucle.
+    """
+
+    def __init__(self, chemin):
+        self.chemin = chemin
+        self.evenements = []
+        self._signature = None
+        self._erreur_signalee = None
+
+    def relire(self, aujourdhui):
+        """Retourne True si la liste a change depuis le dernier appel."""
+        if not self.chemin:
+            return False
+        try:
+            etat = os.stat(self.chemin)
+            signature = (etat.st_mtime, etat.st_size)
+        except OSError as exc:
+            self._signaler("agenda illisible (%s)" % exc)
+            return False
+        if signature == self._signature:
+            return False
+        try:
+            with open(self.chemin, encoding="utf-8") as fichier:
+                donnees = json.load(fichier)
+        except Exception as exc:
+            # Le fichier est peut-etre en cours d'ecriture : on reessaiera
+            # au prochain tour, sans toucher a ce qui est deja affiche.
+            self._signaler("agenda mal forme (%s)" % exc)
+            return False
+        self._signature = signature
+        self._erreur_signalee = None
+        neufs = evenements_du_jour(donnees, aujourdhui)
+        if neufs == self.evenements:
+            return False
+        self.evenements = neufs
+        print("Agenda : %d evenement(s) aujourd'hui" % len(neufs))
+        return True
+
+    def _signaler(self, message):
+        if message != self._erreur_signalee:
+            print("Agenda :", message)
+            self._erreur_signalee = message
+
+
 class Panneau:
     """La fenetre qui montre les commandes du profil courant.
 
@@ -1723,6 +1910,10 @@ def main():
                            help="duree d'affichage du recapitulatif des "
                                 "commandes au changement de profil "
                                 "(0 pour ne pas l'afficher)")
+    analyseur.add_argument(
+        "--agenda",
+        help="fichier JSON de l'agenda du jour a afficher sur l'ecran "
+             "(voir docs/12-agenda-oled.md)")
     analyseur.add_argument("--journal", action="store_true",
                            help="ecrire aussi dans macropad_auto.log "
                                 "(utilise par le demarrage automatique)")
@@ -1760,6 +1951,14 @@ def main():
     dernier_bas = None
     generation = macropad.generation
     prochaine_sync = time.time() + PERIODE_SYNC
+
+    # L'agenda du jour. Sans --agenda, rien de tout cela ne tourne et le
+    # compagnon se comporte exactement comme avant.
+    agenda = SourceAgenda(options.agenda)
+    derniere_minute = None
+    dernier_jour = None
+    if options.agenda:
+        print("Agenda lu dans :", options.agenda)
     try:
         while True:
             maintenant = time.time()
@@ -1770,6 +1969,9 @@ def main():
             if macropad.generation != generation:
                 generation = macropad.generation
                 dernier_profil = dernier_bas = None
+                # La carte a redemarre : elle a tout oublie, l'heure
+                # comprise. On la lui redonne au prochain tour.
+                derniere_minute = dernier_jour = None
                 prochaine_sync = maintenant
 
             if maintenant >= prochaine_sync:
@@ -1780,6 +1982,25 @@ def main():
                 ok = table.synchroniser(macropad)
                 prochaine_sync = maintenant + (PERIODE_SYNC if ok else 300.0)
             table.recharger()
+
+            # --- l'heure, puis l'agenda -------------------------------
+            # L'heure part a CHAQUE MINUTE : c'est elle qui fait descendre
+            # la ligne "maintenant" et tourner le compte a rebours. Sans
+            # elle, la carte finit par afficher "--:--" plutot qu'une
+            # heure qui aurait derive - voir device/agenda.py.
+            if options.agenda:
+                horloge = datetime.datetime.now()
+                repere = (horloge.hour, horloge.minute)
+                if repere != derniere_minute:
+                    if macropad.envoyer(ligne_heure(horloge)):
+                        derniere_minute = repere
+                change = agenda.relire(horloge.date())
+                if change or dernier_jour != horloge.date():
+                    envoye = True
+                    for ligne in lignes_agenda(agenda.evenements):
+                        envoye = macropad.envoyer(ligne) and envoye
+                    if envoye:
+                        dernier_jour = horloge.date()
 
             programme, titre = fenetre.lire()
             if programme is None:

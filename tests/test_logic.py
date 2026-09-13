@@ -2924,6 +2924,404 @@ class NomCompletDesTouches(unittest.TestCase):
                          profiles.NOMS["CIVIL3D"]["B6"])
 
 
+class AgendaDuJour(unittest.TestCase):
+    """La journee que le PC raconte a la carte.
+
+    Tout est ici verifiable sur PC : agenda.py ne connait ni l'ecran, ni
+    le port serie. Les cas qui font mal - une heure perimee, une
+    transmission coupee, deux reunions en meme temps - se jouent en une
+    milliseconde.
+    """
+
+    def setUp(self):
+        import agenda
+        self.mod = agenda
+        clock[0] = 0
+        self.ag = agenda.Agenda()
+
+    def _remplir(self, *lignes):
+        self.ag.commencer()
+        for ligne in lignes:
+            self.ag.ajouter(ligne)
+        self.ag.terminer()
+
+    # --- l'heure ---------------------------------------------------
+    def test_l_heure_et_le_jour_sont_lus(self):
+        self.assertTrue(self.ag.set_heure("19:47|DIM 13", 0))
+        self.assertEqual(self.ag.minute(0), 19 * 60 + 47)
+        self.assertEqual(self.ag.jour, "DIM 13")
+
+    def test_une_heure_illisible_est_refusee(self):
+        """On ne devine pas : une heure inventee ferait rater une reunion."""
+        for mauvaise in ("", "25:00", "12:99", "midi", "12", "ab:cd"):
+            self.assertFalse(self.ag.set_heure(mauvaise, 0), mauvaise)
+        self.assertIsNone(self.ag.minute(0))
+
+    def test_l_heure_avance_toute_seule_entre_deux_messages(self):
+        """Le PC parle chaque minute ; entre deux, on extrapole."""
+        self.ag.set_heure("19:47|DIM 13", 0)
+        self.assertEqual(self.ag.minute(90 * 1000), 19 * 60 + 48)
+
+    def test_une_heure_trop_vieille_devient_inconnue(self):
+        """LA REGLE QUI COMPTE : mieux vaut pas d'heure qu'une fausse.
+
+        Si le compagnon se tait - PC en veille, cable debranche - notre
+        extrapolation derive sans que rien ne le signale. Passe le delai,
+        on rend None : l'ecran affichera "--:--" et effacera la ligne
+        "maintenant", au lieu de laisser croire qu'on a le temps.
+        """
+        self.ag.set_heure("19:47|DIM 13", 0)
+        limite = C.AGENDA_HEURE_PERIMEE_MS
+        self.assertIsNotNone(self.ag.minute(limite - 1))
+        self.assertIsNone(self.ag.minute(limite + 1))
+        self.assertTrue(self.ag.heure_perimee(limite + 1))
+        self.assertFalse(self.ag.heure_perimee(limite - 1))
+
+    def test_minuit_ne_fait_pas_deborder_l_heure(self):
+        """23:59 + une minute fait 00:00, pas 24:00."""
+        self.ag.set_heure("23:59|DIM 13", 0)
+        self.assertEqual(self.ag.minute(60 * 1000), 0)
+        self.assertEqual(self.ag.minute(120 * 1000), 1)
+
+    # --- la liste --------------------------------------------------
+    def test_la_liste_n_est_adoptee_qu_a_la_fin(self):
+        """Une transmission coupee en deux laisse l'ancienne affichee.
+
+        Sans cette regle, un cable qui bouge pendant l'envoi laisserait
+        un agenda a moitie efface - et on croirait sa journee libre.
+        """
+        self._remplir("16:00|17:00|ELDV")
+        self.ag.commencer()
+        self.ag.ajouter("19:30|21:00|tache 1")
+        self.assertEqual([e[2] for e in self.ag.evenements], ["ELDV"],
+                         "l'agenda a change avant la fin de la transmission")
+        self.ag.terminer()
+        self.assertEqual([e[2] for e in self.ag.evenements], ["tache 1"])
+
+    def test_une_ligne_illisible_n_annule_pas_les_autres(self):
+        """Une reunion perdue vaut mieux qu'un agenda refuse en entier."""
+        self.ag.commencer()
+        self.assertFalse(self.ag.ajouter("n'importe quoi"))
+        self.assertFalse(self.ag.ajouter("16:00|17:00|"))      # sans titre
+        self.assertTrue(self.ag.ajouter("16:00|17:00|ELDV"))
+        self.ag.terminer()
+        self.assertEqual(len(self.ag.evenements), 1)
+
+    def test_la_liste_est_bornee(self):
+        """La carte a 224 Ko de RAM : rien ne grossit sans limite."""
+        self.ag.commencer()
+        for n in range(C.AGENDA_MAX + 10):
+            self.ag.ajouter("0%d:00|0%d:30|R%d" % (n % 10, n % 10, n))
+        self.ag.terminer()
+        self.assertEqual(len(self.ag.evenements), C.AGENDA_MAX)
+
+    def test_les_evenements_sont_tries(self):
+        self._remplir("19:30|21:00|tache 1", "16:00|17:00|ELDV")
+        self.assertEqual([e[2] for e in self.ag.evenements],
+                         ["ELDV", "tache 1"])
+
+    # --- les questions que l'ecran pose ----------------------------
+    def test_en_cours_et_a_venir(self):
+        self._remplir("16:00|17:00|ELDV", "19:30|21:00|tache 1")
+        midi = 12 * 60
+        self.assertIsNone(self.ag.courant(midi))
+        self.assertEqual(self.ag.prochain(midi)[2], "ELDV")
+        pendant = 19 * 60 + 47
+        self.assertEqual(self.ag.courant(pendant)[2], "tache 1")
+        self.assertIsNone(self.ag.prochain(pendant))
+
+    def test_deux_reunions_en_meme_temps_montrent_la_plus_pressee(self):
+        """Etre invite a deux reunions a la fois arrive. On montre celle
+        qui finit le plus tot : c'est son echeance qui presse.
+
+        Le cas est choisi pour DISCRIMINER : la longue commence AVANT, elle
+        vient donc en premier dans la liste triee. Prendre simplement la
+        premiere trouvee donnerait la mauvaise reponse - et c'est
+        exactement ce qu'une premiere version de ce test laissait passer.
+        """
+        self._remplir("13:00|17:00|Atelier", "14:00|15:00|Point rapide")
+        self.assertEqual(self.ag.evenements[0][2], "Atelier")   # la 1re
+        self.assertEqual(self.ag.courant(14 * 60 + 30)[2], "Point rapide")
+
+    def test_la_fenetre_glisse_avec_l_heure(self):
+        """Une heure de passe pour se reperer, le reste en avenir."""
+        self._remplir("16:00|17:00|ELDV")
+        depart, visibles = self.ag.fenetre(19 * 60 + 47)
+        self.assertEqual(depart, 18)
+        self.assertEqual(visibles, [])          # 16h est sorti par le haut
+        depart, visibles = self.ag.fenetre(16 * 60 + 30)
+        self.assertEqual(depart, 15)
+        self.assertEqual(len(visibles), 1)
+
+    def test_la_fenetre_ne_sort_jamais_de_la_journee(self):
+        for minute in (0, 30, 23 * 60 + 59):
+            depart, _ = self.ag.fenetre(minute)
+            self.assertGreaterEqual(depart, 0)
+            self.assertLessEqual(depart + C.AGENDA_FENETRE_H, 24)
+
+    def test_le_resume_dit_la_fin_quand_c_est_en_cours(self):
+        self._remplir("19:30|21:00|tache 1")
+        prefixe, titre = self.ag.resume(19 * 60 + 47)
+        self.assertEqual(prefixe, ">21:00")
+        self.assertEqual(titre, "tache 1")
+
+    def test_le_resume_compte_a_rebours_quand_ca_approche(self):
+        self._remplir("19:30|21:00|tache 1")
+        prefixe, titre = self.ag.resume(19 * 60 + 17)
+        self.assertEqual(prefixe, "13m")
+        self.assertEqual(titre, "tache 1")
+
+    def test_le_resume_donne_l_heure_quand_c_est_loin(self):
+        self._remplir("19:30|21:00|tache 1")
+        self.assertEqual(self.ag.resume(12 * 60)[0], "19:30")
+
+    def test_le_resume_ne_laisse_jamais_la_ligne_vide(self):
+        """Un ecran muet ressemble a une panne. Il doit dire pourquoi."""
+        self._remplir("08:00|09:00|Passee")
+        self.assertIn("Plus rien", self.ag.resume(20 * 60)[1])
+        self.assertIn("Heure inconnue", self.ag.resume(None)[1])
+
+
+class VueAgendaSurLEcran(unittest.TestCase):
+    """Le dessin lui-meme : il ne doit RIEN ecrire hors des 128x64.
+
+    Un depassement ne se voit pas sur un PC - framebuf coupe en silence -
+    mais il efface une partie de l'image sur la vraie dalle. C'est
+    exactement le genre de defaut qu'on ne trouve qu'en soudant.
+    """
+
+    def _ecran(self):
+        class EcranFactice:
+            def __init__(self):
+                self.hors = 0
+                self.pages = []
+                self.dort = False
+                self.contraste = None
+                self.displaybuf = bytearray(1024)
+
+            def _v(self, x, y, w, h):
+                if x < 0 or y < 0 or x + w > 128 or y + h > 64:
+                    self.hors += 1
+
+            def fill(self, c):
+                pass
+
+            def fill_rect(self, x, y, w, h, c):
+                self._v(x, y, w, h)
+
+            def rect(self, x, y, w, h, c):
+                self._v(x, y, w, h)
+
+            def hline(self, x, y, w, c):
+                self._v(x, y, w, 1)
+
+            def vline(self, x, y, h, c):
+                self._v(x, y, 1, h)
+
+            def pixel(self, x, y, c=None):
+                self._v(x, y, 1, 1)
+
+            def text(self, s, x, y, c=1):
+                if y >= 54:
+                    # La ligne du bas defile VOLONTAIREMENT hors de
+                    # l'ecran : seule sa hauteur est verifiable.
+                    if y < 0 or y + 8 > 64:
+                        self.hors += 1
+                    return
+                self._v(x, y, 8 * len(s), 8)
+
+            def contrast(self, valeur):
+                self.contraste = valeur
+
+            def sleep(self, valeur):
+                self.dort = valeur
+
+            def write_cmd(self, c):
+                pass
+
+            def write_data(self, b):
+                self.pages.append(bytes(b))
+
+        from display import Display
+        from agenda import Agenda
+        clock[0] = 0
+        ecran = Display()
+        ecran.oled = EcranFactice()
+        journee = Agenda()
+        journee.commencer()
+        # Une journee volontairement penible : un rendez-vous avant la
+        # fenetre, un a cheval sur son bord, une reunion eclair de cinq
+        # minutes, un intitule bien trop long, et un evenement de nuit.
+        for ligne in ("08:00|09:00|Tot le matin",
+                      "11:00|12:00|BUGEY II / Point d'equipe Atlas",
+                      "14:00|14:05|Eclair",
+                      "16:00|17:30|ELDV - Etude et modelisation 3D",
+                      "19:30|21:00|tache 1",
+                      "23:30|23:59|Tard"):
+            journee.ajouter(ligne)
+        journee.terminer()
+        ecran.set_agenda(journee)
+        return ecran, journee
+
+    def test_aucun_debordement_a_aucune_heure_du_jour(self):
+        """On fait tourner les 24 heures, minute par quart d'heure."""
+        ecran, journee = self._ecran()
+        for minute in range(0, 24 * 60, 15):
+            journee.set_heure("%02d:%02d|DIM 13" % (minute // 60, minute % 60),
+                              clock[0])
+            ecran.rafraichir_agenda(clock[0])
+            for _ in range(40):
+                clock[0] += 10
+                ecran.tick(clock[0])
+        self.assertEqual(ecran.oled.hors, 0,
+                         "la vue agenda ecrit hors des 128x64 pixels")
+        self.assertGreater(len(ecran.oled.pages), 8)
+
+    def test_sans_heure_l_ecran_dessine_quand_meme(self):
+        """Le PC n'a jamais parle : on montre la liste, sans ligne
+        "maintenant". Un ecran noir ressemblerait a une panne."""
+        ecran, _ = self._ecran()
+        ecran.rafraichir_agenda(clock[0])
+        ecran.flush_startup()
+        self.assertEqual(ecran.oled.hors, 0)
+        self.assertGreaterEqual(len(ecran.oled.pages), 8,
+                                "l'image complete n'a pas ete envoyee")
+
+    def test_un_agenda_vide_ne_plante_pas(self):
+        from display import Display
+        from agenda import Agenda
+        ecran, _ = self._ecran()
+        vide = Agenda()
+        vide.set_heure("10:00|LUN 01", clock[0])
+        ecran.set_agenda(vide)
+        ecran.flush_startup()
+        self.assertEqual(ecran.oled.hors, 0)
+
+    def test_l_ecran_ne_s_eteint_jamais_en_vue_agenda(self):
+        """UN AGENDA, ON LE REGARDE SANS RIEN TOUCHER.
+
+        L'economiseur eteint la dalle apres un quart d'heure sans appui.
+        Applique ici, il rendrait la vue inutile : c'est justement quand
+        on ne tape pas qu'on veut la voir. Elle reste donc attenuee - le
+        contraste minimal use bien moins les pixels - mais allumee.
+        """
+        ecran, journee = self._ecran()
+        ecran.reveiller(clock[0])
+        clock[0] += C.SCREEN_OFF_MS + 60000
+        journee.set_heure("10:00|LUN 01", clock[0])
+        ecran.tick(clock[0])        # attenuation
+        ecran.tick(clock[0])        # ... et c'est ici que l'autre vue
+        ecran.tick(clock[0])        #     s'eteindrait
+        self.assertFalse(ecran.oled.dort,
+                         "l'agenda s'est eteint au bout d'un quart d'heure")
+        self.assertEqual(ecran.oled.contraste, C.SCREEN_DIM_CONTRAST,
+                         "l'agenda n'a pas ete attenue")
+
+    def test_la_vue_macros_s_eteint_toujours(self):
+        """L'autre moitie de la regle : le tableau des macros, lui, garde
+        l'extinction. On n'a pas desactive l'economiseur pour tout le
+        monde en passant."""
+        ecran, _ = self._ecran()
+        ecran.vue = "macros"
+        ecran.macros = [("A", {}), ("B", {})]
+        ecran.reveiller(clock[0])
+        clock[0] += C.SCREEN_OFF_MS + 60000
+        ecran.tick(clock[0])        # attenuation
+        ecran.tick(clock[0])        # extinction
+        self.assertTrue(ecran.oled.dort,
+                        "l'extinction a disparu pour tout le monde")
+
+
+class AgendaAbsentDeLaCarte(unittest.TestCase):
+    """agenda.py est un fichier de PLUS a televerser. Il peut manquer.
+
+    La regle du projet vaut ici comme ailleurs : une carte dont on n'a
+    copie qu'une partie des fichiers doit DEMARRER et TAPER, pas planter.
+    """
+
+    def test_l_ecran_fonctionne_sans_agenda_py(self):
+        """Le piege evite : display.py importait agenda.py en tete de
+        fichier. Un agenda.py oublie emportait alors TOUT l'ecran - y
+        compris le tableau des macros, qui n'a rien a voir avec lui."""
+        import importlib
+        with patch.dict(sys.modules, {"agenda": None}):
+            sys.modules.pop("display", None)
+            display = importlib.import_module("display")
+            self.assertIsNone(display.agenda_mod)
+            ecran = display.Display()          # ne doit pas lever
+            self.assertIsNone(ecran.oled)      # pas d'I2C sur un PC
+        sys.modules.pop("display", None)
+        importlib.import_module("display")     # on remet le vrai
+
+    def test_le_diagnostic_reclame_agenda(self):
+        """diag.controle() doit le citer : un fichier manquant se
+        reteleverse, encore faut-il savoir lequel."""
+        import diag
+        self.assertIn("agenda", diag.MODULES_ATTENDUS)
+
+
+class InventaireDesFichiers(unittest.TestCase):
+    """CODE_COMPLET.md doit contenir TOUS les fichiers de device/.
+
+    Ce test existe a cause d'un oubli reel : agenda.py a ete ecrit,
+    teste, documente... et absent de la copie lisible du firmware, parce
+    que la liste du generateur est ecrite a la main. Personne ne l'aurait
+    vu avant d'avoir besoin du fichier.
+    """
+
+    def test_le_generateur_connait_tous_les_modules_de_device(self):
+        fichiers = sorted(p.name for p in (ROOT / "device").glob("*.py"))
+        source = (ROOT / "tools" / "generer_code_complet.py").read_text(
+            encoding="utf-8")
+        manquants = [nom for nom in fichiers
+                     if ('"%s"' % nom) not in source]
+        self.assertEqual(manquants, [],
+                         "absents de tools/generer_code_complet.py")
+
+    def test_code_complet_contient_tous_les_modules_de_device(self):
+        fichiers = sorted(p.name for p in (ROOT / "device").glob("*.py"))
+        complet = (ROOT / "CODE_COMPLET.md").read_text(encoding="utf-8")
+        manquants = [nom for nom in fichiers
+                     if ("## device/%s" % nom) not in complet]
+        self.assertEqual(manquants, [],
+                         "absents de CODE_COMPLET.md : relance "
+                         "python3 tools/generer_code_complet.py")
+
+
+class ProtocoleAgenda(unittest.TestCase):
+    """Les lignes H:, A: et !AG* telles que link.py les recoit."""
+
+    def _lien(self, agenda=None):
+        from link import Link
+        return Link(6, source=None, sortie=lambda *a: None, agenda=agenda)
+
+    def test_les_lignes_remplissent_l_agenda(self):
+        from agenda import Agenda
+        from link import EVT_AGENDA
+        journee = Agenda()
+        lien = self._lien(journee)
+        clock[0] = 0
+        self.assertEqual(lien._traiter("H:19:47|DIM 13"), (EVT_AGENDA, None))
+        self.assertIsNone(lien._traiter("!AGBEGIN"))
+        self.assertIsNone(lien._traiter("A:19:30|21:00|tache 1"))
+        self.assertEqual(lien._traiter("!AGEND"), (EVT_AGENDA, None))
+        self.assertEqual(journee.minute(0), 19 * 60 + 47)
+        self.assertEqual(len(journee.evenements), 1)
+
+    def test_sans_agenda_les_lignes_sont_ignorees_proprement(self):
+        """AGENDA_ENABLED = False : un compagnon plus recent que le
+        firmware ne doit rien casser, juste ne rien faire."""
+        lien = self._lien(None)
+        for ligne in ("H:19:47|DIM 13", "!AGBEGIN",
+                      "A:19:30|21:00|tache 1", "!AGEND"):
+            self.assertIsNone(lien._traiter(ligne), ligne)
+
+    def test_une_heure_invalide_ne_produit_aucun_evenement(self):
+        from agenda import Agenda
+        lien = self._lien(Agenda())
+        self.assertIsNone(lien._traiter("H:pas une heure"))
+
+
 class LedsRgb(unittest.TestCase):
     """Les LED RGB des touches, sans LED.
 

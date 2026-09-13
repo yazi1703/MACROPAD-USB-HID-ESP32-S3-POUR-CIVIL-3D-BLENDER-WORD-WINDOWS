@@ -51,7 +51,8 @@ import config as C
 # Les fichiers que le firmware attend sur la carte.
 MODULES_ATTENDUS = ("config", "profiles", "runtime", "inputs", "gestures",
                     "combos", "layouts", "store", "stats", "link",
-                    "hid_keyboard", "display", "led", "rgb", "sh1106")
+                    "hid_keyboard", "display", "agenda", "led", "rgb",
+                    "sh1106")
 
 # Les reglages ajoutes au fil des versions. Un config.py conserve d'une
 # version precedente ne les a pas : le firmware se rabat sur une valeur
