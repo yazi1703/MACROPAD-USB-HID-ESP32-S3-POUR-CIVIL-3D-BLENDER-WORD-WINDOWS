@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 396 tests PC réussis ; 24 fichiers Python compilés avec succès.**
+**Résultat : 397 tests PC réussis ; 24 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, seize corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,7 +14,7 @@
 
 - Compilation syntaxique des **24 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 396 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+- 397 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
   304 pour le firmware, 93 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
@@ -328,6 +328,7 @@ test_controle_signale_les_interrupteurs_a_False ... ok
 test_controle_signale_un_clavier_jamais_ouvert ... ok
 test_controle_signale_un_reglage_manquant ... ok
 test_controle_signale_une_broche_reservee ... ok
+test_des_fichiers_de_versions_differentes_sont_nommes ... ok
 test_l_ecran_affiche_USB_quand_le_clavier_n_est_pas_ouvert ... ok
 test_le_repli_vaut_la_valeur_du_depot ... ok
 test_pas_de_doublon_dans_la_configuration_livree ... ok
@@ -709,7 +710,7 @@ test_les_lieux_fouilles_sont_annonces ... ok
 test_un_OneDrive_sans_agenda_ne_donne_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 396 tests
+Ran 397 tests
 
 OK
 ```

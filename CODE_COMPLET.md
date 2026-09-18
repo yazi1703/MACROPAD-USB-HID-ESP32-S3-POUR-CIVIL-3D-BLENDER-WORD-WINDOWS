@@ -6808,7 +6808,7 @@ def limiter(couleur):
 
 ## device/diag.py
 
-`740 lignes - sha256 c08edec85f252b48`
+`772 lignes - sha256 8ede01afae27a97d`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -6866,6 +6866,16 @@ MODULES_ATTENDUS = ("config", "profiles", "runtime", "inputs", "gestures",
                     "combos", "layouts", "store", "stats", "link",
                     "hid_keyboard", "display", "agenda", "led", "rgb",
                     "sh1106")
+
+# Nombre de valeurs que store.charger() doit rendre. Il a grandi deux fois
+# (les combinaisons, puis les noms complets), et chaque fois une carte dont
+# on n'avait televerse qu'une partie des fichiers refusait de demarrer sur
+# un message qui ne nomme personne :
+#
+#     ValueError: too many values to unpack (expected 9)
+#
+# Rien n'y dit QUEL fichier est en retard. Ce controle-la le dit.
+CHAMPS_CHARGER = 10
 
 # Les reglages ajoutes au fil des versions. Un config.py conserve d'une
 # version precedente ne les a pas : le firmware se rabat sur une valeur
@@ -6934,6 +6944,28 @@ def controle():
         soucis.append("%s ne s'importe pas : %s" % (nom, exc))
     if not absents and not casses:
         print("   les %d fichiers sont la et s'importent." % len(MODULES_ATTENDUS))
+
+    # --- 1 bis. Les fichiers sont-ils de la MEME version ? ---------
+    # Tous presents ne veut pas dire tous a jour. Un store.py recent avec
+    # un main.py ancien s'importent tres bien tous les deux, et la carte
+    # plante au demarrage sans nommer le coupable.
+    print("1 bis. Coherence entre fichiers")
+    try:
+        import store
+        champs = len(store.charger(len(C.BUTTON_PINS)))
+        if champs != CHAMPS_CHARGER:
+            soucis.append("store.py rend %d valeurs, le reste du firmware "
+                          "en attend %d" % (champs, CHAMPS_CHARGER))
+            print("   store.py rend %d valeurs, on en attend %d."
+                  % (champs, CHAMPS_CHARGER))
+            print("   -> des fichiers de VERSIONS DIFFERENTES cohabitent.")
+            print("      Reteleverse TOUT le contenu de device/ d'un coup,")
+            print("      SAUF config.py (tu y perdrais tes reglages).")
+        else:
+            print("   store.py et le reste du firmware s'accordent.")
+    except Exception as exc:
+        soucis.append("store.charger() a echoue : %s" % exc)
+        print("   store.charger() a echoue : %s" % exc)
 
     # --- 2. config.py est-il a jour ? ------------------------------
     print("2. Reglages")

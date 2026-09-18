@@ -2599,6 +2599,31 @@ class ControleGeneral(unittest.TestCase):
         self.assertTrue(ok, texte)
         self.assertIn("TOUT EST COHERENT", texte)
 
+    def test_des_fichiers_de_versions_differentes_sont_nommes(self):
+        """Cas reel, rencontre au montage, et deja la deuxieme fois.
+
+        Une carte dont on n'a reteleverse qu'une PARTIE des fichiers
+        refuse de demarrer sur un message qui n'accuse personne :
+
+            ValueError: too many values to unpack (expected 9)
+
+        Tous les fichiers sont pourtant la, et chacun s'importe tres bien.
+        C'est l'ACCORD entre eux qui manque. Le controle doit le nommer,
+        et dire le remede - sinon on cherche une soudure pendant une heure,
+        ce qui est exactement ce qui s'est passe.
+        """
+        import diag
+        attendu = diag.CHAMPS_CHARGER
+        try:
+            diag.CHAMPS_CHARGER = attendu - 1      # comme un main.py ancien
+            ok, texte = self._controle()
+        finally:
+            diag.CHAMPS_CHARGER = attendu
+        self.assertFalse(ok, "le desaccord est passe inapercu")
+        self.assertIn("VERSIONS DIFFERENTES", texte)
+        self.assertIn("SAUF config.py", texte,
+                      "le remede doit rappeler de garder ses reglages")
+
 
 class BrochesAvantDeSouder(unittest.TestCase):
     """Le brochage de l'ESP32-S3, verifie AVANT le fer a souder.
