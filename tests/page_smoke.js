@@ -165,11 +165,23 @@ setTimeout(function () {
   const nbProfils = (donnees.ordre || []).length;
   const nbTouches = donnees.touches || 6;
 
+  // UN SEUL PROFIL EST AFFICHE A LA FOIS, precede de sa barre d'onglets.
+  // profs.children[0] est donc la barre, [1] la carte visible.
+  const barre = profs.children[0];
+  const onglets = (barre && barre.id === 'onglets')
+    ? barre.children.filter(function (e) { return e.tag === 'button'; })
+    : [];
+  const carte = function () { return profs.children[1]; };
+
   const vu = {
     erreur_texte: texte(registre.msg),
     texte_profs: texte(profs),
     erreur_src: registre.src.textContent,
-    cartes: profs.children.length,
+    onglets: onglets.length,
+    onglet_actif: onglets.filter(function (b) {
+      return (b.className || '').indexOf('on') >= 0;
+    }).length,
+    cartes: onglets.length ? profs.children.length - 1 : profs.children.length,
     lignes: compter(profs, 'tr'),
     listes: compter(profs, 'select'),
     src: registre.src.textContent,
@@ -184,13 +196,13 @@ setTimeout(function () {
     // des trois valeurs de gestes.
     // Par carte : nom interne, titre, puis PAR TOUCHE un libelle court,
     // un nom complet, et les trois valeurs de gestes.
-    const c = champs(profs.children[0]);
+    const c = champs(carte());
     saisir(c[2], 'ZZZ');            // libelle court de la touche 1
     saisir(c[3], 'Nom complet B1'); // son nom complet
     saisir(c[4], 'TESTVAL');        // valeur de son appui court
 
     // ---- on change aussi la couleur des LED du profil ---------------
-    const cc = couleurs(profs.children[0]);
+    const cc = couleurs(carte());
     if (cc.length) { saisir(cc[0], '#123456'); }
     // La SECONDE couleur, celle qui alterne avec la premiere.
     if (cc.length > 1) { saisir(cc[1], '#abcdef'); }
@@ -202,13 +214,20 @@ setTimeout(function () {
     // ---- les combinaisons, sur la carte qui en a ---------------------
     // Meme piege que pour les touches : chaque champ doit ecrire dans SA
     // combinaison. On modifie donc la PREMIERE et on regarde la DERNIERE.
+    // Un seul profil est affiche : pour trouver celui qui a des
+    // combinaisons, on CLIQUE LES ONGLETS. Le harnais exerce ainsi le
+    // mecanisme au lieu de le contourner - et le premier profil de
+    // l'ordre d'usine n'en a justement aucune.
     let carteCombos = null;
-    profs.children.forEach(function (carte) {
-      if (!carteCombos && parTitre(carte, 'appuyees ensemble').length > 1) {
-        carteCombos = carte;
+    vu.carte_combos = -1;
+    for (let i = 0; i < onglets.length && !carteCombos; i += 1) {
+      onglets[i].onclick();
+      const visible = registre.profs.children[1];
+      if (visible && parTitre(visible, 'appuyees ensemble').length > 1) {
+        carteCombos = visible;
+        vu.carte_combos = i;
       }
-    });
-    vu.carte_combos = profs.children.indexOf(carteCombos);
+    }
     if (carteCombos) {
       const duo = parTitre(carteCombos, 'appuyees ensemble');
       const lib = parTitre(carteCombos, 'libelle affiche');
@@ -222,14 +241,20 @@ setTimeout(function () {
     // ---- on enchaine une etape : commande, pause, validation --------
     // Chaque clic redessine la page : il faut recollecter les elements
     // apres chaque action, comme le ferait un vrai navigateur.
-    const plus = boutons(profs.children[0], '+ etape');
+    // RETOUR SUR LE PREMIER ONGLET. La recherche des combinaisons vient
+    // de cliquer ailleurs, et c'est dans la touche 1 du PREMIER profil
+    // qu'on a tape 'TESTVAL' : ajouter une etape a un autre profil ne
+    // prouverait rien. Le piege est le meme que celui que ce fichier
+    // existe pour attraper - une saisie qui part ailleurs qu'ou on croit.
+    if (onglets.length) { onglets[0].onclick(); }
+    const plus = boutons(carte(), '+ etape');
     vu.boutons_etape = plus.length;
     if (plus.length) {
       plus[0].onclick();                       // B1, appui court
-      const sel2 = listes(registre.profs.children[0])[1];
+      const sel2 = listes(carte())[1];
       sel2.value = 'pause';
       if (sel2.onchange) { sel2.onchange(); }
-      const champs2 = champs(registre.profs.children[0]);
+      const champs2 = champs(carte());
       saisir(champs2[5], '500');               // duree de la pause
     }
 
@@ -343,6 +368,25 @@ setTimeout(function () {
         '{"autre": 1}');
       vu.message_refus = registre.msg.textContent;
       vu.cartes_apres_restauration = registre.profs.children.length;
+      // ---- les onglets changent bien de profil ----------------------
+      // Le controle qui compte : cliquer doit montrer UNE AUTRE carte,
+      // pas seulement colorer un bouton.
+      const barre2 = registre.profs.children[0];
+      const ong2 = (barre2 && barre2.id === 'onglets')
+        ? barre2.children.filter(function (e) { return e.tag === 'button'; })
+        : [];
+      vu.onglets_apres = ong2.length;
+      if (ong2.length > 1) {
+        const nomVisible = function () {
+          const c = parTitre(registre.profs.children[1], 'nom interne');
+          return c.length ? c[0].value : '';
+        };
+        ong2[0].onclick();
+        vu.titre_avant = nomVisible();
+        ong2[1].onclick();
+        vu.titre_apres = nomVisible();
+        vu.cartes_apres_onglet = registre.profs.children.length - 1;
+      }
 
       console.log(JSON.stringify(vu));
     }, 0);

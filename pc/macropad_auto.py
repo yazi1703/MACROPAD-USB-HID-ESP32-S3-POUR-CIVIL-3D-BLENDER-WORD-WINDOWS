@@ -365,11 +365,17 @@ def lignes_du_profil(config, profil):
         lignes.append(("", "", "ensemble", description))
 
     esc = (config or {}).get("esc") or {}
-    for geste in ("court", "maintien"):
-        description = texte_actions(esc.get(geste))
-        if description:
-            lignes.append(("ESC" if geste == "court" else "", "",
-                           GESTES_LISIBLES.get(geste, geste), description))
+    gestes_esc = [(g, texte_actions(esc.get(g)))
+                  for g in ("court", "maintien")]
+    gestes_esc = [(g, d) for g, d in gestes_esc if d]
+    if gestes_esc:
+        # Une ligne d'en-tete pour ESC aussi, comme pour les touches. Sans
+        # elle, le bouton se retrouvait colle au bloc precedent : on le
+        # lisait comme un geste de plus de la derniere combinaison.
+        lignes.append(("ESC", "", "", ""))
+        for geste, description in gestes_esc:
+            lignes.append(("", "", GESTES_LISIBLES.get(geste, geste),
+                           description))
     return lignes
 
 
@@ -897,6 +903,52 @@ class SourceAgenda:
             self._erreur_signalee = message
 
 
+def texte_du_panneau(lignes):
+    """[(touche, libelle, geste, description)] -> le texte a afficher.
+
+    Fonction PURE, donc verifiable sans ouvrir de fenetre.
+
+    DEUX FORMES DE LIGNE, et c'est tout l'enjeu de lisibilite. Une seule
+    grille de quatre colonnes reservait la place du libelle ET celle du
+    geste sur CHAQUE ligne, alors qu'aucune ligne n'a les deux : environ
+    vingt-cinq caracteres perdus a gauche, qui repoussaient les
+    descriptions hors de la fenetre.
+
+        B1  CTRL   Ctrl maintenu, Maj en double appui     <- en-tete
+              appui court   maintenir CTRL                <- geste, indente
+              double appui  maintenir SHIFT
+
+        B2  COPIER  Copier / coller / couper
+
+    Une ligne vide entre deux touches : sans elle, dix-neuf lignes
+    d'affilee ne se lisent pas, elles se decryptent.
+    """
+    entetes = [(t, l) for t, l, g, _ in lignes if not g]
+    largeur = max([len(t) for t, _ in entetes] + [2])
+    libelle = max([len(l) for _, l in entetes] + [2])
+    geste = max([len(g) for _, _, g, _ in lignes] + [2])
+
+    morceaux, premier = [], True
+    for touche, label, mouvement, description in lignes:
+        if not mouvement:
+            # En-tete : une ligne vide avant, sauf tout en haut.
+            if not premier:
+                morceaux.append("")
+            morceaux.append(("%-*s  %-*s  %s"
+                             % (largeur, touche, libelle, label, description))
+                            .rstrip())
+        else:
+            # Geste : indente sous son en-tete. Les lignes d'ESC n'ont pas
+            # d'en-tete propre, on les indente pareil pour ne pas casser
+            # l'alignement d'une colonne a l'autre.
+            marque = touche or ""
+            morceaux.append(("%-*s    %-*s  %s"
+                             % (largeur, marque, geste, mouvement,
+                                description)).rstrip())
+        premier = False
+    return "\n".join(morceaux)
+
+
 class Panneau:
     """La fenetre qui montre les commandes du profil courant.
 
@@ -1031,23 +1083,22 @@ class Panneau:
         self._racine.after(100, self._pomper)
 
     def _afficher(self, profil, lignes):
-        largeur = max([len(t) for t, _, _, _ in lignes] + [3])
-        libelle = max([len(l) for _, l, _, _ in lignes] + [3])
-        geste = max([len(g) for _, _, g, _ in lignes] + [3])
-        corps = "\n".join(
-            "%-*s  %-*s  %-*s  %s" % (largeur, t, libelle, l, geste, g, d)
-            for t, l, g, d in lignes)
         self._titre.configure(text="  " + profil)
-        self._texte.configure(text=corps or "(aucune commande)")
+        self._texte.configure(text=texte_du_panneau(lignes)
+                              or "(aucune commande)")
         self._racine.deiconify()
         self._racine.update_idletasks()
         # En bas a droite, au-dessus de la barre des taches.
+        #
+        # ON REPOSITIONNE A CHAQUE AFFICHAGE. La position n'etait calculee
+        # qu'une fois, avec la largeur du PREMIER profil montre : un profil
+        # plus large ensuite debordait du bord droit de l'ecran, et ses
+        # descriptions etaient coupees sans que rien ne le signale.
         ecran_x = self._racine.winfo_screenwidth()
         ecran_y = self._racine.winfo_screenheight()
-        if self._cache is None:
-            self._racine.geometry(
-                "+%d+%d" % (ecran_x - self._racine.winfo_width() - 24,
-                            ecran_y - self._racine.winfo_height() - 80))
+        x = ecran_x - self._racine.winfo_width() - 24
+        y = ecran_y - self._racine.winfo_height() - 80
+        self._racine.geometry("+%d+%d" % (max(0, x), max(0, y)))
         self._cache = True
         if not self._epingle:
             self._racine.after(int(self.secondes * 1000), self._cacher)
@@ -1345,6 +1396,14 @@ input.alt{width:auto;flex:0 0 auto;margin:0 0 0 2px;cursor:pointer}
 /* La barre d'enregistrement reste COLLEE EN BAS DE L'ECRAN. Sans elle,
    il fallait remonter la page pour retrouver le bouton Stop - et la page
    fait plusieurs ecrans de haut. */
+/* Les onglets restent en haut quand on descend : sans ca, changer de
+   logiciel obligeait a remonter toute la page. */
+#onglets{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;
+gap:6px;padding:8px 0;margin-bottom:10px;background:#0e1014;
+border-bottom:1px solid #222836}
+#onglets button{background:#151922;color:#8b94a6;border:1px solid #222836;
+font:600 13px system-ui;padding:7px 14px}
+#onglets button.on{background:#3d7bfd;color:#fff;border-color:#3d7bfd}
 #bande{position:fixed;left:0;right:0;bottom:0;z-index:30;display:none;
 background:#6d2233;color:#fff;padding:10px 16px;align-items:center;
 gap:14px;flex-wrap:wrap;box-shadow:0 -6px 18px rgba(0,0,0,.45);
@@ -1841,11 +1900,41 @@ function tableauCombos(p){
   ["+ combinaison"]));
  return bloc;}
 
+// Le profil actuellement AFFICHE. Les quatre profils font une page de
+// plusieurs ecrans : il fallait faire defiler pour trouver le logiciel,
+// puis defiler encore pour trouver la touche. On n'en montre donc qu'un,
+// et les onglets font le reste.
+//
+// Ce choix SURVIT au redessin : renommer un profil ou saisir un libelle
+// rappelle render(), et retomber sur le premier profil a chaque frappe
+// serait pire que le defilement.
+var VU=null;
+
+function onglets(zone){
+ var barre=el("div",{},[]);barre.id="onglets";
+ D.ordre.forEach(function(nom){
+  var p=D.profils[nom]||{};
+  var b=el("button",{cls:nom===VU?"on":"",
+   title:"n'afficher que ce profil"},[p.titre||nom]);
+  b.onclick=function(){VU=nom;render();
+   // On remonte en haut : la carte affichee vient de changer sous le
+   // curseur, rester au milieu de l'ancienne n'aurait aucun sens.
+   window.scrollTo(0,0);};
+  barre.appendChild(b);
+ });
+ zone.appendChild(barre);
+}
+
 function render(){
  var zone=document.getElementById("profs");zone.innerHTML="";
  var mx=maxUse();
  if(!D.ordre.length){zone.appendChild(vide());renderApps();return;}
+ // Un profil supprime, renomme, ou un premier affichage : on retombe sur
+ // le premier de la liste plutot que sur une page vide.
+ if(D.ordre.indexOf(VU)<0)VU=D.ordre[0];
+ onglets(zone);
  D.ordre.forEach(function(nom){
+  if(nom!==VU)return;
   var p=D.profils[nom];if(!p)return;
   var head=el("div",{cls:"ph"},[]);
   head.appendChild(inp(nom,20,function(v){ren(nom,v);},true));

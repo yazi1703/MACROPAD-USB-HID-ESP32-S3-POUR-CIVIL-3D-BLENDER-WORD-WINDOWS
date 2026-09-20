@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 405 tests PC réussis ; 24 fichiers Python compilés avec succès.**
+**Résultat : 410 tests PC réussis ; 24 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, seize corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,7 +14,7 @@
 
 - Compilation syntaxique des **24 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 405 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+- 410 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
   304 pour le firmware, 93 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
@@ -658,6 +658,13 @@ test_le_fuseau_est_bien_decale_pendant_ces_tests ... ok
 test_summary_est_accepte_comme_titre ... ok
 test_un_champ_qui_porte_deja_son_fuseau_l_emporte ... ok
 
+--- LisibiliteDuRecapitulatif
+test_ESC_a_son_propre_bloc ... ok
+test_la_place_du_libelle_n_est_pas_reservee_sur_les_gestes ... ok
+test_les_touches_sont_separees_par_une_ligne_vide ... ok
+test_rien_ne_traine_en_fin_de_ligne ... ok
+test_un_profil_vide_ne_produit_pas_de_texte ... ok
+
 --- NomDeDocument
 test_chemin_complet_reduit_au_nom_de_fichier ... ok
 test_coupe_a_ce_que_l_ecran_retient ... ok
@@ -720,7 +727,7 @@ test_les_lieux_fouilles_sont_annonces ... ok
 test_un_OneDrive_sans_agenda_ne_donne_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 405 tests
+Ran 410 tests
 
 OK
 ```

@@ -3587,7 +3587,7 @@ class Stats:
 
 ## device/portal.py
 
-`924 lignes - sha256 6c055c63b8ea70f2`
+`962 lignes - sha256 2ace8bef036ed089`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -3677,6 +3677,14 @@ input.alt{width:auto;flex:0 0 auto;margin:0 0 0 2px;cursor:pointer}
 /* La barre d'enregistrement reste COLLEE EN BAS DE L'ECRAN. Sans elle,
    il fallait remonter la page pour retrouver le bouton Stop - et la page
    fait plusieurs ecrans de haut. */
+/* Les onglets restent en haut quand on descend : sans ca, changer de
+   logiciel obligeait a remonter toute la page. */
+#onglets{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;
+gap:6px;padding:8px 0;margin-bottom:10px;background:#0e1014;
+border-bottom:1px solid #222836}
+#onglets button{background:#151922;color:#8b94a6;border:1px solid #222836;
+font:600 13px system-ui;padding:7px 14px}
+#onglets button.on{background:#3d7bfd;color:#fff;border-color:#3d7bfd}
 #bande{position:fixed;left:0;right:0;bottom:0;z-index:30;display:none;
 background:#6d2233;color:#fff;padding:10px 16px;align-items:center;
 gap:14px;flex-wrap:wrap;box-shadow:0 -6px 18px rgba(0,0,0,.45);
@@ -4173,11 +4181,41 @@ function tableauCombos(p){
   ["+ combinaison"]));
  return bloc;}
 
+// Le profil actuellement AFFICHE. Les quatre profils font une page de
+// plusieurs ecrans : il fallait faire defiler pour trouver le logiciel,
+// puis defiler encore pour trouver la touche. On n'en montre donc qu'un,
+// et les onglets font le reste.
+//
+// Ce choix SURVIT au redessin : renommer un profil ou saisir un libelle
+// rappelle render(), et retomber sur le premier profil a chaque frappe
+// serait pire que le defilement.
+var VU=null;
+
+function onglets(zone){
+ var barre=el("div",{},[]);barre.id="onglets";
+ D.ordre.forEach(function(nom){
+  var p=D.profils[nom]||{};
+  var b=el("button",{cls:nom===VU?"on":"",
+   title:"n'afficher que ce profil"},[p.titre||nom]);
+  b.onclick=function(){VU=nom;render();
+   // On remonte en haut : la carte affichee vient de changer sous le
+   // curseur, rester au milieu de l'ancienne n'aurait aucun sens.
+   window.scrollTo(0,0);};
+  barre.appendChild(b);
+ });
+ zone.appendChild(barre);
+}
+
 function render(){
  var zone=document.getElementById("profs");zone.innerHTML="";
  var mx=maxUse();
  if(!D.ordre.length){zone.appendChild(vide());renderApps();return;}
+ // Un profil supprime, renomme, ou un premier affichage : on retombe sur
+ // le premier de la liste plutot que sur une page vide.
+ if(D.ordre.indexOf(VU)<0)VU=D.ordre[0];
+ onglets(zone);
  D.ordre.forEach(function(nom){
+  if(nom!==VU)return;
   var p=D.profils[nom];if(!p)return;
   var head=el("div",{cls:"ph"},[]);
   head.appendChild(inp(nom,20,function(v){ren(nom,v);},true));

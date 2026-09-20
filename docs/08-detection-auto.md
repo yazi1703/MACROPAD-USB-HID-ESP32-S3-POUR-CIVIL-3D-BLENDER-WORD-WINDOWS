@@ -178,6 +178,9 @@ fenêtre en bas à droite avec **tout** ce que fait le pad :
                   maintenu       CTRL+Z
 ```
 
+Chaque touche forme **un bloc**, séparé du suivant par une ligne vide :
+dix-neuf lignes d'affilée ne se lisent pas, elles se décryptent.
+
 Une touche occupe donc **une ligne d'en-tête** — son numéro, son libellé
 court (celui de l'écran) et son **nom complet** — puis **une ligne par
 geste**, sans répéter le numéro. L'œil retrouve les touches d'un coup, et

@@ -4413,14 +4413,20 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         vu = self._construire(configuration)
 
         profils = len(configuration["ordre"])
-        self.assertEqual(vu["cartes"], profils)
-        # Une liste deroulante par etape : 6 touches x 3 gestes par
-        # profil, plus une par etape de combinaison.
-        etapes_combos = sum(
-            max(1, len(combo["actions"]))
-            for bloc in configuration["profils"].values()
-            for combo in bloc.get("combos", []))
-        self.assertEqual(vu["listes"], profils * 6 * 3 + etapes_combos)
+        # UN SEUL profil affiche a la fois, mais un onglet par profil :
+        # c'est ce qui supprime le defilement sans rien cacher.
+        self.assertEqual(vu["cartes"], 1)
+        self.assertEqual(vu["onglets"], profils)
+        self.assertEqual(vu["onglet_actif"], 1,
+                         "il faut voir LEQUEL est affiche")
+        # Une liste deroulante par etape, POUR LE SEUL PROFIL AFFICHE :
+        # 6 touches x 3 gestes, plus une par etape de combinaison. Les
+        # autres profils ne sont pas dessines tant qu'on n'a pas clique
+        # leur onglet - c'est precisement ce qui supprime le defilement.
+        premier = configuration["profils"][configuration["ordre"][0]]
+        etapes_combos = sum(max(1, len(combo["actions"]))
+                            for combo in premier.get("combos", []))
+        self.assertEqual(vu["listes"], 6 * 3 + etapes_combos)
         self.assertIn("source", vu["src"])
         self.assertIn("appuis", vu["cnt"])
         # Les logiciels : une ligne d'en-tete, une par logiciel, une pour
@@ -4473,7 +4479,10 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         self.assertEqual(vu["touche1_nom"], "Nom complet B1")
         self.assertEqual(vu["touche1_valeur"], "TESTVAL")
 
-        # Un bouton "+ etape" par geste : 6 touches x 3 gestes.
+        # Un bouton "+ etape" par geste : 6 touches x 3 gestes, sur le
+        # SEUL profil affiche. Le harnais revient sur le premier onglet
+        # avant de compter - c'est la que 'TESTVAL' a ete tape, et
+        # ajouter une etape a un autre profil ne prouverait rien.
         self.assertEqual(vu["boutons_etape"], 18)
         # L'etape ajoutee est bien partie, a la suite de la premiere.
         self.assertEqual(vu["touche1_etapes"], 2)
@@ -4703,7 +4712,15 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         self.assertIn("4 profils", vu["message_restaure"])
         # Elle CHARGE le formulaire sans appliquer : le message le dit.
         self.assertIn("Enregistrer", vu["message_restaure"])
-        self.assertEqual(vu["cartes_apres_restauration"], 4)
+        self.assertEqual(vu["cartes_apres_restauration"], 2,
+                         "la barre d'onglets, plus la carte affichee")
+        self.assertEqual(vu["onglets_apres"], 4,
+                         "les quatre profils restaures doivent avoir "
+                         "leur onglet")
+        self.assertNotEqual(vu["titre_avant"], vu["titre_apres"],
+                            "cliquer un onglet n'a pas change de carte")
+        self.assertEqual(vu["cartes_apres_onglet"], 1,
+                         "toujours une seule carte apres le clic")
 
         # Un fichier illisible ou etranger est refuse, sans rien casser.
         self.assertFalse(vu["restaure_cassee"])

@@ -108,7 +108,9 @@ class RecapitulatifDesCommandes(unittest.TestCase):
         self.assertIn(("B5+B6", "VUE PREC.", "", "Vue precedente"), lignes)
         self.assertIn(("", "", "ensemble", "taper MPVIEWPREV puis Entree"),
                       lignes)
-        self.assertIn(("ESC", "", "appui court", "ESC"), lignes)
+        self.assertIn(("ESC", "", "", ""), lignes,
+                      "ESC doit avoir sa propre ligne d'en-tete")
+        self.assertIn(("", "", "appui court", "ESC"), lignes)
         self.assertIn(("", "", "maintenu", "CTRL+Z"), lignes)
 
     def test_un_profil_inconnu_ne_garde_que_ce_qui_est_global(self):
@@ -118,7 +120,8 @@ class RecapitulatifDesCommandes(unittest.TestCase):
         profil qu'on ne connait pas.
         """
         lignes = MA.lignes_du_profil(self.CONFIG, "INEXISTANT")
-        self.assertEqual([l[0] for l in lignes], ["ESC", ""])
+        # Son en-tete, puis ses deux gestes - et rien d'autre.
+        self.assertEqual([l[0] for l in lignes], ["ESC", "", ""])
 
     def test_une_configuration_absente_ne_plante_pas(self):
         self.assertEqual(MA.lignes_du_profil(None, "CIVIL3D"), [])
@@ -1319,3 +1322,58 @@ class GarderLeRecapitulatifAffiche(unittest.TestCase):
         self.assertFalse(panneau.actif)
         panneau.montrer("CIVIL3D", [])      # ne doit pas lever
         panneau.fermer()
+
+
+class LisibiliteDuRecapitulatif(unittest.TestCase):
+    """Signale a l'usage, capture a l'appui : "la fenetre n'est pas du
+    tout claire".
+
+    Deux defauts distincts sur la meme capture, et le second ne se voyait
+    pas du tout sur un profil seul.
+    """
+
+    def _lignes(self):
+        sys.path.insert(0, str(RACINE / "device"))
+        import store
+        return MA.lignes_du_profil(store.vers_json(6), "CIVIL3D")
+
+    def test_les_touches_sont_separees_par_une_ligne_vide(self):
+        """Dix-neuf lignes d'affilee ne se lisent pas, elles se
+        decryptent. Un bloc par touche, et l'oeil suit."""
+        texte = MA.texte_du_panneau(self._lignes())
+        self.assertIn("\n\n", texte, "aucune respiration entre les touches")
+        blocs = texte.split("\n\n")
+        self.assertGreater(len(blocs), 5)
+        for bloc in blocs:
+            premiere = bloc.split("\n")[0]
+            self.assertFalse(premiere.startswith(" "),
+                             "un bloc commence par un geste, pas par une "
+                             "touche : %r" % premiere)
+
+    def test_la_place_du_libelle_n_est_pas_reservee_sur_les_gestes(self):
+        """LE DEFAUT QUI COUPAIT LE TEXTE. Une seule grille de quatre
+        colonnes reservait la place du libelle ET celle du geste sur
+        CHAQUE ligne, alors qu'aucune ligne n'a les deux : une vingtaine
+        de caracteres perdus a gauche, qui repoussaient les descriptions
+        hors de la fenetre."""
+        lignes = self._lignes()
+        texte = MA.texte_du_panneau(lignes)
+        ancienne = max(len("%-6s  %-10s  %-13s  %s" % (t, l, g, d))
+                       for t, l, g, d in lignes)
+        nouvelle = max(len(l) for l in texte.split("\n"))
+        self.assertLess(nouvelle, ancienne,
+                        "la mise en page n'a pas gagne en largeur")
+
+    def test_ESC_a_son_propre_bloc(self):
+        """Sans en-tete, il se collait au bloc precedent et se lisait
+        comme un geste de plus de la derniere combinaison."""
+        texte = MA.texte_du_panneau(self._lignes())
+        self.assertTrue(texte.split("\n\n")[-1].startswith("ESC"))
+
+    def test_rien_ne_traine_en_fin_de_ligne(self):
+        """Des espaces en fin de ligne elargissent la fenetre pour rien."""
+        for ligne in MA.texte_du_panneau(self._lignes()).split("\n"):
+            self.assertEqual(ligne, ligne.rstrip())
+
+    def test_un_profil_vide_ne_produit_pas_de_texte(self):
+        self.assertEqual(MA.texte_du_panneau([]), "")

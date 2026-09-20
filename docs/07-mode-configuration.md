@@ -70,6 +70,26 @@ les 224 Ko de RAM de la carte.
 
 ## 7.3 Ce que la page sait faire
 
+### Un seul logiciel à la fois
+
+En haut de la page, **une barre d'onglets** : un par profil. Tu cliques,
+et **seul ce profil s'affiche**.
+
+```
+  [ BLENDER ]  [ CIVIL 3D ]  [ WORD ]  [ WINDOWS ]
+```
+
+Avant, les quatre profils s'empilaient : il fallait faire défiler pour
+trouver le logiciel, puis défiler encore pour trouver la touche, sur une
+page de plusieurs écrans. La barre **reste collée en haut** quand tu
+descends, donc changer de logiciel ne demande jamais de remonter.
+
+> **Rien n'est caché pour autant.** Les profils non affichés sont toujours
+> envoyés au macropad à l'enregistrement — la page garde tout en mémoire,
+> elle n'en dessine qu'un. Et l'onglet choisi **survit à une modification**
+> : renommer un profil ou taper un libellé redessine la page, et retomber
+> sur le premier onglet à chaque frappe serait pire que le défilement.
+
 | | |
 |---|---|
 | Renommer un profil | ✅ nom interne et titre affiché |
