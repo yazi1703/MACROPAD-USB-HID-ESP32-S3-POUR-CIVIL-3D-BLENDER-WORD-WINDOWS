@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 401 tests PC réussis ; 24 fichiers Python compilés avec succès.**
+**Résultat : 405 tests PC réussis ; 24 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, seize corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,7 +14,7 @@
 
 - Compilation syntaxique des **24 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 401 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+- 405 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
   304 pour le firmware, 93 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
@@ -622,6 +622,12 @@ test_un_fichier_absent_ne_plante_pas ... ok
 test_un_fichier_inchange_ne_declenche_rien ... ok
 test_un_fichier_mal_forme_garde_la_liste_precedente ... ok
 
+--- GarderLeRecapitulatifAffiche
+test_epingler_la_garde_affichee ... ok
+test_l_option_est_reliee_au_panneau ... ok
+test_par_defaut_la_fenetre_se_retire ... ok
+test_sans_tkinter_rien_ne_casse ... ok
+
 --- JournalDuCompagnon
 test_ecrit_dans_les_deux_sorties ... ok
 test_une_console_absente_ne_casse_rien ... ok
@@ -714,7 +720,7 @@ test_les_lieux_fouilles_sont_annonces ... ok
 test_un_OneDrive_sans_agenda_ne_donne_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 401 tests
+Ran 405 tests
 
 OK
 ```

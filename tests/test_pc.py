@@ -1278,3 +1278,44 @@ class TrouverLAgendaDansOneDrive(unittest.TestCase):
         lieux = MA.dossiers_agenda(self.dossier)
         self.assertEqual(lieux[0], self.dossier)
         self.assertIn(self.onedrive, lieux)
+
+
+class GarderLeRecapitulatifAffiche(unittest.TestCase):
+    """Le recapitulatif s'efface au bout de cinq secondes.
+
+    C'est voulu - il ne doit pas manger l'ecran en permanence - mais il
+    existait un bouton "epingler" qu'il fallait recliquer A CHAQUE
+    LANCEMENT du compagnon. Donc y penser, donc ne pas le faire, donc
+    voir la fenetre disparaitre chaque fois.
+
+    Ces tests ne touchent pas a tkinter : ils verifient l'etat que le
+    panneau emporte, qui est la partie decidable sans fenetre.
+    """
+
+    def test_par_defaut_la_fenetre_se_retire(self):
+        panneau = MA.Panneau(5.0)
+        self.assertFalse(panneau.epingle_au_depart)
+
+    def test_epingler_la_garde_affichee(self):
+        panneau = MA.Panneau(5.0, epingle=True)
+        self.assertTrue(panneau.epingle_au_depart)
+
+    def test_l_option_est_reliee_au_panneau(self):
+        """Le controle qui compte : --epingler doit vraiment arriver
+        jusqu'a la fenetre. Une option ajoutee mais non branchee ne se
+        voit pas, et c'est le genre de chose qu'on croit fait."""
+        source = (RACINE / "pc" / "macropad_auto.py").read_text(
+            encoding="utf-8")
+        self.assertIn('"--epingler"', source)
+        self.assertIn("Panneau(options.panneau, epingle=options.epingler)",
+                      source)
+
+    def test_sans_tkinter_rien_ne_casse(self):
+        """Le panneau reste un confort : il n'a jamais le droit d'etre la
+        raison d'une panne du compagnon."""
+        panneau = MA.Panneau(5.0, epingle=True)
+        with unittest.mock.patch.dict(sys.modules, {"tkinter": None}):
+            self.assertFalse(panneau.demarrer())
+        self.assertFalse(panneau.actif)
+        panneau.montrer("CIVIL3D", [])      # ne doit pas lever
+        panneau.fermer()

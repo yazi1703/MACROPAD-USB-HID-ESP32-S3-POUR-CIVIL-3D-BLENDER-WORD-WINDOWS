@@ -914,8 +914,13 @@ class Panneau:
     comme avant : il ne doit jamais etre la raison d'une panne.
     """
 
-    def __init__(self, secondes=5.0):
+    def __init__(self, secondes=5.0, epingle=False):
         self.secondes = secondes
+        # Epingle des le depart : la fenetre ne se retire plus toute seule.
+        # Sans ca il fallait cliquer sur "epingler" A CHAQUE LANCEMENT du
+        # compagnon - donc y penser, donc ne pas le faire, donc voir le
+        # recapitulatif disparaitre au bout de cinq secondes chaque fois.
+        self.epingle_au_depart = bool(epingle)
         self.actif = False
         self.file = queue.Queue()
         self._fil = None
@@ -953,7 +958,7 @@ class Panneau:
             self._racine.overrideredirect(True)     # ni barre de titre, ni focus
             self._racine.attributes("-topmost", True)
             self._racine.configure(bg="#0e1014")
-            self._epingle = False
+            self._epingle = self.epingle_au_depart
             self._cache = None
             self._construire()
             self._racine.after(100, self._pomper)
@@ -978,6 +983,8 @@ class Panneau:
                                 padx=8, cursor="hand2")
         self._bouton.pack(side="right")
         self._bouton.bind("<Button-1>", self._basculer_epingle)
+        if self._epingle:
+            self._bouton.configure(text="epinglee", fg="#3d7bfd")
         tk.Label(entete, text="x", bg="#1d2330", fg="#6f7788",
                  font=("Segoe UI", 9), padx=8, cursor="hand2"
                  ).pack(side="right")
@@ -2074,6 +2081,10 @@ def main():
                            help="duree d'affichage du recapitulatif des "
                                 "commandes au changement de profil "
                                 "(0 pour ne pas l'afficher)")
+    analyseur.add_argument("--epingler", action="store_true",
+                           help="garder le recapitulatif affiche en "
+                                "permanence, sans avoir a cliquer sur "
+                                "'epingler' a chaque lancement")
     analyseur.add_argument(
         "--agenda",
         help="fichier JSON de l'agenda du jour a afficher sur l'ecran. "
@@ -2100,7 +2111,7 @@ def main():
     macropad = Macropad(options.port, options.simuler)
     table.synchroniser(macropad)        # la carte a le dernier mot
 
-    panneau = Panneau(options.panneau)
+    panneau = Panneau(options.panneau, epingle=options.epingler)
     if options.panneau > 0 and panneau.demarrer():
         print("Recapitulatif des commandes : %.0f s a chaque changement de "
               "profil" % options.panneau)

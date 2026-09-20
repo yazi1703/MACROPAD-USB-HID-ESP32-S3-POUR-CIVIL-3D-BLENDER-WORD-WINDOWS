@@ -188,13 +188,31 @@ Le nom complet se saisit dans la page de configuration
 ([chapitre 7](07-mode-configuration.md)) et vit avec les macros, sur la
 carte. Une touche sans nom n'affiche que son libellé : rien ne casse.
 
-Elle disparaît seule au bout de quelques secondes. **« epingler »** la
-garde ouverte ; on la déplace en tirant sur son bandeau.
+Elle disparaît seule au bout de quelques secondes, pour ne pas manger
+l'écran en permanence. On la déplace en tirant sur son bandeau.
+
+### La garder affichée
+
+Deux façons, selon que tu la veux tout le temps ou juste ce coup-ci :
+
+| Ce que tu veux | Comment |
+|---|---|
+| **la garder, maintenant** | clique sur **« epingler »**, en haut à droite de son bandeau — elle reste ouverte pour toute la session |
+| **la garder, toujours** | lance le compagnon avec **`--epingler`** |
+
+> Le bouton « epingler » suffit, mais il faut le recliquer **à chaque
+> lancement** du compagnon. Donc y penser, donc ne pas le faire, donc voir
+> la fenêtre disparaître au bout de cinq secondes chaque fois. `--epingler`
+> supprime la question.
+>
+> Pour que le démarrage automatique avec Windows la garde aussi, ajoute
+> l'option au raccourci — voir [`docs/08.7`](#87-démarrer-tout-seul-avec-windows).
 
 | Réglage | Effet |
 |---|---|
 | `--panneau 5` | durée d'affichage en secondes (défaut) |
 | `--panneau 0` | ne pas l'afficher du tout |
+| `--epingler` | la garder affichée en permanence |
 
 Les combinaisons et le bouton ESC y figurent **aussi** : ce sont
 justement ceux qu'on ne retient pas.
