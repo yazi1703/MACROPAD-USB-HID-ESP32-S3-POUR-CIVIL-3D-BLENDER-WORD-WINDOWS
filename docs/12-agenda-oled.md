@@ -117,6 +117,29 @@ L'intitulé **défile** s'il est trop long, comme le nom de document.
 > à 19h47 se lirait comme un rendez-vous à venir, et on croirait avoir le
 > temps.
 
+### Ce que tu vois quand tu appuies sur une touche
+
+L'agenda n'a pas de tableau à surligner. Chaque appui prend donc l'écran
+**un instant**, en gros, puis l'agenda revient tout seul :
+
+```
+    +----------------+
+    |                |
+    |     PLINE      |   le LIBELLE, en double hauteur
+    |                |
+    |       B4       |   le numéro, dessous
+    |                |
+    +----------------+
+```
+
+Le libellé en gros et le numéro dessous — **l'inverse d'une combinaison**,
+et c'est voulu : d'une combinaison tu cherches *quelles touches*, d'une
+touche seule tu sais très bien laquelle tu as enfoncée et tu veux savoir
+**ce qu'elle a fait**.
+
+La durée se règle avec `HIGHLIGHT_MS` dans `config.py` (1,3 s par défaut),
+le même réglage que le surlignage du tableau des macros.
+
 ---
 
 ## 12.2 La limite à connaître avant de s'énerver

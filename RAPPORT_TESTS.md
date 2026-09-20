@@ -1,6 +1,6 @@
 # Rapport de vérification — 6 septembre 2026
 
-**Résultat : 397 tests PC réussis ; 24 fichiers Python compilés avec succès.**
+**Résultat : 401 tests PC réussis ; 24 fichiers Python compilés avec succès.**
 
 > **Mise à jour après relecture.** Le projet a été relu, seize corrections y ont
 > été apportées (voir `docs/06-corrections.md`) et **14 tests supplémentaires**
@@ -14,7 +14,7 @@
 
 - Compilation syntaxique des **24 fichiers** du firmware avec CPython (`python3 -m py_compile device/*.py device/lib/usb/device/*.py`).
 - Compilation des 16 sources de la V0 avec `mpy-cross` : MicroPython v1.29.0, compilation de l'outil datée 2026-08-29, format .mpy v6.3. Distribution PC utilisée : mpy-cross 1.29.0.post2. Les .mpy de vérification ne sont pas distribués : transférer les .py lisibles.
-- 397 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
+- 401 tests unitaires et d'intégration simulée (voir sortie ci-dessous) :
   304 pour le firmware, 93 pour le compagnon Windows.
 - Lecture des API dans les fichiers officiels réellement inclus.
 - Vérification des empreintes des quatre fichiers USB et du driver SH1106 ; driver SH1106 identique au commit figé.
@@ -580,9 +580,13 @@ test_les_suites_d_actions_traversent_la_page_web ... ok
 --- VueAgendaSurLEcran
 test_aucun_debordement_a_aucune_heure_du_jour ... ok
 test_l_ecran_ne_s_eteint_jamais_en_vue_agenda ... ok
+test_la_vue_macros_garde_son_surlignage ... ok
 test_la_vue_macros_s_eteint_toujours ... ok
 test_sans_heure_l_ecran_dessine_quand_meme ... ok
 test_un_agenda_vide_ne_plante_pas ... ok
+test_un_changement_de_profil_ne_remplace_pas_l_agenda ... ok
+test_une_touche_sans_libelle_montre_son_numero ... ok
+test_une_touche_simple_se_voit_AUSSI_en_vue_agenda ... ok
 
 --- AgendaDuJourCotePC
 test_la_forme_brute_de_Microsoft_Graph_est_acceptee ... ok
@@ -710,7 +714,7 @@ test_les_lieux_fouilles_sont_annonces ... ok
 test_un_OneDrive_sans_agenda_ne_donne_rien ... ok
 
 ----------------------------------------------------------------------
-Ran 397 tests
+Ran 401 tests
 
 OK
 ```

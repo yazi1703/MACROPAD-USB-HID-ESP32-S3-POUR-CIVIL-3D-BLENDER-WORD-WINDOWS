@@ -41,7 +41,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`456 lignes - sha256 67e8f89b4c74b343`
+`459 lignes - sha256 9ba7468ea4bff5e2`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -493,8 +493,11 @@ AGENDA_SCROLL_PAUSE_MS = 1600
 # 6. LED RESPIRANTE
 # =====================================================================
 PWM_FREQ = 2000         # 2 kHz : aucun scintillement visible à l'oeil
-LED_MIN = 0.04          # luminosité basse de la respiration (4 %)
-LED_MAX = 0.25          # luminosité haute de la respiration (25 %)
+# La résistance de 330 Ω plafonne le courant à ~8,5 mA quoi qu'on mette
+# ici : monter jusqu'à 1.0 ne peut rien abîmer. Voir docs/05-electronique.
+# C'est l'ÉCART entre les deux qui fait la respiration.
+LED_MIN = 0.10          # luminosité basse de la respiration (10 %)
+LED_MAX = 0.75          # luminosité haute de la respiration (75 %)
 LED_PERIOD_MS = 3000    # durée d'un cycle inspiration + expiration
 LED_FLASH_MS = 120      # durée de l'éclat quand tu appuies sur ESC
 LED_RETURN_MS = 350     # retour progressif du flash vers la respiration
@@ -5246,7 +5249,7 @@ def create_interface():
 
 ## device/display.py
 
-`748 lignes - sha256 a1cb8701f8d13d0c`
+`770 lignes - sha256 ccb7656dc41ce816`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -5805,12 +5808,16 @@ class Display:
                 self.splash_until = ticks_add(now, C.PROFILE_SPLASH_MS)
             else:
                 self.splash_until = None
-                self._vue_principale()
+                # _redessiner() SAIT quelle vue dessiner. Appeler
+                # _vue_principale() en direct remplacait l'agenda par le
+                # tableau des macros a chaque changement de profil, et
+                # l'agenda ne revenait qu'au changement de minute suivant.
+                self._redessiner()
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
 
-    def flash(self, ligne1, ligne2, now):
+    def flash(self, ligne1, ligne2, now, duree=None):
         """Prend l'ecran un instant : "B3+B4" en gros, le libelle dessous.
 
         Une combinaison ne correspond a aucune ligne du tableau : le
@@ -5827,7 +5834,7 @@ class Display:
         try:
             self._deux_lignes(str(ligne1)[:16], str(ligne2)[:16])
             self.splash_until = ticks_add(
-                now, getattr(C, "COMBO_FLASH_MS", 1200))
+                now, duree or getattr(C, "COMBO_FLASH_MS", 1200))
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
@@ -5841,6 +5848,24 @@ class Display:
         self.reveiller(now)
         if not self.oled or not (0 <= index < len(self.macros)):
             return
+
+        if self.vue == "agenda":
+            # PAS DE TABLEAU A SURLIGNER DANS CETTE VUE. Sans ce cas,
+            # appuyer sur une touche ne produisait RIEN a l'ecran - on ne
+            # savait pas si l'appui avait ete pris. On la montre donc
+            # comme une combinaison : en grand, un instant, et tick()
+            # rend l'ecran a l'agenda tout seul.
+            #
+            # Le LIBELLE en gros, le numero dessous - l'inverse d'une
+            # combinaison, et c'est voulu : d'une combinaison on cherche
+            # QUELLES touches, d'une touche seule on sait laquelle on a
+            # enfoncee et on veut savoir CE QU'ELLE A FAIT.
+            label = str(self.macros[index][0] or "")
+            numero = "B%d" % (index + 1)
+            self.flash(label or numero, numero if label else "",
+                       now, getattr(C, "HIGHLIGHT_MS", 1300))
+            return
+
         self.surbrillance = index
         self._surbrillance_t = ticks_add(now, C.HIGHLIGHT_MS)
         # On amene la touche dans la fenetre visible si elle n'y est pas.

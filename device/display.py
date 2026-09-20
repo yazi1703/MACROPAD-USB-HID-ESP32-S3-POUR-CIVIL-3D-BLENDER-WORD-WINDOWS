@@ -554,12 +554,16 @@ class Display:
                 self.splash_until = ticks_add(now, C.PROFILE_SPLASH_MS)
             else:
                 self.splash_until = None
-                self._vue_principale()
+                # _redessiner() SAIT quelle vue dessiner. Appeler
+                # _vue_principale() en direct remplacait l'agenda par le
+                # tableau des macros a chaque changement de profil, et
+                # l'agenda ne revenait qu'au changement de minute suivant.
+                self._redessiner()
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
 
-    def flash(self, ligne1, ligne2, now):
+    def flash(self, ligne1, ligne2, now, duree=None):
         """Prend l'ecran un instant : "B3+B4" en gros, le libelle dessous.
 
         Une combinaison ne correspond a aucune ligne du tableau : le
@@ -576,7 +580,7 @@ class Display:
         try:
             self._deux_lignes(str(ligne1)[:16], str(ligne2)[:16])
             self.splash_until = ticks_add(
-                now, getattr(C, "COMBO_FLASH_MS", 1200))
+                now, duree or getattr(C, "COMBO_FLASH_MS", 1200))
             self.pending_page = 0
         except Exception as exc:
             self.disable(exc)
@@ -590,6 +594,24 @@ class Display:
         self.reveiller(now)
         if not self.oled or not (0 <= index < len(self.macros)):
             return
+
+        if self.vue == "agenda":
+            # PAS DE TABLEAU A SURLIGNER DANS CETTE VUE. Sans ce cas,
+            # appuyer sur une touche ne produisait RIEN a l'ecran - on ne
+            # savait pas si l'appui avait ete pris. On la montre donc
+            # comme une combinaison : en grand, un instant, et tick()
+            # rend l'ecran a l'agenda tout seul.
+            #
+            # Le LIBELLE en gros, le numero dessous - l'inverse d'une
+            # combinaison, et c'est voulu : d'une combinaison on cherche
+            # QUELLES touches, d'une touche seule on sait laquelle on a
+            # enfoncee et on veut savoir CE QU'ELLE A FAIT.
+            label = str(self.macros[index][0] or "")
+            numero = "B%d" % (index + 1)
+            self.flash(label or numero, numero if label else "",
+                       now, getattr(C, "HIGHLIGHT_MS", 1300))
+            return
+
         self.surbrillance = index
         self._surbrillance_t = ticks_add(now, C.HIGHLIGHT_MS)
         # On amene la touche dans la fenetre visible si elle n'y est pas.

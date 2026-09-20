@@ -36,6 +36,40 @@ D'où le transistor BC547 : il sert d'interrupteur commandé. Le GPIO ne
 fournit qu'**1,2 mA** pour commander la base, et c'est le +5 V de l'USB qui
 fournit le courant de la LED, à travers la résistance de 330 ohms.
 
+### Régler la luminosité de la LED ESC — et pourquoi c'est sans risque
+
+Deux réglages dans `config.py`, entre 0.0 et 1.0 :
+
+```python
+LED_MIN = 0.10          # le creux de la respiration
+LED_MAX = 0.75          # le sommet
+```
+
+C'est **l'écart entre les deux** qui fait la respiration. Les rapprocher
+donne une lueur fixe ; les écarter accentue le souffle.
+
+**Tu peux monter jusqu'à 1.0 sans rien risquer**, et ce n'est pas une
+impression — c'est la résistance de 330 Ω qui plafonne le courant, quoi
+que fasse le logiciel :
+
+```
+(5 V − 2,0 V de la LED − 0,2 V du transistor) ÷ 330 Ω ≈ 8,5 mA
+```
+
+**8,5 mA** pour une LED donnée à 20 mA et un BC547 donné à 100 mA. Même à
+100 % en continu, on reste à moins de la moitié de ce que la LED accepte.
+
+> Le calcul vaut pour une LED **rouge** (2,0 V de seuil). Une bleue ou une
+> blanche montent à ~3,2 V, ce qui donne **4,8 mA** : encore moins de
+> courant, donc encore moins de risque — mais aussi moins lumineux. Si ta
+> LED reste terne à `LED_MAX = 1.0`, c'est là qu'il faut regarder, pas du
+> côté du logiciel.
+
+Ce qui serait dangereux, en revanche, c'est de **baisser la résistance**
+pour gagner en éclat : à 100 Ω on passerait à 28 mA, au-dessus de ce que
+la LED supporte en continu. Le réglage logiciel, lui, ne peut pas sortir
+des clous.
+
 ### Règle 3 — On ne modifie jamais un câblage sous tension
 
 Débranche l'USB avant de toucher un fil. Deux raisons :

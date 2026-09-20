@@ -447,8 +447,11 @@ AGENDA_SCROLL_PAUSE_MS = 1600
 # 6. LED RESPIRANTE
 # =====================================================================
 PWM_FREQ = 2000         # 2 kHz : aucun scintillement visible à l'oeil
-LED_MIN = 0.04          # luminosité basse de la respiration (4 %)
-LED_MAX = 0.25          # luminosité haute de la respiration (25 %)
+# La résistance de 330 Ω plafonne le courant à ~8,5 mA quoi qu'on mette
+# ici : monter jusqu'à 1.0 ne peut rien abîmer. Voir docs/05-electronique.
+# C'est l'ÉCART entre les deux qui fait la respiration.
+LED_MIN = 0.10          # luminosité basse de la respiration (10 %)
+LED_MAX = 0.75          # luminosité haute de la respiration (75 %)
 LED_PERIOD_MS = 3000    # durée d'un cycle inspiration + expiration
 LED_FLASH_MS = 120      # durée de l'éclat quand tu appuies sur ESC
 LED_RETURN_MS = 350     # retour progressif du flash vers la respiration

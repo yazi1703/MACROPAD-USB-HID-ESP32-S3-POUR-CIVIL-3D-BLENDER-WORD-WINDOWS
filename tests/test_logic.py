@@ -3252,6 +3252,69 @@ class VueAgendaSurLEcran(unittest.TestCase):
         ecran.flush_startup()
         self.assertEqual(ecran.oled.hors, 0)
 
+    def test_une_touche_simple_se_voit_AUSSI_en_vue_agenda(self):
+        """Demande a l'usage : "je veux voir toutes les commandes que je
+        tape, pas seulement les combinaisons".
+
+        La vue agenda n'a pas de tableau a surligner. Sans ce cas, appuyer
+        sur une touche ne produisait RIEN a l'ecran - on ne savait meme pas
+        si l'appui avait ete pris en compte.
+        """
+        ecran, journee = self._ecran()
+        ecran.macros = [("CTRL", {}), ("COPIER", {}), ("F3", {}),
+                        ("PLINE", {}), ("ISOLE", {}), ("SELSIM", {})]
+        vus = []
+        vrai_deux_lignes = ecran._deux_lignes
+        ecran._deux_lignes = lambda haut, bas: (vus.append((haut, bas)),
+                                                vrai_deux_lignes(haut, bas))[1]
+        ecran.surligner(3, clock[0])
+        self.assertEqual(vus, [("PLINE", "B4")],
+                         "l'appui n'a rien montre a l'ecran")
+        self.assertIsNotNone(ecran.splash_until,
+                             "l'affichage ne se retire pas tout seul")
+
+        # ... et l'ecran revient a l'agenda tout seul, sans rien bloquer.
+        clock[0] += C.HIGHLIGHT_MS + 50
+        ecran.tick(clock[0])
+        self.assertIsNone(ecran.splash_until)
+        self.assertEqual(ecran.oled.hors, 0)
+
+    def test_une_touche_sans_libelle_montre_son_numero(self):
+        """Une touche non configuree ne doit pas afficher une ligne vide :
+        on ne saurait pas si l'appui a ete pris."""
+        ecran, _ = self._ecran()
+        ecran.macros = [("", {})] * 6
+        vus = []
+        ecran._deux_lignes = lambda haut, bas: vus.append((haut, bas))
+        ecran.surligner(0, clock[0])
+        self.assertEqual(vus, [("B1", "")])
+
+    def test_la_vue_macros_garde_son_surlignage(self):
+        """L'autre moitie de la regle : la ou il y a un tableau, le
+        surlignage reste - il montre les DEUX AUTRES gestes de la touche,
+        ce qu'un affichage en gros ne peut pas faire."""
+        ecran, _ = self._ecran()
+        ecran.vue = "macros"
+        ecran.macros = [("PLINE", {})] * 6
+        ecran.surligner(3, clock[0])
+        self.assertEqual(ecran.surbrillance, 3)
+        self.assertIsNone(ecran.splash_until)
+
+    def test_un_changement_de_profil_ne_remplace_pas_l_agenda(self):
+        """profile() appelait _vue_principale() en direct : le tableau des
+        macros remplacait l'agenda a chaque changement de profil, et
+        l'agenda ne revenait qu'au changement de minute suivant."""
+        ecran, journee = self._ecran()
+        vues = []
+        ecran._vue_principale = lambda: vues.append("macros")
+        vraie_agenda = ecran._vue_agenda
+        ecran._vue_agenda = lambda: (vues.append("agenda"), vraie_agenda())[1]
+        ecran.profile("CIVIL 3D", [("PLINE", {})] * 6, clock[0], splash=False)
+        self.assertEqual(vues, ["agenda"],
+                         "le tableau des macros a remplace l'agenda")
+        self.assertEqual(ecran.macros[0][0], "PLINE",
+                         "les libelles doivent quand meme etre retenus")
+
     def test_l_ecran_ne_s_eteint_jamais_en_vue_agenda(self):
         """UN AGENDA, ON LE REGARDE SANS RIEN TOUCHER.
 
