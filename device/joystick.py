@@ -271,6 +271,12 @@ class Joystick:
         self._rentre = None         # instant du retour au repos, ou None
         self._prochain = 0          # avant cet instant, on n'envoie rien
         self._aveugle = 0           # instant jusqu'auquel on ignore les axes
+        # VERROU APRES UNE INTERRUPTION. Quand ESC referme une orbite, le
+        # stick est encore pousse : sans ce verrou, le tour de boucle
+        # SUIVANT en recommencerait aussitot une nouvelle, et ESC n'aurait
+        # eu aucun effet visible. Il faut ramener le stick au repos pour
+        # repartir - c'est ce qu'on attend d'une touche d'annulation.
+        self._bloque = False
         self.derniere = (0.0, 0.0)  # pour l'ecran et les diagnostics
 
     # ------------------------------------------------------------------
@@ -322,9 +328,15 @@ class Joystick:
         change tout seul selon la fenetre active. Un glissement en cours est
         ABANDONNE : les reglages d'un logiciel ne doivent pas finir un
         mouvement commence dans un autre.
+
+        Une premiere version se contentait de REPONDRE qu'un glissement
+        etait en cours, sans l'abandonner. main.py relachait donc le bouton
+        du milieu, mais la machine a etats restait en GLISSE : les tours
+        suivants continuaient d'envoyer du mouvement avec un bouton
+        relache, et la vue se baladait sans tourner.
         """
         self.reglages = reglages_valides(brut)
-        return self.etat != REPOS
+        return self.abandonner()
 
     def mode(self):
         return self.reglages["mode"]
@@ -386,6 +398,11 @@ class Joystick:
 
         if self.etat == REPOS:
             if not actif:
+                self._bloque = False       # le stick est revenu au milieu
+                return (RIEN, 0, 0)
+            if self._bloque:
+                # On a ete interrompu et le stick n'est pas encore revenu
+                # au repos : on ne repart pas tout seul.
                 return (RIEN, 0, 0)
             self.etat = GLISSE
             self._rentre = None
@@ -429,6 +446,7 @@ class Joystick:
             return False
         self.etat = REPOS
         self._rentre = None
+        self._bloque = True
         return True
 
     def _terminer(self):

@@ -5027,8 +5027,13 @@ class GlissementDeVue(unittest.TestCase):
         pour s'en sortir.
         """
         self.assertEqual(self.pousse(10000)[0], self.J.COMMENCER)
-        self.jo.regler({"mode": "eteint"})
-        self.assertEqual(self.pousse(10020)[0], self.J.TERMINER)
+        # regler() ABANDONNE lui-meme le glissement et le dit : main.py
+        # relache alors le bouton. Une premiere version se contentait de
+        # repondre "oui il y en avait un" sans changer d'etat, si bien que
+        # les tours suivants continuaient d'envoyer du mouvement avec un
+        # bouton deja relache - la vue se baladait sans tourner.
+        self.assertTrue(self.jo.regler({"mode": "eteint"}))
+        self.assertEqual(self.pousse(10020)[0], self.J.RIEN)
         self.assertEqual(self.pousse(10040)[0], self.J.RIEN)
 
     def test_regler_signale_un_glissement_a_refermer(self):
@@ -5070,15 +5075,22 @@ class GlissementDeVue(unittest.TestCase):
         JOYSTICK_FIN_MS n'en demande.
         """
         self.assertEqual(self.pousse(10000)[0], self.J.COMMENCER)
-        self.jo.ignorer(10010, 200)
-        for instant in (10020, 10100, 10200):
-            self.assertEqual(self.relache(instant)[0], self.J.RIEN)
-        # Le glissement est toujours ouvert. Et le delai de fin repart de
-        # ZERO a la sortie de l'aveuglement, ce qui est le bon
-        # comportement : on ne peut pas compter comme "repos constate" un
-        # temps pendant lequel on ne regardait pas les axes.
-        self.assertEqual(self.relache(10400)[0], self.J.RIEN)
-        self.assertEqual(self.relache(10560)[0], self.J.TERMINER)
+        # ON LAISSE D'ABORD LE CHRONOMETRE DU REPOS DEMARRER. C'est la
+        # seule facon d'eprouver le gel : si l'aveuglement commence alors
+        # qu'aucun retour au repos n'a encore ete constate, il n'y a rien
+        # a geler et le test ne prouve rien. Une mutation l'a montre.
+        self.assertEqual(self.relache(10020)[0], self.J.RIEN)
+        self.jo.ignorer(10030, 200)
+        self.assertEqual(self.relache(10040)[0], self.J.RIEN)
+        # Fin de l'aveuglement. Sans le gel, 220 ms se seraient ecoulees
+        # depuis le retour au repos de 10020 - bien plus que les 120 ms
+        # demandees - et l'orbite serait coupee ici, en plein clic.
+        self.assertEqual(self.relache(10240)[0], self.J.RIEN,
+                         "un clic ne doit pas pouvoir terminer une orbite")
+        # Et le delai repart de zero : on ne compte pas comme "repos
+        # constate" un temps pendant lequel on ne regardait pas les axes.
+        self.assertEqual(self.relache(10300)[0], self.J.RIEN)
+        self.assertEqual(self.relache(10400)[0], self.J.TERMINER)
 
     def test_le_mode_touches_ne_repete_pas_quatre_vingts_fois_par_seconde(self):
         """Un raccourci n'est pas un deplacement de souris.
@@ -5113,6 +5125,10 @@ class FausseSouris:
         self.occupee = False
         self.plante = False
         self.journalise = journalise
+        # L'INSTANT de chaque rapport. Sans lui, impossible de verifier
+        # QUAND un bouton est relache - et c'est tout ce qui distingue
+        # "ESC a referme l'orbite" de "le firmware s'est arrete".
+        self.instants = []
 
     def is_open(self):
         return self.ouverte
@@ -5126,6 +5142,7 @@ class FausseSouris:
         if self.occupee:
             return False
         self.rapports.append((bool(milieu), dx, dy))
+        self.instants.append(clock[0])
         if self.journalise:
             JOURNAL.append(("souris", (bool(milieu), dx, dy)))
         return True
@@ -5671,12 +5688,36 @@ class JoystickDansLaBoucleReelle(unittest.TestCase):
                            else {1: 32768, 2: 32768})
             Pin.levels[C.ESC_PIN] = 0 if 3000 <= t < 3100 else 1
 
-        clavier, souris = self._boucle(chrono, fin=3300)
+        clavier, souris = self._boucle(chrono, fin=4000)
         self.assertTrue(souris.rapports)
-        # Le bouton du milieu est relache AVANT la fin de la boucle, alors
-        # que le stick est toujours pousse.
-        relaches = [i for i, r in enumerate(souris.rapports) if not r[0]]
-        self.assertTrue(relaches, "ESC n'a pas referme le glissement")
+        # ATTENTION AU PIEGE QUI M'A EU DEUX FOIS.
+        #
+        # Premier piege : le finally de main.run() relache TOUJOURS le
+        # bouton, par securite. Chercher "un relachement quelque part"
+        # etait donc vrai meme quand ESC ne faisait rien.
+        #
+        # Second piege : chercher un relachement "au milieu de la
+        # sequence" ne marche pas non plus, parce qu'apres ESC il ne se
+        # passe plus rien - le relachement se trouve etre le DERNIER
+        # rapport, et il est pourtant le bon.
+        #
+        # Ce qui distingue vraiment les deux cas, c'est QUAND. ESC est
+        # appuye a 3000 et le stick reste pousse jusqu'a 4000 : le bouton
+        # doit se relever tout de suite, pas une seconde plus tard a
+        # l'arret du firmware.
+        relaches = [t for t, r in zip(souris.instants, souris.rapports)
+                    if not r[0]]
+        self.assertTrue(relaches, "le bouton n'a jamais ete relache")
+        self.assertLess(relaches[0], 3200,
+                        "ESC n'a pas referme l'orbite : le bouton est reste "
+                        "enfonce jusqu'a l'arret du firmware")
+        # Et l'orbite ne repart pas toute seule : il faut ramener le stick
+        # au repos. Sinon ESC n'aurait aucun effet visible - la vue
+        # continuerait de tourner comme avant.
+        apres = [r for t, r in zip(souris.instants, souris.rapports)
+                 if t > relaches[0]]
+        self.assertEqual([r for r in apres if r[0]], [],
+                         "l'orbite est repartie sans qu'on relache le stick")
 
     def test_l_etalonnage_refuse_un_stick_tenu_au_demarrage(self):
         """Et le macropad TAPE quand meme : c'est la regle du projet."""

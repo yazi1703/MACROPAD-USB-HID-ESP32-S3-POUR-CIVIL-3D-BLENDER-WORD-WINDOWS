@@ -1281,7 +1281,7 @@ else:
 
 ## device/main.py
 
-`833 lignes - sha256 6f268d4328c469d6`
+`852 lignes - sha256 107c8a8342f940b5`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1719,7 +1719,7 @@ def run():
         if keyboard is not None:
             keyboard.relacher_joystick()
 
-    def joystick_agir(action, dx, dy):
+    def joystick_agir(action, dx, dy, now):
         """Traduit ce que demande joystick.py en actions USB.
 
         joystick.py ne sait rien de l'USB - c'est ce qui le rend testable
@@ -1741,12 +1741,21 @@ def run():
             return
 
         if action == JOY_COMMENCER:
-            # LE MODIFICATEUR D'ABORD, LE BOUTON ENSUITE. Un Maj qui arrive
-            # apres le clic n'est pas vu par le logiciel 3D : il a deja
-            # decide que ce glissement serait une translation.
+            # LE MODIFICATEUR D'ABORD, LE BOUTON ENSUITE, ET CE N'EST PAS
+            # UNE PRECAUTION THEORIQUE. Un Maj qui arrive APRES le clic
+            # n'est pas vu par le logiciel 3D : Civil 3D a deja decide que
+            # ce glissement serait une translation, et la vue se deplace au
+            # lieu de tourner.
+            #
+            # Demander ne suffit pas : il faut que le paquet PARTE. On
+            # appelle donc tick() tout de suite, exactement comme le fait
+            # la branche du bouton ESC juste au-dessus - sans cela, l'ordre
+            # dependrait de celui des taches de fond, et un test de bout en
+            # bout a montre que le clic partait bel et bien en premier.
             modif = stick.modificateur()
             if modif and keyboard is not None:
                 keyboard.maintenir_joystick([("maintien", (modif,))])
+                keyboard.tick(now)
             souris.milieu(True)
         elif action == JOY_BOUGER:
             souris.bouger(dx, dy)
@@ -1991,19 +2000,29 @@ def run():
                 # 125 rapports de souris par seconde - et c'est la cadence
                 # interne du joystick qui s'en occupe.
                 if stick is not None and axes is not None:
+                    # LA SOURIS A DISPARU PENDANT UN GLISSEMENT. Elle a
+                    # oublie l'etat du bouton, donc nous aussi : on ferme
+                    # le glissement et on relache le modificateur tenu,
+                    # sinon un Maj resterait enfonce cote Windows sans
+                    # plus rien pour le relacher.
+                    if (souris is not None and not souris.ready()
+                            and stick.abandonner()):
+                        joystick_relacher()
                     brut_x, brut_y = axes.lire()
                     action, dx, dy = stick.service(brut_x, brut_y, now)
                     if action != JOY_RIEN:
-                        joystick_agir(action, dx, dy)
+                        joystick_agir(action, dx, dy, now)
 
             # --- 4. Travaux de fond, tous non bloquants -------------
-            # La souris d'abord : son rapport porte l'etat du bouton du
-            # milieu, et un bouton qui tarde a s'enfoncer fait rater le
-            # debut du mouvement.
-            if souris:
-                souris.tick(now)
+            # LE CLAVIER D'ABORD. Une premiere version mettait la souris en
+            # tete, pour que le bouton du milieu ne tarde pas a s'enfoncer.
+            # C'etait exactement l'inverse de ce qu'il faut : le Maj d'une
+            # orbite Civil 3D passe par le clavier, et il doit partir AVANT
+            # le clic, sinon le logiciel translate au lieu de tourner.
             if keyboard:
                 keyboard.tick(now)
+            if souris:
+                souris.tick(now)
                 pret = keyboard.ready()
                 if pret and not etait_pret:
                     controls.disarm_held()
@@ -3292,7 +3311,7 @@ def compile_actions(actions, layout, caps_lock=False):
 
 ## device/store.py
 
-`786 lignes - sha256 8744314f4421c853`
+`797 lignes - sha256 fee05ad049196016`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -3566,9 +3585,20 @@ def joystick_depuis_json(bloc):
     """
     bloc = bloc if isinstance(bloc, dict) else {}
     propre = _reglages_joystick(bloc)
+    # "directions" doit etre un dictionnaire. Un fichier edite a la main
+    # peut y avoir mis n'importe quoi - une chaine, une liste, null - et la
+    # promesse de cette fonction est de NE JAMAIS LEVER : une configuration
+    # abimee doit degrader vers un joystick eteint, pas empecher la carte
+    # de demarrer.
+    brutes = bloc.get("directions")
+    if not isinstance(brutes, dict):
+        brutes = {}
     directions = {}
     for sens in _DIRECTIONS:
-        actions = _actions_direction((bloc.get("directions") or {}).get(sens))
+        try:
+            actions = _actions_direction(brutes.get(sens))
+        except Exception:
+            actions = []
         if actions:
             directions[sens] = actions
     propre["directions"] = directions
@@ -4216,7 +4246,7 @@ class Stats:
 
 ## device/portal.py
 
-`962 lignes - sha256 2ace8bef036ed089`
+`1087 lignes - sha256 1b14efdb1a23a517`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -4296,6 +4326,21 @@ cursor:pointer}
 input[type=color]:disabled{opacity:.3;cursor:default}
 input.alt{width:auto;flex:0 0 auto;margin:0 0 0 2px;cursor:pointer}
 .val{display:flex;gap:5px;align-items:center}
+/* Le bloc du joystick. Une grille qui se replie en une colonne sur un
+   telephone : la page de configuration s'ouvre souvent depuis un mobile,
+   par le point d'acces WiFi du macropad. */
+.joy{border-top:1px solid #262c3a;margin-top:12px;padding-top:12px}
+.joy .titre{font:11px ui-monospace,monospace;text-transform:uppercase;
+letter-spacing:1px;color:#8b94a6;margin-bottom:8px}
+.joy .grille{display:grid;gap:8px;
+grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.joy label{display:block;font-size:11px;color:#8b94a6;margin-bottom:3px}
+.joy .case{display:flex;gap:6px;align-items:center;font-size:12px;
+color:#e8eaee}
+.joy .case input{width:auto;flex:0 0 auto;cursor:pointer}
+.joy .dirs{margin-top:10px;display:grid;gap:8px;
+grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.joy .aide{font-size:11px;color:#8b94a6;margin-top:8px;line-height:1.45}
 .pile{display:flex;flex-direction:column;gap:5px}
 .pile select{flex:0 0 138px}
 .pile .add{align-self:flex-start;padding:4px 9px;font-size:11px}
@@ -4820,6 +4865,115 @@ function tableauCombos(p){
 // serait pire que le defilement.
 var VU=null;
 
+// =====================================================================
+// LE JOYSTICK 3D, PROFIL PAR PROFIL
+// =====================================================================
+// POURQUOI CE REGLAGE N'EST PAS GLOBAL, et c'est le point important :
+// chaque logiciel 3D a SA convention de navigation.
+//
+//   Blender    orbite = clic du milieu glisse, SANS modificateur
+//   Civil 3D   orbite = MAJ + clic du milieu glisse
+//
+// C'est INVERSE entre les deux. Le meme geste physique fait tourner dans
+// l'un et translater dans l'autre. Un reglage unique est donc impossible,
+// et c'est pour cela qu'il vit dans le profil - qui bascule tout seul
+// quand le compagnon PC voit changer la fenetre active.
+var JOY_MODES=[["eteint","eteint"],["souris","souris (orbite)"],
+["touches","raccourcis clavier"]];
+var JOY_MODIFS=[["","aucun"],["MAJ","MAJ"],["CTRL","CTRL"],["ALT","ALT"]];
+var JOY_DIRS=[["gauche","vers la gauche"],["droite","vers la droite"],
+["haut","vers le haut"],["bas","vers le bas"]];
+
+function choix(liste,val,cb){
+ var s=el("select");
+ liste.forEach(function(t){
+  var o=el("option",{value:t[0]},[t[1]]);
+  if(t[0]==val)o.selected=true;s.appendChild(o);});
+ s.onchange=function(){cb(s.value);render();};return s;}
+
+function nombre(val,mini,maxi,titre,cb){
+ var i=el("input",{type:"number",min:mini,max:maxi,title:titre});
+ i.value=val;
+ i.onchange=function(){
+  var v=parseInt(i.value,10);
+  if(isNaN(v))v=mini;
+  if(v<mini)v=mini;if(v>maxi)v=maxi;
+  i.value=v;cb(v);};
+ return i;}
+
+function coche(val,texte,titre,cb){
+ var b=el("input",{type:"checkbox",title:titre});
+ b.checked=!!val;
+ b.onchange=function(){cb(b.checked);};
+ return el("div",{cls:"case"},[b,texte]);}
+
+function champ(nom,titre,widget){
+ return el("div",{},[el("label",{title:titre},[nom]),widget]);}
+
+function blocJoystick(p){
+ if(!p.joystick)p.joystick={};
+ var j=p.joystick;
+ if(j.mode===undefined)j.mode="eteint";
+ if(!j.directions)j.directions={};
+
+ var bloc=el("div",{cls:"joy"},[]);
+ bloc.appendChild(el("div",{cls:"titre"},["Joystick 3D"]));
+
+ var grille=el("div",{cls:"grille"},[]);
+ grille.appendChild(champ("Mode",
+  "eteint = le joystick ne fait rien dans ce logiciel",
+  choix(JOY_MODES,j.mode,function(v){j.mode=v;})));
+
+ if(j.mode=="souris"){
+  grille.appendChild(champ("Maintenu pendant l'orbite",
+   "Blender : aucun. Civil 3D : MAJ. Releve-le a la souris dans les "+
+   "autres logiciels.",
+   choix(JOY_MODIFS,j.modificateur||"",
+    function(v){j.modificateur=v;})));
+ }
+ if(j.mode!="eteint"){
+  grille.appendChild(champ("Sensibilite",
+   "deplacement a pleine inclinaison. Monte-la si la vue tourne trop "+
+   "lentement.",
+   nombre(j.sensibilite===undefined?6:j.sensibilite,1,15,
+    "1 a 15",function(v){j.sensibilite=v;})));
+  grille.appendChild(champ("Zone morte (%)",
+   "en dessous, le stick est considere au repos. Monte-la si la vue "+
+   "derive toute seule.",
+   nombre(j.zone_morte===undefined?12:j.zone_morte,1,60,
+    "1 a 60 %",function(v){j.zone_morte=v;})));
+  grille.appendChild(el("div",{},[
+   el("label",{},["Sens"]),
+   coche(j.inverser_x,"inverser X",
+    "si la vue part a droite quand tu pousses a gauche",
+    function(v){j.inverser_x=v;}),
+   coche(j.inverser_y,"inverser Y",
+    "si la vue monte quand tu pousses vers le bas",
+    function(v){j.inverser_y=v;})]));
+ }
+ bloc.appendChild(grille);
+
+ if(j.mode=="touches"){
+  var dirs=el("div",{cls:"dirs"},[]);
+  JOY_DIRS.forEach(function(d){
+   etapes(j.directions,d[0]);
+   dirs.appendChild(el("div",{},[
+    el("label",{},[d[1]]),
+    ligneEtape(j.directions,d[0],0)]));});
+  bloc.appendChild(dirs);
+  bloc.appendChild(el("div",{cls:"aide"},[
+   "Mode sans souris : le joystick envoie un raccourci par direction. "+
+   "Dans Blender, le pave numerique 4 et 6 tournent la vue par pas de "+
+   "15 degres, 8 et 2 la font basculer (KP_4, KP_6, KP_8, KP_2)."]));
+ }
+ if(j.mode=="souris"){
+  bloc.appendChild(el("div",{cls:"aide"},[
+   "Le joystick tient le clic du milieu et deplace : c'est le geste "+
+   "d'orbite de presque tous les logiciels 3D. Il faut une souris USB, "+
+   "donc JOYSTICK_ENABLED = True dans config.py et un redemarrage."]));
+ }
+ return bloc;}
+
 function onglets(zone){
  var barre=el("div",{},[]);barre.id="onglets";
  D.ordre.forEach(function(nom){
@@ -4872,7 +5026,8 @@ function render(){
    el("th",{},["Libelle"]),el("th",{},["Action"]),
    el("th",{},["Usage"])])]);
   for(var i=0;i<N;i++)ligne(p,i,tb,mx);
-  zone.appendChild(el("div",{cls:"card"},[head,tb,tableauCombos(p)]));
+  zone.appendChild(el("div",{cls:"card"},
+   [head,tb,tableauCombos(p),blocJoystick(p)]));
  });
  renderApps();
 }
@@ -6008,7 +6163,7 @@ def create_interface(souris=None):
 
 ## device/hid_mouse.py
 
-`298 lignes - sha256 798fd70431376a5f`
+`306 lignes - sha256 d02241f5b252cdc7`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -6187,10 +6342,18 @@ class HIDMouse:
             # Debranchement, veille, ou reinitialisation du port. Windows a
             # de toute facon oublie l'etat des boutons : on repart de zero
             # plutot que de croire qu'un bouton est encore enfonce.
+            #
+            # ON OUBLIE AUSSI CE QU'ON VOULAIT, et c'est la meme regle que
+            # pour le clavier, qui jette sa file de macros au
+            # debranchement : HORS DE QUESTION QU'UN CLIC PARTE TOUT SEUL
+            # AU REBRANCHEMENT. Un bouton du milieu qui s'enfonce sans
+            # qu'on ait rien demande, dans le logiciel qui a le focus a ce
+            # moment-la, est exactement le genre de surprise qu'on refuse.
             if self.opened:
-                print("Souris : deconnexion/reset USB")
+                print("Souris : deconnexion/reset USB, glissement oublie")
             self.opened = False
             self._etat_milieu = False
+            self._voulu_milieu = False
             self._dx = 0
             self._dy = 0
             return
@@ -6315,7 +6478,7 @@ def creer_interface():
 
 ## device/joystick.py
 
-`453 lignes - sha256 b56f2d097d574af7`
+`471 lignes - sha256 5c7a71658fe25a5c`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -6591,6 +6754,12 @@ class Joystick:
         self._rentre = None         # instant du retour au repos, ou None
         self._prochain = 0          # avant cet instant, on n'envoie rien
         self._aveugle = 0           # instant jusqu'auquel on ignore les axes
+        # VERROU APRES UNE INTERRUPTION. Quand ESC referme une orbite, le
+        # stick est encore pousse : sans ce verrou, le tour de boucle
+        # SUIVANT en recommencerait aussitot une nouvelle, et ESC n'aurait
+        # eu aucun effet visible. Il faut ramener le stick au repos pour
+        # repartir - c'est ce qu'on attend d'une touche d'annulation.
+        self._bloque = False
         self.derniere = (0.0, 0.0)  # pour l'ecran et les diagnostics
 
     # ------------------------------------------------------------------
@@ -6642,9 +6811,15 @@ class Joystick:
         change tout seul selon la fenetre active. Un glissement en cours est
         ABANDONNE : les reglages d'un logiciel ne doivent pas finir un
         mouvement commence dans un autre.
+
+        Une premiere version se contentait de REPONDRE qu'un glissement
+        etait en cours, sans l'abandonner. main.py relachait donc le bouton
+        du milieu, mais la machine a etats restait en GLISSE : les tours
+        suivants continuaient d'envoyer du mouvement avec un bouton
+        relache, et la vue se baladait sans tourner.
         """
         self.reglages = reglages_valides(brut)
-        return self.etat != REPOS
+        return self.abandonner()
 
     def mode(self):
         return self.reglages["mode"]
@@ -6706,6 +6881,11 @@ class Joystick:
 
         if self.etat == REPOS:
             if not actif:
+                self._bloque = False       # le stick est revenu au milieu
+                return (RIEN, 0, 0)
+            if self._bloque:
+                # On a ete interrompu et le stick n'est pas encore revenu
+                # au repos : on ne repart pas tout seul.
                 return (RIEN, 0, 0)
             self.etat = GLISSE
             self._rentre = None
@@ -6749,6 +6929,7 @@ class Joystick:
             return False
         self.etat = REPOS
         self._rentre = None
+        self._bloque = True
         return True
 
     def _terminer(self):
