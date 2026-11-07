@@ -1361,8 +1361,17 @@ class Macropad:
 # passe par le cable USB, l'autre par le WiFi depuis un telephone.
 PAGE = r"""<!DOCTYPE html><html lang=fr><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
+<meta name=theme-color content="#0e1014">
 <title>Macropad</title><style>
+:root{color-scheme:dark}
 *{box-sizing:border-box}
+/* Le focus CLAVIER, et seulement lui : :focus-visible ne s'allume pas
+   sur un clic a la souris. Sans cet anneau, une tabulation a travers la
+   page ne dit plus ou l'on est - et cette page se remplit au clavier. */
+:focus-visible{outline:2px solid #3d7bfd;outline-offset:2px}
+/* Pas de delai de 300 ms sur un appui tactile : la page s'ouvre souvent
+   depuis un telephone, par le point d'acces du macropad. */
+button,input,select,label{touch-action:manipulation}
 body{margin:0;padding:0 0 40px;background:#0e1014;color:#e8eaee;
 font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
 header{position:sticky;top:0;z-index:9;background:#151922;
@@ -1372,7 +1381,7 @@ header h1{font-size:16px;margin:0;letter-spacing:.4px}
 header .tag{font:11px ui-monospace,monospace;color:#8b94a6;
 border:1px solid #2b3242;border-radius:99px;padding:3px 9px}
 main{max-width:940px;margin:0 auto;padding:18px}
-h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;
+h2{font-size:13px;letter-spacing:.2px;
 color:#8b94a6;margin:26px 0 10px;font-weight:600}
 .card{background:#151922;border:1px solid #262c3a;border-radius:12px;
 padding:14px;margin-bottom:12px}
@@ -1390,13 +1399,13 @@ input.alt{width:auto;flex:0 0 auto;margin:0 0 0 2px;cursor:pointer}
    telephone : la page de configuration s'ouvre souvent depuis un mobile,
    par le point d'acces WiFi du macropad. */
 .joy{border-top:1px solid #262c3a;margin-top:12px;padding-top:12px}
-.joy .titre{font:11px ui-monospace,monospace;text-transform:uppercase;
-letter-spacing:1px;color:#8b94a6;margin-bottom:8px}
+.joy .titre{font:11px ui-monospace,monospace;color:#8b94a6;
+margin-bottom:8px}
 .joy .grille{display:grid;gap:8px;
 grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .joy label{display:block;font-size:11px;color:#8b94a6;margin-bottom:3px}
-.joy .case{display:flex;gap:6px;align-items:center;font-size:12px;
-color:#e8eaee}
+.joy .case{display:flex;gap:8px;align-items:center;font-size:12px;
+color:#e8eaee;cursor:pointer}
 .joy .case input{width:auto;flex:0 0 auto;cursor:pointer}
 .joy .dirs{margin-top:10px;display:grid;gap:8px;
 grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
@@ -1431,9 +1440,10 @@ font:13px system-ui}
 #msg.rec{background:#33131d;border:1px solid #7d2a3c;color:#f0a6b6}
 input:focus,select:focus{outline:0;border-color:#3d7bfd}
 table{width:100%;border-collapse:collapse}
-td,th{padding:3px 5px 3px 0;vertical-align:middle}
+td,th{padding:4px 8px 4px 0;vertical-align:middle}
+.use{font-variant-numeric:tabular-nums}
 th{font:11px system-ui;color:#6f7788;text-align:left;font-weight:600;
-text-transform:uppercase;letter-spacing:.6px;padding-bottom:6px}
+padding-bottom:6px}
 td.k{width:30px;color:#3d7bfd;font:700 13px ui-monospace,monospace}
 td.g{width:58px;color:#6f7788;font:11px system-ui}
 td.lab{width:150px}td.ty{width:132px}
@@ -1453,7 +1463,7 @@ white-space:pre-wrap;font:13px ui-monospace,monospace}
 .ko{background:#33131d;border:1px solid #7d2a3c;color:#f0a6b6}
 .hint{color:#6f7788;font-size:12px;margin:0 0 14px}
 .combos{margin-top:14px;border-top:1px solid #1f2531;padding-top:12px}
-.combos h3{font:600 11px system-ui;text-transform:uppercase;
+.combos h3{font:600 11px system-ui;
 letter-spacing:.6px;color:#6f7788;margin:0 0 8px}
 .combos .hint{margin:0 0 8px}
 td.duo{width:78px}
@@ -1465,8 +1475,8 @@ text-align:center}
 </style></head><body>
 <header>
 <h1>Macropad</h1>
-<span class=tag id=src>...</span>
-<span class=tag id=cnt>...</span>
+<span class=tag id=src>…</span>
+<span class=tag id=cnt>…</span>
 </header>
 <main>
 <p class=hint>Chaque touche a un LIBELLE COURT (6 caracteres, c'est la largeur de
@@ -1507,7 +1517,7 @@ defile.</p>
 <button onclick=zero()>Compteurs a zero</button>
 <button class=d onclick=usine()>Valeurs d'usine</button>
 </div>
-<div id=msg></div>
+<div id=msg role=status aria-live=polite></div>
 </main>
 <div id=bande>
 <b>Enregistrement</b>
@@ -1543,7 +1553,7 @@ var D={ordre:[],profils:{},apps:{repli:{profil:"WINDOWS",abrege:"Win"},liste:[]}
 var N=6,GESTES=["court","long","double"];
 var LIB={court:"court",long:"long",double:"double"};
 var TYPES=[["none","inactive"],["key","touche"],["combo","combinaison"],
-["maintien","maintenir (Ctrl, Maj...)"],
+["maintien","maintenir (Ctrl, Maj…)"],
 ["text","texte"],["text_enter","texte + Entree"],
 ["pause","pause (millisecondes)"]];
 
@@ -1615,6 +1625,7 @@ function capture(champ,cb){
   title:"Capturer UNE SEULE combinaison dans cette case. Pour enregistrer "+
    "une suite de frappes, utilise le bouton Enregistrer plus bas."},
   ["\u2328"]);
+ b.setAttribute("aria-label","Capturer une combinaison au clavier");
  b.onclick=function(){
   b.className="s cap on";champ.value="";
   champ.onkeydown=function(ev){
@@ -1792,7 +1803,8 @@ function ligneEtape(k,g,i){
  if(e.type=="key"||e.type=="combo"||e.type=="maintien")
   l.appendChild(capture(champ,function(v){e.valeur=v;}));
  if(k[g].length>1)
-  l.appendChild(el("button",{cls:"d s cap",title:"retirer cette etape",
+  l.appendChild(el("button",{cls:"d s cap","aria-label":"Retirer cette etape",
+   title:"retirer cette etape",
    onclick:function(){k[g].splice(i,1);render();}},["\u00d7"]));
  return l;}
 
@@ -1961,14 +1973,27 @@ function nombre(val,mini,maxi,titre,cb){
   i.value=v;cb(v);};
  return i;}
 
+// La case ET son texte dans UN SEUL <label> : sans cela, cliquer sur le
+// mot "inverser X" ne faisait rien - une zone morte juste a cote de la
+// cible, le genre de detail qui fait croire que la page est cassee.
 function coche(val,texte,titre,cb){
  var b=el("input",{type:"checkbox",title:titre});
  b.checked=!!val;
  b.onchange=function(){cb(b.checked);};
- return el("div",{cls:"case"},[b,texte]);}
+ return el("label",{cls:"case"},[b,texte]);}
 
+// UNE ETIQUETTE QUI NE DESIGNE RIEN N'EST PAS UNE ETIQUETTE. On relie
+// donc chaque <label> a son champ par un identifiant : le texte devient
+// cliquable, et un lecteur d'ecran annonce enfin "Mode, liste" au lieu
+// de "liste" tout court.
+// L'identifiant vient du NOM du champ, pas d'un compteur : un compteur
+// donnerait un identifiant different a chaque redessin, et le navigateur
+// perdrait le focus a chaque frappe. Un seul profil est affiche a la
+// fois, le nom suffit donc a rester unique.
 function champ(nom,titre,widget){
- return el("div",{},[el("label",{title:titre},[nom]),widget]);}
+ var id="j-"+nom.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+ widget.id=id;
+ return el("div",{},[el("label",{title:titre,"for":id},[nom]),widget]);}
 
 function blocJoystick(p){
  if(!p.joystick)p.joystick={};
