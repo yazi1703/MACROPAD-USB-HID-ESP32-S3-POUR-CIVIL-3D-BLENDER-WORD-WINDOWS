@@ -164,3 +164,67 @@ class Inputs:
         for _, item in self.sequence:
             if item.active():
                 item.filter.armed = False
+
+
+class Axes:
+    """Les deux axes du joystick. LE SEUL ENDROIT QUI TOUCHE L'ANALOGIQUE.
+
+    Tout le calcul - centre, zone morte, sensibilité, bornage - vit dans
+    joystick.py, qui ne touche aucun matériel et se teste donc sur un PC.
+    Ici, on ne fait que lire deux nombres.
+
+    POURQUOI UNE CLASSE POUR SI PEU : parce que l'interface analogique de
+    MicroPython a changé de forme au fil des versions, et qu'on ne veut pas
+    que le reste du firmware s'en occupe. Trois façons de régler
+    l'atténuation sont essayées dans l'ordre, de la plus récente à la plus
+    ancienne, et celle qui marche est annoncée au démarrage.
+    """
+
+    def __init__(self, broche_x, broche_y, atten=None):
+        from machine import ADC
+        self.x = self._ouvrir(ADC, broche_x, atten)
+        self.y = self._ouvrir(ADC, broche_y, atten)
+
+    def _ouvrir(self, ADC, numero, atten):
+        """Ouvre une entrée analogique, atténuation maximale si possible.
+
+        L'ATTÉNUATION N'EST PAS UN DÉTAIL : sans elle, l'entrée sature très
+        en dessous de 3,3 V, et le joystick semble bloqué en butée sur une
+        bonne partie de sa course. Avec elle, toute la course est lue.
+
+        Le nom de la constante vient de config.py sous forme de TEXTE,
+        volontairement : il dépend du port MicroPython, et un nom écrit en
+        dur ferait tomber le firmware sur une carte qui ne le connaît pas.
+        """
+        broche = Pin(numero)
+        valeur = getattr(ADC, str(atten), None) if atten else None
+        if valeur is None:
+            if atten:
+                print("Joystick : attenuation %s inconnue de ce firmware."
+                      % atten)
+                print("Joystick : lecture par defaut. Verifie avec "
+                      "print(dir(ADC)) si la course semble tronquee.")
+            return ADC(broche)
+        try:
+            return ADC(broche, atten=valeur)          # forme actuelle
+        except TypeError:
+            pass
+        adc = ADC(broche)
+        try:
+            adc.atten(valeur)                         # forme plus ancienne
+        except Exception as exc:
+            print("Joystick : attenuation non appliquee (%s)" % exc)
+        return adc
+
+    def lire(self):
+        """(x, y) bruts, de 0 a 65535. Jamais bloquant, jamais d'exception.
+
+        Une lecture qui echoue rend le CENTRE APPARENT plutot que zero :
+        zero serait interprete comme "stick pousse a fond" et ferait partir
+        la vue toute seule. Au milieu, il ne se passe rien - c'est le bon
+        comportement quand on ne sait plus lire.
+        """
+        try:
+            return (self.x.read_u16(), self.y.read_u16())
+        except Exception:
+            return (32768, 32768)

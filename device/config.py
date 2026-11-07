@@ -547,6 +547,13 @@ JOYSTICK_ETALON_MS = 20             # délai entre deux mesures
 # le signale.
 JOYSTICK_CADENCE_MS = 12
 
+# Cadence du mode « touches », qui envoie des RACCOURCIS au lieu de
+# déplacements. Un raccourci ne se répète pas quatre-vingts fois par
+# seconde : à la cadence de la souris, une seconde d'inclinaison enverrait
+# quatre-vingts rotations de 15° dans Blender, et la vue partirait en
+# vrille. On vise le rythme d'une touche maintenue.
+JOYSTICK_TOUCHES_MS = 180
+
 # --- Le piège du retour au centre -----------------------------------
 # Pour passer d'une rotation à gauche à une rotation à droite, le stick
 # TRAVERSE le centre. Pendant un instant très court il est donc « au
@@ -561,6 +568,11 @@ JOYSTICK_FIN_MS = 120
 # sur les axes pendant ce délai autour d'un appui.
 # Mets 0 pour désactiver, si ton module a un clic franc.
 JOYSTICK_CLIC_AVEUGLE_MS = 80
+
+# Quelle touche est le clic du stick, en index dans BUTTON_PINS. 0 = B1,
+# c'est-à-dire le pouce, là où le fil SW est soudé. Change-le seulement si
+# tu as soudé SW ailleurs.
+JOYSTICK_CLIC_INDEX = 0
 
 # --- Réglages de repli ----------------------------------------------
 # Les vrais réglages vivent DANS CHAQUE PROFIL (voir profiles.py et la

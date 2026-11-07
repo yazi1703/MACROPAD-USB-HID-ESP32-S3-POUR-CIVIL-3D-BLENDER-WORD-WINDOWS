@@ -15,7 +15,7 @@ LES TROIS MODES DE DÉMARRAGE
 Ce que tu maintiens pendant le RESET décide de tout :
 
   rien           -> MACROPAD : clavier USB actif, usage normal
-  B1 maintenu    -> SAFE MODE : le clavier n'est même pas créé.
+  B6 maintenu    -> SAFE MODE : le clavier n'est même pas créé.
                     Impossible de taper quoi que ce soit, même avec une
                     macro mal écrite. C'est ton filet de secours.
   B2 maintenu    -> MODE CONFIG : pas de clavier non plus, mais le WiFi
@@ -38,6 +38,10 @@ import runtime
 
 def _maintenu(index):
     """True si la touche d'index donné est maintenue enfoncée.
+
+    L'index vient de config.py et n'est PAS écrit en dur : le mode sans
+    échec a déménagé de B1 vers B6 le jour où le clic du joystick est
+    devenu B1 (voir l'explication dans config.py).
 
     La résistance de tirage interne met la broche à 3,3 V (valeur 1) ;
     appuyer la relie à la masse (valeur 0). On laisse 5 ms à la broche
@@ -71,7 +75,43 @@ elif runtime.config_mode:
 elif C.HID_ENABLED:
     try:
         from hid_keyboard import create_interface
-        runtime.interface = create_interface()
+
+        # --- La souris du joystick, si elle est demandée ---------------
+        # Elle est créée AVANT la déclaration à Windows, parce que les deux
+        # interfaces doivent être déclarées ensemble, en un seul appel.
+        souris = None
+        if getattr(C, "JOYSTICK_ENABLED", False):
+            try:
+                from hid_mouse import creer_interface
+                souris = creer_interface()
+            except Exception as exc:
+                # Un fichier manquant ou une bibliothèque incomplète ne
+                # doit pas coûter le clavier : on le dit et on continue.
+                runtime.souris_error = str(exc)
+                print("Souris USB indisponible (%s)." % exc)
+                print("Le clavier fonctionne, le joystick sera inactif.")
+
+        # --- LE MOMENT LE PLUS RISQUÉ, ET SON FILET -------------------
+        # Si Windows refuse le périphérique composite, on ne perd pas la
+        # souris : on perd LE CLAVIER, c'est-à-dire tout. On réessaie donc
+        # immédiatement sans souris, plutôt que de laisser le macropad muet
+        # jusqu'à ce que quelqu'un comprenne pourquoi.
+        try:
+            runtime.interface = create_interface(souris)
+            runtime.souris = souris
+        except Exception as exc:
+            if souris is None:
+                raise
+            runtime.souris_error = str(exc)
+            runtime.souris = None
+            print("=" * 46)
+            print(" PERIPHERIQUE COMPOSITE REFUSE")
+            print("=" * 46)
+            print("Windows n'a pas accepte clavier + souris :", exc)
+            print("Repli automatique : CLAVIER SEUL, joystick inactif.")
+            print("Mets JOYSTICK_ENABLED = False dans config.py pour")
+            print("ne plus voir ce message.")
+            runtime.interface = create_interface()
     except Exception as exc:
         # On n'avale jamais silencieusement une erreur de clavier :
         # elle est affichée et mémorisée pour que main.py la signale.

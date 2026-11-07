@@ -23,6 +23,34 @@ class PWM:
     def __init__(self, *a, **kw): self.values=[]
     def duty_u16(self, v): self.values.append(v)
     def deinit(self): pass
+class ADC:
+    """Faux convertisseur analogique.
+
+    Il sert surtout a verifier que inputs.Axes essaie les trois formes
+    d'atténuation dans le bon ordre : le mot-cle atten= de l'interface
+    actuelle, puis la methode atten() des ports plus anciens, puis rien.
+    valeurs[broche] donne ce que read_u16() rendra.
+    """
+    ATTN_0DB, ATTN_2_5DB, ATTN_6DB, ATTN_11DB = 0, 1, 2, 3
+    valeurs = {}
+    accepte_mot_cle = True
+    journal = []
+
+    def __init__(self, broche, atten=None):
+        if atten is not None and not ADC.accepte_mot_cle:
+            raise TypeError("atten inconnu de ce port")
+        self.broche = getattr(broche, 'n', broche)
+        ADC.journal.append(('init', self.broche, atten))
+
+    def atten(self, valeur):
+        ADC.journal.append(('atten', self.broche, valeur))
+
+    def read_u16(self):
+        return ADC.valeurs.get(self.broche, 32768)
+
+
+machine.ADC = ADC
+machine.idle = lambda: None
 machine.Pin, machine.PWM = Pin, PWM
 machine.USBDevice = type('USBDevice', (), {})
 sys.modules['machine'] = machine
@@ -4444,7 +4472,17 @@ class PageDeConfigurationIntacte(unittest.TestCase):
         premier = configuration["profils"][configuration["ordre"][0]]
         etapes_combos = sum(max(1, len(combo["actions"]))
                             for combo in premier.get("combos", []))
-        self.assertEqual(vu["listes"], 6 * 3 + etapes_combos)
+        # Et le bloc du joystick : son mode est toujours la, le
+        # modificateur seulement en mode souris, et les quatre directions
+        # seulement en mode touches. On compte donc selon le profil, au
+        # lieu d'ecrire un nombre en dur qui ne dirait plus pourquoi.
+        joy = premier.get("joystick") or {}
+        listes_joy = 1
+        if joy.get("mode") == "souris":
+            listes_joy += 1
+        elif joy.get("mode") == "touches":
+            listes_joy += len(("gauche", "droite", "haut", "bas"))
+        self.assertEqual(vu["listes"], 6 * 3 + etapes_combos + listes_joy)
         self.assertIn("source", vu["src"])
         self.assertIn("appuis", vu["cnt"])
         # Les logiciels : une ligne d'en-tete, une par logiciel, une pour
@@ -4811,3 +4849,849 @@ class AncienFichierDeConfiguration(unittest.TestCase):
 
 
 if __name__=='__main__': unittest.main(verbosity=2)
+
+
+# =====================================================================
+# LE JOYSTICK 3D
+# =====================================================================
+class JoystickLogiquePure(unittest.TestCase):
+    """Le calcul, sans carte, sans joystick, sans USB."""
+
+    def setUp(self):
+        import joystick
+        self.J = joystick
+
+    def test_un_centre_decale_ne_rend_pas_le_stick_asymetrique(self):
+        """LE PIEGE NUMERO UN D'UN JOYSTICK A QUELQUES EUROS.
+
+        Le centre ne vaut jamais la moitie de l'echelle. A 30000, il reste
+        35535 de course vers le haut et seulement 30000 vers le bas.
+        Diviser les deux par la meme valeur rendrait le stick nettement
+        plus rapide dans un sens que dans l'autre - defaut tres
+        desagreable, et dont la cause est introuvable sans y penser.
+        """
+        haut = self.J.fraction(65535, 30000, 10)
+        bas = self.J.fraction(0, 30000, 10)
+        self.assertAlmostEqual(haut, 1.0, places=5)
+        self.assertAlmostEqual(bas, -1.0, places=5)
+        # Et a mi-course de chaque cote, la meme vitesse au signe pres.
+        milieu_haut = self.J.fraction(30000 + 35535 // 2, 30000, 0)
+        milieu_bas = self.J.fraction(30000 - 30000 // 2, 30000, 0)
+        self.assertAlmostEqual(milieu_haut, -milieu_bas, places=2)
+
+    def test_la_zone_morte_rend_zero_et_le_mouvement_demarre_a_zero(self):
+        """Sans re-etalement, le mouvement SAUTERAIT a la sortie.
+
+        Avec une zone morte de 20 %, le premier deplacement vaudrait
+        d'emblee 20 % de la vitesse maximale : la vue partirait d'un coup
+        des qu'on quitte le centre.
+        """
+        self.assertEqual(self.J.fraction(32768, 32768, 20), 0.0)
+        # Juste a l'interieur de la zone morte : toujours rien.
+        presque = 32768 + int(0.19 * 32767)
+        self.assertEqual(self.J.fraction(presque, 32768, 20), 0.0)
+        # Juste au-dela : un mouvement, mais TRES petit.
+        dehors = 32768 + int(0.21 * 32767)
+        valeur = self.J.fraction(dehors, 32768, 20)
+        self.assertGreater(valeur, 0.0)
+        self.assertLess(valeur, 0.05,
+                        "le mouvement doit demarrer a zero, pas a 20 %")
+
+    def test_un_centre_impossible_ne_rend_jamais_de_mouvement(self):
+        """Broche qui ne lit rien, ou etalonnage fait stick pousse a fond.
+
+        On rend 0.0 plutot qu'un mouvement invente : une vue qui ne bouge
+        pas se diagnostique, une vue qui part toute seule affole.
+        """
+        for centre in (0, 65535, None, "x"):
+            self.assertEqual(self.J.fraction(1000, centre, 10), 0.0)
+
+    def test_le_bornage_ne_leve_jamais_et_sature_a_127(self):
+        """move_by() de la bibliotheque leve ValueError hors -127..127.
+
+        Une sensibilite mal reglee ferait donc tomber la boucle
+        principale, c'est-a-dire TOUT le macropad : plus d'ecran, plus de
+        LED, plus de bouton ESC. Le bornage est le rempart.
+        """
+        self.assertEqual(self.J.deplacement(1.0, 10000), 127)
+        self.assertEqual(self.J.deplacement(-1.0, 10000), -127)
+        self.assertEqual(self.J.deplacement(0.5, 10), 5)
+        # Une sensibilite illisible ne doit pas lever non plus.
+        self.assertIsInstance(self.J.deplacement(0.5, "beaucoup"), int)
+        self.assertEqual(self.J.deplacement(1.0, -5), 0)
+
+    def test_l_etalonnage_refuse_un_stick_qui_bougeait(self):
+        """Un centre pris stick pousse ferait deriver la vue sans fin."""
+        jo = self.J.Joystick()
+        self.assertFalse(jo.etalonner([(30000, 30000), (60000, 30000),
+                                       (30000, 30000)]))
+        self.assertFalse(jo.etalonne())
+        # Trop peu de mesures : on refuse aussi.
+        self.assertFalse(jo.etalonner([(30000, 30000)]))
+        # Au repos, avec le bruit normal du convertisseur : accepte.
+        self.assertTrue(jo.etalonner([(30010, 29990), (30000, 30000),
+                                      (29995, 30005), (30005, 29995)]))
+        self.assertTrue(jo.etalonne())
+        self.assertTrue(29990 <= jo.centre_x <= 30010)
+
+    def test_les_reglages_illisibles_sont_repares_pas_refuses(self):
+        """profils.json peut avoir ete edite a la main, ou tronque."""
+        propre = self.J.reglages_valides({"mode": "fusee",
+                                          "modificateur": "F13",
+                                          "sensibilite": 9999,
+                                          "zone_morte": -4})
+        self.assertEqual(propre["mode"], self.J.MODE_ETEINT)
+        self.assertEqual(propre["modificateur"], "")
+        self.assertEqual(propre["sensibilite"], 15)
+        self.assertEqual(propre["zone_morte"], 1)
+        # SHIFT est le nom anglais du meme modificateur : on l'accepte.
+        self.assertEqual(
+            self.J.reglages_valides({"modificateur": "shift"})["modificateur"],
+            "MAJ")
+        # Rien du tout : des valeurs sures, et surtout un joystick eteint.
+        self.assertEqual(self.J.reglages_valides(None)["mode"],
+                         self.J.MODE_ETEINT)
+
+    def test_la_direction_dominante_sert_le_mode_touches(self):
+        """Un raccourci n'a pas de nuance : il faut choisir UNE direction."""
+        self.assertEqual(self.J.direction(0.9, 0.1), "droite")
+        self.assertEqual(self.J.direction(-0.9, 0.1), "gauche")
+        self.assertEqual(self.J.direction(0.1, -0.9), "haut")
+        self.assertEqual(self.J.direction(0.1, 0.9), "bas")
+        self.assertIsNone(self.J.direction(0.0, 0.0))
+
+
+class GlissementDeVue(unittest.TestCase):
+    """La machine a etats : enfoncer, deplacer, relacher."""
+
+    def setUp(self):
+        import joystick
+        self.J = joystick
+        self.jo = joystick.Joystick()
+        self.jo.etalonner([(32768, 32768)] * 4)
+        self.jo.regler({"mode": "souris", "modificateur": "MAJ",
+                        "sensibilite": 10, "zone_morte": 10})
+        clock[0] = 10000
+
+    def pousse(self, now):
+        clock[0] = now
+        return self.jo.service(64000, 32768, now)
+
+    def relache(self, now):
+        clock[0] = now
+        return self.jo.service(32768, 32768, now)
+
+    def test_le_cycle_complet(self):
+        self.assertEqual(self.relache(10000)[0], self.J.RIEN)
+        self.assertEqual(self.pousse(10002)[0], self.J.COMMENCER)
+        # On attend une cadence avant de bouger : Windows doit voir le
+        # bouton s'enfoncer AVANT le mouvement, sinon le logiciel 3D prend
+        # le glissement pour un simple survol.
+        self.assertEqual(self.pousse(10004)[0], self.J.RIEN)
+        action, dx, dy = self.pousse(10020)
+        self.assertEqual(action, self.J.BOUGER)
+        self.assertGreater(dx, 0)
+        self.assertEqual(dy, 0)
+        # Retour au repos : on ne termine pas tout de suite.
+        self.assertEqual(self.relache(10040)[0], self.J.RIEN)
+        self.assertEqual(self.relache(10100)[0], self.J.RIEN)
+        self.assertEqual(self.relache(10200)[0], self.J.TERMINER)
+        # Et apres la fin, plus rien tant qu'on ne repousse pas.
+        self.assertEqual(self.relache(10300)[0], self.J.RIEN)
+
+    def test_traverser_le_centre_ne_coupe_pas_l_orbite(self):
+        """LE PIEGE QUI JUSTIFIE JOYSTICK_FIN_MS.
+
+        Pour passer d'une rotation a gauche a une rotation a droite, le
+        stick TRAVERSE le centre. Sans delai, le glissement serait coupe
+        en deux - bouton relache, bouton re-enfonce - et dans Blender cela
+        termine l'orbite et en commence une autre : la vue saute.
+        """
+        self.assertEqual(self.pousse(10000)[0], self.J.COMMENCER)
+        self.assertEqual(self.pousse(10020)[0], self.J.BOUGER)
+        # Traversee du centre, breve : rien ne doit se terminer.
+        self.assertEqual(self.relache(10030)[0], self.J.RIEN)
+        self.assertEqual(self.relache(10060)[0], self.J.RIEN)
+        # Et de l'autre cote, le glissement CONTINUE : pas de COMMENCER.
+        clock[0] = 10080
+        action, dx, _ = self.jo.service(1000, 32768, 10080)
+        self.assertEqual(action, self.J.BOUGER,
+                         "l'orbite doit se poursuivre, pas recommencer")
+        self.assertLess(dx, 0)
+
+    def test_un_profil_eteint_referme_un_glissement_ouvert(self):
+        """Passer de Blender a Word pendant une orbite.
+
+        Si le bouton du milieu restait enfonce cote Windows, la vue
+        tournerait sans fin et il faudrait aller cliquer dans le logiciel
+        pour s'en sortir.
+        """
+        self.assertEqual(self.pousse(10000)[0], self.J.COMMENCER)
+        self.jo.regler({"mode": "eteint"})
+        self.assertEqual(self.pousse(10020)[0], self.J.TERMINER)
+        self.assertEqual(self.pousse(10040)[0], self.J.RIEN)
+
+    def test_regler_signale_un_glissement_a_refermer(self):
+        """main.py s'en sert pour relacher au changement de profil."""
+        self.assertFalse(self.jo.regler({"mode": "souris"}))
+        self.assertEqual(self.pousse(10000)[0], self.J.COMMENCER)
+        self.assertTrue(self.jo.regler({"mode": "souris"}),
+                        "un glissement etait en cours : il faut relacher")
+
+    def test_abandonner_dit_s_il_faut_relacher(self):
+        self.assertFalse(self.jo.abandonner())
+        self.assertEqual(self.pousse(10000)[0], self.J.COMMENCER)
+        self.assertTrue(self.jo.abandonner())
+        self.assertFalse(self.jo.abandonner())
+
+    def test_sans_etalonnage_le_joystick_ne_fait_rien(self):
+        jo = self.J.Joystick()
+        jo.regler({"mode": "souris"})
+        self.assertEqual(jo.service(64000, 32768, 10000)[0], self.J.RIEN)
+
+    def test_le_clic_du_stick_n_envoie_pas_de_mouvement_parasite(self):
+        """Le poussoir d'un module bon marche est dur et decentre.
+
+        En enfonçant, on BOUGE le stick. Comme ce clic est devenu B1,
+        chaque appui enverrait un sursaut a la vue 3D.
+        """
+        self.jo.ignorer(10000, 80)
+        # Pendant l'aveuglement, meme pousse a fond : rien ne part.
+        self.assertEqual(self.pousse(10010)[0], self.J.RIEN)
+        self.assertEqual(self.pousse(10070)[0], self.J.RIEN)
+        # Et apres, le joystick repond normalement.
+        self.assertEqual(self.pousse(10090)[0], self.J.COMMENCER)
+
+    def test_un_clic_au_milieu_d_une_orbite_ne_la_termine_pas(self):
+        """L'aveuglement gele le chronometre du retour au repos.
+
+        Sinon un clic pendant une orbite la couperait : le firmware
+        verrait le stick "au repos" pendant 80 ms, soit plus que
+        JOYSTICK_FIN_MS n'en demande.
+        """
+        self.assertEqual(self.pousse(10000)[0], self.J.COMMENCER)
+        self.jo.ignorer(10010, 200)
+        for instant in (10020, 10100, 10200):
+            self.assertEqual(self.relache(instant)[0], self.J.RIEN)
+        # Le glissement est toujours ouvert. Et le delai de fin repart de
+        # ZERO a la sortie de l'aveuglement, ce qui est le bon
+        # comportement : on ne peut pas compter comme "repos constate" un
+        # temps pendant lequel on ne regardait pas les axes.
+        self.assertEqual(self.relache(10400)[0], self.J.RIEN)
+        self.assertEqual(self.relache(10560)[0], self.J.TERMINER)
+
+    def test_le_mode_touches_ne_repete_pas_quatre_vingts_fois_par_seconde(self):
+        """Un raccourci n'est pas un deplacement de souris.
+
+        A la cadence de la souris, une seconde d'inclinaison enverrait
+        quatre-vingts rotations de 15 degres dans Blender : la vue
+        partirait en vrille.
+        """
+        self.jo.regler({"mode": "touches", "sensibilite": 10,
+                        "zone_morte": 10})
+        self.assertEqual(self.pousse(10000)[0], self.J.COMMENCER)
+        # A la cadence de la souris, on aurait deja une repetition.
+        self.assertEqual(self.pousse(10020)[0], self.J.RIEN)
+        self.assertEqual(self.pousse(10100)[0], self.J.RIEN)
+        self.assertEqual(self.pousse(10200)[0], self.J.BOUGER)
+
+
+# Le journal COMMUN aux deux interfaces. Les paquets clavier et les
+# rapports souris partent par des chemins separes : sans une liste
+# partagee, impossible de verifier que le MAJ d'une orbite part bien AVANT
+# le clic du milieu - alors que c'est precisement ce qui distingue une
+# rotation d'une translation dans Civil 3D.
+JOURNAL = []
+
+
+class FausseSouris:
+    """L'interface souris, simulee. Compte ce qui part vraiment."""
+
+    def __init__(self, journalise=False):
+        self.rapports = []
+        self.ouverte = True
+        self.occupee = False
+        self.plante = False
+        self.journalise = journalise
+
+    def is_open(self):
+        return self.ouverte
+
+    def busy(self):
+        return self.occupee
+
+    def rapport(self, milieu, dx=0, dy=0):
+        if self.plante:
+            raise OSError('simulated failure')
+        if self.occupee:
+            return False
+        self.rapports.append((bool(milieu), dx, dy))
+        if self.journalise:
+            JOURNAL.append(("souris", (bool(milieu), dx, dy)))
+        return True
+
+
+class SourisQuiNeBloqueJamais(unittest.TestCase):
+    """Le piege le plus grave de toute l'integration du joystick.
+
+    La methode d'envoi de la bibliotheque officielle contient
+    "while self.busy(): machine.idle()" SANS limite de temps. Dans une
+    boucle cooperative, cela gele l'ecran, les LED et surtout LE BOUTON
+    ESC. Ces tests verifient qu'on ne l'appelle jamais.
+    """
+
+    def setUp(self):
+        from hid_mouse import HIDMouse
+        self.faux = FausseSouris()
+        self.souris = HIDMouse(self.faux)
+        self.souris.tick(0)        # Windows ouvre l'interface
+
+    def test_un_usb_occupe_rend_la_main_immediatement(self):
+        """Le controle qui compte : tick() revient, quoi qu'il arrive."""
+        self.faux.occupee = True
+        self.souris.milieu(True)
+        self.souris.bouger(5, 3)
+        self.souris.tick(10)        # ne doit PAS tourner en rond
+        self.assertEqual(self.faux.rapports, [])
+        # Rien n'est perdu : tout part des que l'USB se libere.
+        self.faux.occupee = False
+        self.souris.tick(20)
+        self.assertEqual(self.faux.rapports, [(True, 5, 3)])
+
+    def test_le_deplacement_s_accumule_au_lieu_de_se_perdre(self):
+        """Un deplacement est RELATIF : l'additionner est fidele au geste.
+
+        Si on remplacait au lieu d'accumuler, un rapport refuse ferait
+        perdre du mouvement et la vue prendrait du retard sur la main.
+        """
+        self.faux.occupee = True
+        self.souris.bouger(4, 0)
+        self.souris.tick(10)
+        self.souris.bouger(3, 0)
+        self.souris.tick(12)
+        self.faux.occupee = False
+        self.souris.tick(14)
+        self.assertEqual(self.faux.rapports, [(False, 7, 0)])
+
+    def test_l_etat_du_bouton_est_repete_jusqu_a_passer(self):
+        """L'etat d'un bouton est ABSOLU : le perdre serait grave.
+
+        Un bouton du milieu reste enfonce cote Windows fait tourner la vue
+        3D sans fin, et il faut aller cliquer dans le logiciel pour s'en
+        sortir.
+        """
+        self.souris.milieu(True)
+        self.souris.tick(10)
+        self.assertTrue(self.souris.enfonce())
+        self.faux.occupee = True
+        self.souris.milieu(False)
+        for instant in (12, 14, 16):
+            self.souris.tick(instant)
+        self.assertTrue(self.souris.enfonce(),
+                        "Windows n'a pas encore recu le relachement")
+        self.faux.occupee = False
+        self.souris.tick(18)
+        self.assertFalse(self.souris.enfonce())
+        self.assertEqual(self.faux.rapports[-1], (False, 0, 0))
+
+    def test_le_deplacement_accumule_ne_grossit_pas_sans_fin(self):
+        """Sinon il partirait d'un coup au rebranchement.
+
+        Un stick pousse a fond pendant que l'USB est bouche creerait une
+        reserve de plusieurs milliers de pixels : la vue ferait un saut
+        spectaculaire et incomprehensible des que la liaison revient.
+        """
+        self.faux.occupee = True
+        for _ in range(500):
+            self.souris.bouger(100, 100)
+        self.faux.occupee = False
+        self.souris.tick(10)
+        self.assertEqual(self.faux.rapports, [(False, 127, 127)])
+        # Il peut rester un reste borne, mais pas des milliers de pixels.
+        self.souris.tick(20)
+        total = sum(abs(r[1]) for r in self.faux.rapports)
+        self.assertLessEqual(total, 127 * 2)
+
+    def test_une_valeur_hors_bornes_ne_leve_jamais(self):
+        """struct "Bbb" leverait, et la boucle principale tomberait."""
+        self.souris.bouger(99999, -99999)
+        self.souris.tick(10)
+        milieu, dx, dy = self.faux.rapports[0]
+        self.assertEqual((dx, dy), (127, -127))
+
+    def test_un_debranchement_oublie_tout_plutot_que_de_croire(self):
+        """Windows a tout oublie : nous aussi, sinon on se desynchronise."""
+        self.souris.milieu(True)
+        self.souris.tick(10)
+        self.assertTrue(self.souris.enfonce())
+        self.faux.ouverte = False
+        self.souris.tick(20)
+        self.assertFalse(self.souris.enfonce())
+        self.assertFalse(self.souris.en_attente())
+
+    def test_une_panne_de_souris_ne_touche_pas_le_clavier(self):
+        """Regle du projet : un peripherique en panne se signale, et le
+        macropad continue de TAPER."""
+        self.faux.plante = True
+        self.souris.milieu(True)
+        self.souris.tick(10)
+        self.assertTrue(self.souris.fault)
+        self.assertFalse(self.souris.ready())
+        # Et plus aucun envoi n'est tente : pas de tempete de messages.
+        self.souris.tick(20)
+        self.assertEqual(self.faux.rapports, [])
+
+    def test_close_relache_le_bouton_du_milieu(self):
+        """C'EST PIRE QU'UN CTRL BLOQUE : la vue tourne sans fin."""
+        self.souris.milieu(True)
+        self.souris.tick(10)
+        self.souris.close()
+        self.assertEqual(self.faux.rapports[-1], (False, 0, 0))
+        self.assertFalse(self.souris.enfonce())
+
+    def test_close_ne_touche_pas_l_usb_si_rien_n_etait_enfonce(self):
+        """Couper l'USB sans raison ferait disparaitre le port COM du REPL."""
+        self.souris.close()
+        self.assertEqual(self.faux.rapports, [])
+
+    def test_la_sous_classe_renonce_au_lieu_d_attendre(self):
+        """On verifie LA CORRECTION ELLE-MEME, pas seulement son effet.
+
+        send_report() de la bibliotheque attend sans limite. La notre doit
+        rendre False immediatement quand l'interface est occupee.
+        """
+        import hid_mouse
+        souris = hid_mouse.creer_interface()
+        envois = []
+        souris._buf = bytearray(3)
+        souris.busy = lambda: True
+        self.assertFalse(souris.send_report(1, 1))
+        souris.busy = lambda: False
+        souris.is_open = lambda: True
+        souris.submit_xfer = lambda ep, buf: envois.append(bytes(buf))
+        souris._int_ep = 1
+        souris._m = True
+        self.assertTrue(souris.rapport(True, 3, -4))
+        # Bouton du milieu = bit 2, puis dx et dy en octets signes.
+        self.assertEqual(envois, [bytes([0b100, 3, 0xFC])])
+
+
+class LeMajDeLOrbiteNEcrasePasLeCtrlDuPouce(unittest.TestCase):
+    """Le bogue que l'etude a trouve en lisant le code.
+
+    maintenir() faisait "self.tenus = codes", une AFFECTATION. Dans
+    Civil 3D l'orbite est MAJ + clic du milieu, et le pouce tient deja
+    Ctrl : l'un ecrasait l'autre. Dans un sens le Ctrl disparait au milieu
+    d'une selection, dans l'autre l'orbite part sans son MAJ et Civil 3D
+    translate au lieu de tourner. Deux symptomes du genre "ca marche une
+    fois sur trois".
+    """
+
+    def setUp(self):
+        self.transport = Transport()
+        self.clavier = HIDKeyboard(self.transport)
+        self.clavier.opened = True
+        clock[0] = 0
+
+    def envoyer(self):
+        self.transport.sent = []
+        pump(self.clavier, clock[0], 200)
+        return self.transport.sent
+
+    def test_les_deux_maintiens_coexistent(self):
+        self.clavier.maintenir([("maintien", ("CTRL",))])
+        self.clavier.maintenir_joystick([("maintien", ("MAJ",))])
+        paquets = self.envoyer()
+        self.assertTrue(paquets)
+        dernier = paquets[-1]
+        self.assertIn(-1, dernier, "le Ctrl du pouce a disparu")
+        self.assertIn(-2, dernier, "le Maj de l'orbite a disparu")
+
+    def test_relacher_le_joystick_garde_le_ctrl_du_pouce(self):
+        self.clavier.maintenir([("maintien", ("CTRL",))])
+        self.clavier.maintenir_joystick([("maintien", ("MAJ",))])
+        self.envoyer()
+        self.clavier.relacher_joystick()
+        dernier = self.envoyer()[-1]
+        self.assertIn(-1, dernier, "le doigt est toujours sur la touche")
+        self.assertNotIn(-2, dernier, "l'orbite est finie")
+
+    def test_relacher_la_touche_garde_le_maj_de_l_orbite(self):
+        self.clavier.maintenir([("maintien", ("CTRL",))])
+        self.clavier.maintenir_joystick([("maintien", ("MAJ",))])
+        self.envoyer()
+        self.clavier.relacher_maintien()
+        dernier = self.envoyer()[-1]
+        self.assertNotIn(-1, dernier)
+        self.assertIn(-2, dernier, "l'orbite est toujours en cours")
+
+    def test_esc_relache_les_deux(self):
+        """Une touche d'annulation doit TOUT arreter."""
+        self.clavier.maintenir([("maintien", ("CTRL",))])
+        self.clavier.maintenir_joystick([("maintien", ("MAJ",))])
+        self.envoyer()
+        self.clavier.cancel()
+        self.assertEqual(self.clavier.tenus, ())
+
+    def test_le_meme_modificateur_des_deux_cotes_ne_fait_pas_de_doublon(self):
+        """Un rapport HID ne transporte que six touches ordinaires."""
+        self.clavier.maintenir([("maintien", ("MAJ",))])
+        self.clavier.maintenir_joystick([("maintien", ("MAJ",))])
+        self.assertEqual(self.clavier.tenus, (-2,))
+
+
+class LeLecteurDesAxes(unittest.TestCase):
+    """inputs.Axes : le seul endroit qui touche l'analogique.
+
+    L'interface analogique de MicroPython a change de forme au fil des
+    versions, et le nom des constantes depend du port. On essaie donc
+    trois formes dans l'ordre, et ces tests verifient qu'on les essaie
+    vraiment - sinon l'entree sature bien avant 3,3 V et le stick semble
+    bloque en butee sur une bonne partie de sa course.
+    """
+
+    def setUp(self):
+        ADC.journal = []
+        ADC.accepte_mot_cle = True
+        ADC.valeurs = {}
+
+    def test_la_forme_actuelle_est_essayee_d_abord(self):
+        from inputs import Axes
+        Axes(1, 2, "ATTN_11DB")
+        self.assertEqual(ADC.journal,
+                         [('init', 1, ADC.ATTN_11DB),
+                          ('init', 2, ADC.ATTN_11DB)])
+
+    def test_un_port_plus_ancien_passe_par_la_methode_atten(self):
+        from inputs import Axes
+        ADC.accepte_mot_cle = False
+        Axes(1, 2, "ATTN_11DB")
+        self.assertEqual(ADC.journal,
+                         [('init', 1, None), ('atten', 1, ADC.ATTN_11DB),
+                          ('init', 2, None), ('atten', 2, ADC.ATTN_11DB)])
+
+    def test_une_constante_inconnue_n_empeche_pas_de_lire(self):
+        """Mieux vaut une course tronquee qu'un firmware qui ne demarre pas."""
+        from inputs import Axes
+        axes = Axes(1, 2, "ATTN_42DB")
+        self.assertEqual(ADC.journal, [('init', 1, None), ('init', 2, None)])
+        self.assertEqual(axes.lire(), (32768, 32768))
+
+    def test_une_lecture_en_panne_rend_le_centre_et_pas_zero(self):
+        """Zero serait lu comme "stick pousse a fond" : la vue partirait."""
+        from inputs import Axes
+        axes = Axes(1, 2, None)
+        ADC.valeurs = {1: 50000, 2: 10000}
+        self.assertEqual(axes.lire(), (50000, 10000))
+
+        def casse():
+            raise OSError('ADC HS')
+        axes.x.read_u16 = casse
+        self.assertEqual(axes.lire(), (32768, 32768))
+
+
+class JoystickDansLaConfiguration(unittest.TestCase):
+    """Les reglages vivent dans profils.json, profil par profil."""
+
+    def setUp(self):
+        try:
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    def test_les_reglages_survivent_a_un_aller_retour(self):
+        import store
+        configuration = store.vers_json(6)
+        self.assertIn("joystick", configuration["profils"]["BLENDER"])
+        blender = configuration["profils"]["BLENDER"]["joystick"]
+        # Valeurs d'usine de Blender : l'orbite y est le clic du milieu
+        # SEUL, sans modificateur. C'est inverse de Civil 3D.
+        self.assertEqual(blender["mode"], "souris")
+        self.assertEqual(blender["modificateur"], "")
+        civil = configuration["profils"]["CIVIL3D"]["joystick"]
+        self.assertEqual(civil["modificateur"], "MAJ")
+        # Aller-retour complet, sans rien perdre.
+        ok, raison = store.enregistrer_json(configuration, 6)
+        self.assertTrue(ok, raison)
+        relu = store.vers_json(6)
+        for nom in configuration["ordre"]:
+            self.assertEqual(relu["profils"][nom]["joystick"],
+                             configuration["profils"][nom]["joystick"], nom)
+
+    def test_les_directions_du_mode_touches_survivent(self):
+        """KP_4 et KP_6 de Blender tournent la vue par pas de 15 degres."""
+        import store
+        configuration = store.vers_json(6)
+        joy = configuration["profils"]["BLENDER"]["joystick"]
+        joy["mode"] = "touches"
+        joy["directions"]["gauche"] = [{"type": "key", "valeur": "KP_4"}]
+        joy["directions"]["droite"] = [{"type": "key", "valeur": "KP_6"}]
+        ok, raison = store.enregistrer_json(configuration, 6)
+        self.assertTrue(ok, raison)
+        relu = store.vers_json(6)["profils"]["BLENDER"]["joystick"]
+        self.assertEqual(relu["mode"], "touches")
+        self.assertEqual(relu["directions"]["gauche"],
+                         [{"type": "key", "valeur": "KP_4"}])
+        self.assertEqual(relu["directions"]["droite"],
+                         [{"type": "key", "valeur": "KP_6"}])
+
+    def test_un_fichier_ecrit_avant_le_joystick_reprend_l_usine(self):
+        """Et PAS un joystick eteint en silence.
+
+        C'est la meme regle que pour les couleurs et les combinaisons : un
+        fichier qui ne PARLE PAS d'une chose n'a pas dit de la supprimer.
+        """
+        import store
+        ancien = store.vers_json(6)
+        for nom in ancien["profils"]:
+            ancien["profils"][nom].pop("joystick", None)
+        (_, _, _, _, _, _, _, _, _, joysticks) = store.depuis_json(ancien, 6)
+        self.assertEqual(joysticks["CIVIL3D"]["modificateur"], "MAJ")
+        self.assertEqual(joysticks["BLENDER"]["mode"], "souris")
+
+    def test_un_bloc_abime_degrade_vers_un_joystick_eteint(self):
+        """Un profils.json edite a la main ne doit pas faire tomber la carte."""
+        import store
+        configuration = store.vers_json(6)
+        configuration["profils"]["BLENDER"]["joystick"] = {
+            "mode": "fusee", "sensibilite": "beaucoup",
+            "zone_morte": None, "directions": "n'importe quoi"}
+        (_, _, _, _, _, _, _, _, _, joysticks) = store.depuis_json(
+            configuration, 6)
+        self.assertEqual(joysticks["BLENDER"]["mode"], "eteint")
+        self.assertEqual(joysticks["BLENDER"]["directions"], {})
+
+    def test_les_valeurs_d_usine_sont_toutes_valides(self):
+        """Une table JOYSTICK mal ecrite dans profiles.py doit se voir ici."""
+        import store, joystick
+        for nom, reglages in store.joysticks_usine().items():
+            self.assertIn(reglages["mode"], joystick.MODES, nom)
+            self.assertIn(reglages["modificateur"], joystick.MODIFICATEURS,
+                          nom)
+            self.assertTrue(1 <= reglages["sensibilite"] <= 15, nom)
+            self.assertTrue(1 <= reglages["zone_morte"] <= 60, nom)
+            # Et chaque macro de direction doit etre TAPABLE.
+            for sens, actions in (reglages.get("directions") or {}).items():
+                compile_actions(actions, C.KEYBOARD_LAYOUT)
+
+
+class BrochesDuJoystick(unittest.TestCase):
+    """Le controle qu'on fait AVANT de souder, pas apres."""
+
+    def test_les_axes_sont_sur_adc1(self):
+        """ADC2 MEURT DES QUE LE WIFI S'ALLUME, et le mode configuration
+        allume le WiFi. Sur un ESP32-S3, ADC1 est GPIO1 a GPIO10."""
+        for broche in (C.JOYSTICK_X_PIN, C.JOYSTICK_Y_PIN):
+            self.assertTrue(1 <= broche <= 10,
+                            "GPIO%d n'est pas sur ADC1" % broche)
+
+    def test_les_axes_ne_sont_sur_aucune_broche_interdite(self):
+        import diag
+        for broche in (C.JOYSTICK_X_PIN, C.JOYSTICK_Y_PIN):
+            verdict, raison = diag.verifier_broche(broche)
+            self.assertEqual(verdict, "libre",
+                             "GPIO%d : %s" % (broche, raison))
+
+    def test_aucune_collision_quand_le_joystick_est_actif(self):
+        import diag
+        with patch.object(C, 'JOYSTICK_ENABLED', True):
+            doubles = diag.broches_en_double()
+            self.assertEqual(doubles, [], "collision de broches : %s" % doubles)
+            roles = dict((n, r) for n, r in diag.roles_declares())
+            self.assertIn(C.JOYSTICK_X_PIN, roles)
+            self.assertIn(C.JOYSTICK_Y_PIN, roles)
+
+    def test_le_joystick_eteint_ne_reserve_rien(self):
+        """Sinon broches() reprocherait une collision sur des broches que
+        personne n'utilise."""
+        import diag
+        with patch.object(C, 'JOYSTICK_ENABLED', False):
+            roles = dict((n, r) for n, r in diag.roles_declares())
+            self.assertNotIn(C.JOYSTICK_X_PIN, roles)
+
+    def test_le_clic_du_stick_partage_la_broche_de_b1_sans_collision(self):
+        """Le fil SW est soude sur la broche de B1 : c'est le montage, pas
+        une erreur. Il ne doit donc PAS etre declare une seconde fois."""
+        with patch.object(C, 'JOYSTICK_ENABLED', True):
+            import diag
+            roles = diag.roles_declares()
+            sur_b1 = [r for n, r in roles if n == C.BUTTON_PINS[0]]
+            self.assertEqual(sur_b1, ["touche B1"])
+
+
+class JoystickDansLaBoucleReelle(unittest.TestCase):
+    """Du convertisseur analogique jusqu'aux octets USB, dans main.run().
+
+    Les classes precedentes verifient chaque piece a part. Celle-ci fait
+    tourner LA VRAIE BOUCLE, avec de vraies lectures d'axes et de vrais
+    rapports USB : c'est le seul endroit ou un branchement oublie se voit.
+    """
+
+    def setUp(self):
+        clock[0] = 0
+        Pin.levels = {}
+        ADC.valeurs = {}
+        ADC.journal = []
+        ADC.accepte_mot_cle = True
+        try:
+            os.remove(C.PROFILES_FILE)
+        except OSError:
+            pass
+
+    tearDown = setUp
+
+    def _boucle(self, chronologie, fin=3600, profil="CIVIL3D",
+                journal=False):
+        """main.run() avec un joystick, en pilotant les axes a chaque ms."""
+        import main, runtime
+        del JOURNAL[:]
+        clavier = Transport()
+        souris = FausseSouris(journalise=journal)
+        if journal:
+            envoyer = clavier.send_keys
+
+            def trace(keys, timeout_ms=100):
+                ok = envoyer(keys, timeout_ms)
+                if ok:
+                    JOURNAL.append(("clavier", tuple(keys)))
+                return ok
+            clavier.send_keys = trace
+
+        def sleep_simule(ms):
+            clock[0] += ms
+            chronologie(clock[0])
+            if clock[0] >= fin:
+                raise KeyboardInterrupt()
+
+        with patch.object(runtime, 'interface', clavier), \
+             patch.object(runtime, 'souris', souris), \
+             patch.object(runtime, 'safe_mode', False), \
+             patch.object(runtime, 'config_mode', False), \
+             patch.object(C, 'JOYSTICK_ENABLED', True), \
+             patch.object(C, 'DEFAULT_PROFILE', profil), \
+             patch.object(main, 'sleep_ms', sleep_simule):
+            with self.assertRaises(KeyboardInterrupt):
+                main.run()
+        return clavier, souris
+
+    @staticmethod
+    def _repos(t):
+        ADC.valeurs = {1: 32768, 2: 32768}
+
+    def test_le_stick_au_repos_n_envoie_jamais_rien(self):
+        """Le controle le plus important de tous.
+
+        Une vue 3D qui derive toute seule rend le macropad inutilisable,
+        et la cause est introuvable sans y penser : c'est l'etalonnage ou
+        la zone morte, pas le logiciel.
+        """
+        _, souris = self._boucle(self._repos)
+        self.assertEqual(souris.rapports, [])
+
+    def test_un_centre_decale_au_repos_n_envoie_rien_non_plus(self):
+        """L'etalonnage doit le rattraper : un centre a 30000 est normal."""
+        def chrono(t):
+            ADC.valeurs = {1: 30000, 2: 36000}
+        _, souris = self._boucle(chrono)
+        self.assertEqual(souris.rapports, [])
+
+    def test_pousser_le_stick_envoie_une_orbite_complete(self):
+        """Le geste entier : MAJ tenu, bouton enfonce, mouvement, relache.
+
+        En profil CIVIL3D, l'orbite est MAJ + clic du milieu glisse. Le
+        MAJ doit arriver AVANT le clic : un modificateur qui arrive apres
+        n'est pas vu, et Civil 3D translate au lieu de tourner.
+        """
+        def chrono(t):
+            if 2800 <= t < 3100:
+                ADC.valeurs = {1: 60000, 2: 32768}
+            else:
+                ADC.valeurs = {1: 32768, 2: 32768}
+
+        clavier, souris = self._boucle(chrono, journal=True)
+        self.assertTrue(souris.rapports, "aucun rapport souris envoye")
+        # Le premier rapport enfonce le bouton du milieu, sans mouvement.
+        self.assertEqual(souris.rapports[0], (True, 0, 0))
+        # L'ORDRE, et c'est le point delicat : le MAJ doit partir AVANT le
+        # clic. Un modificateur qui arrive apres n'est pas pris en compte,
+        # et Civil 3D decide alors que ce glissement est une translation.
+        # On relit donc le journal commun aux deux interfaces.
+        premier_maj = next((i for i, (quoi, valeur) in enumerate(JOURNAL)
+                            if quoi == "clavier" and -2 in valeur), None)
+        premier_clic = next((i for i, (quoi, valeur) in enumerate(JOURNAL)
+                             if quoi == "souris" and valeur[0]), None)
+        self.assertIsNotNone(premier_maj, "le MAJ n'est jamais parti")
+        self.assertIsNotNone(premier_clic, "le clic n'est jamais parti")
+        self.assertLess(premier_maj, premier_clic,
+                        "le MAJ doit partir AVANT le clic du milieu")
+        # Puis du mouvement vers la droite, bouton toujours enfonce.
+        bouges = [r for r in souris.rapports if r[1] or r[2]]
+        self.assertTrue(bouges, "le stick pousse n'a produit aucun mouvement")
+        for milieu, dx, dy in bouges:
+            self.assertTrue(milieu, "mouvement sans le bouton du milieu")
+            self.assertGreater(dx, 0)
+            self.assertEqual(dy, 0)
+        # Et a la fin, le bouton est relache.
+        self.assertEqual(souris.rapports[-1][0], False,
+                         "le bouton du milieu est reste enfonce")
+        # Cote clavier : le MAJ a bien ete tenu, puis relache.
+        avec_maj = [p for p in clavier.sent if -2 in p]
+        self.assertTrue(avec_maj, "le MAJ de l'orbite n'est jamais parti")
+        self.assertEqual(clavier.sent[-1], (),
+                         "le clavier doit finir tout relache")
+
+    def test_blender_tourne_sans_modificateur(self):
+        """L'INVERSE de Civil 3D, et c'est tout l'interet du reglage par
+        profil : le meme geste physique, deux conventions."""
+        def chrono(t):
+            if 2800 <= t < 3100:
+                ADC.valeurs = {1: 60000, 2: 32768}
+            else:
+                ADC.valeurs = {1: 32768, 2: 32768}
+
+        clavier, souris = self._boucle(chrono, profil="BLENDER")
+        self.assertTrue(souris.rapports)
+        self.assertEqual(souris.rapports[0], (True, 0, 0))
+        self.assertEqual([p for p in clavier.sent if -2 in p], [],
+                         "Blender n'a pas besoin de MAJ pour l'orbite")
+
+    def test_word_eteint_le_joystick(self):
+        """Dans un traitement de texte, un joystick n'a aucun sens."""
+        def chrono(t):
+            ADC.valeurs = {1: 60000, 2: 60000}
+        _, souris = self._boucle(chrono, profil="WORD")
+        self.assertEqual(souris.rapports, [])
+
+    def test_esc_referme_une_orbite_en_cours(self):
+        """Une touche d'annulation doit TOUT arreter, orbite comprise."""
+        def chrono(t):
+            ADC.valeurs = ({1: 60000, 2: 32768} if t >= 2800
+                           else {1: 32768, 2: 32768})
+            Pin.levels[C.ESC_PIN] = 0 if 3000 <= t < 3100 else 1
+
+        clavier, souris = self._boucle(chrono, fin=3300)
+        self.assertTrue(souris.rapports)
+        # Le bouton du milieu est relache AVANT la fin de la boucle, alors
+        # que le stick est toujours pousse.
+        relaches = [i for i, r in enumerate(souris.rapports) if not r[0]]
+        self.assertTrue(relaches, "ESC n'a pas referme le glissement")
+
+    def test_l_etalonnage_refuse_un_stick_tenu_au_demarrage(self):
+        """Et le macropad TAPE quand meme : c'est la regle du projet."""
+        def chrono(t):
+            # Le stick bouge pendant toute la mesure du centre.
+            ADC.valeurs = {1: 20000 if (t // 40) % 2 else 50000, 2: 32768}
+
+        _, souris = self._boucle(chrono)
+        self.assertEqual(souris.rapports, [],
+                         "un etalonnage refuse doit laisser le joystick muet")
+
+    def test_les_axes_sont_ouverts_sur_les_broches_de_config(self):
+        """Un cablage oublie dans main.py se verrait ici, et nulle part
+        ailleurs : les tests de joystick.py ne touchent aucune broche."""
+        self._boucle(self._repos, fin=600)
+        ouvertes = [broche for genre, broche, _ in ADC.journal
+                    if genre == 'init']
+        self.assertEqual(ouvertes, [C.JOYSTICK_X_PIN, C.JOYSTICK_Y_PIN])

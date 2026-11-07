@@ -174,10 +174,18 @@ class HIDMouse:
             # Debranchement, veille, ou reinitialisation du port. Windows a
             # de toute facon oublie l'etat des boutons : on repart de zero
             # plutot que de croire qu'un bouton est encore enfonce.
+            #
+            # ON OUBLIE AUSSI CE QU'ON VOULAIT, et c'est la meme regle que
+            # pour le clavier, qui jette sa file de macros au
+            # debranchement : HORS DE QUESTION QU'UN CLIC PARTE TOUT SEUL
+            # AU REBRANCHEMENT. Un bouton du milieu qui s'enfonce sans
+            # qu'on ait rien demande, dans le logiciel qui a le focus a ce
+            # moment-la, est exactement le genre de surprise qu'on refuse.
             if self.opened:
-                print("Souris : deconnexion/reset USB")
+                print("Souris : deconnexion/reset USB, glissement oublie")
             self.opened = False
             self._etat_milieu = False
+            self._voulu_milieu = False
             self._dx = 0
             self._dy = 0
             return

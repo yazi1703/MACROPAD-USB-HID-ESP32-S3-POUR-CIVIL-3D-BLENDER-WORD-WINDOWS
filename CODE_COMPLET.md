@@ -44,7 +44,7 @@ de `device/`, pas ce document.
 
 ## device/config.py
 
-`571 lignes - sha256 1c94244616c57343`
+`583 lignes - sha256 097814a7112d178d`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -596,6 +596,13 @@ JOYSTICK_ETALON_MS = 20             # délai entre deux mesures
 # le signale.
 JOYSTICK_CADENCE_MS = 12
 
+# Cadence du mode « touches », qui envoie des RACCOURCIS au lieu de
+# déplacements. Un raccourci ne se répète pas quatre-vingts fois par
+# seconde : à la cadence de la souris, une seconde d'inclinaison enverrait
+# quatre-vingts rotations de 15° dans Blender, et la vue partirait en
+# vrille. On vise le rythme d'une touche maintenue.
+JOYSTICK_TOUCHES_MS = 180
+
 # --- Le piège du retour au centre -----------------------------------
 # Pour passer d'une rotation à gauche à une rotation à droite, le stick
 # TRAVERSE le centre. Pendant un instant très court il est donc « au
@@ -610,6 +617,11 @@ JOYSTICK_FIN_MS = 120
 # sur les axes pendant ce délai autour d'un appui.
 # Mets 0 pour désactiver, si ton module a un clic franc.
 JOYSTICK_CLIC_AVEUGLE_MS = 80
+
+# Quelle touche est le clic du stick, en index dans BUTTON_PINS. 0 = B1,
+# c'est-à-dire le pouce, là où le fil SW est soudé. Change-le seulement si
+# tu as soudé SW ailleurs.
+JOYSTICK_CLIC_INDEX = 0
 
 # --- Réglages de repli ----------------------------------------------
 # Les vrais réglages vivent DANS CHAQUE PROFIL (voir profiles.py et la
@@ -1139,7 +1151,7 @@ TESTS = {
 
 ## device/boot.py
 
-`81 lignes - sha256 22722123b48903aa`
+`121 lignes - sha256 2de86a1a4c3e3a37`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1159,7 +1171,7 @@ LES TROIS MODES DE DÉMARRAGE
 Ce que tu maintiens pendant le RESET décide de tout :
 
   rien           -> MACROPAD : clavier USB actif, usage normal
-  B1 maintenu    -> SAFE MODE : le clavier n'est même pas créé.
+  B6 maintenu    -> SAFE MODE : le clavier n'est même pas créé.
                     Impossible de taper quoi que ce soit, même avec une
                     macro mal écrite. C'est ton filet de secours.
   B2 maintenu    -> MODE CONFIG : pas de clavier non plus, mais le WiFi
@@ -1182,6 +1194,10 @@ import runtime
 
 def _maintenu(index):
     """True si la touche d'index donné est maintenue enfoncée.
+
+    L'index vient de config.py et n'est PAS écrit en dur : le mode sans
+    échec a déménagé de B1 vers B6 le jour où le clic du joystick est
+    devenu B1 (voir l'explication dans config.py).
 
     La résistance de tirage interne met la broche à 3,3 V (valeur 1) ;
     appuyer la relie à la masse (valeur 0). On laisse 5 ms à la broche
@@ -1215,7 +1231,43 @@ elif runtime.config_mode:
 elif C.HID_ENABLED:
     try:
         from hid_keyboard import create_interface
-        runtime.interface = create_interface()
+
+        # --- La souris du joystick, si elle est demandée ---------------
+        # Elle est créée AVANT la déclaration à Windows, parce que les deux
+        # interfaces doivent être déclarées ensemble, en un seul appel.
+        souris = None
+        if getattr(C, "JOYSTICK_ENABLED", False):
+            try:
+                from hid_mouse import creer_interface
+                souris = creer_interface()
+            except Exception as exc:
+                # Un fichier manquant ou une bibliothèque incomplète ne
+                # doit pas coûter le clavier : on le dit et on continue.
+                runtime.souris_error = str(exc)
+                print("Souris USB indisponible (%s)." % exc)
+                print("Le clavier fonctionne, le joystick sera inactif.")
+
+        # --- LE MOMENT LE PLUS RISQUÉ, ET SON FILET -------------------
+        # Si Windows refuse le périphérique composite, on ne perd pas la
+        # souris : on perd LE CLAVIER, c'est-à-dire tout. On réessaie donc
+        # immédiatement sans souris, plutôt que de laisser le macropad muet
+        # jusqu'à ce que quelqu'un comprenne pourquoi.
+        try:
+            runtime.interface = create_interface(souris)
+            runtime.souris = souris
+        except Exception as exc:
+            if souris is None:
+                raise
+            runtime.souris_error = str(exc)
+            runtime.souris = None
+            print("=" * 46)
+            print(" PERIPHERIQUE COMPOSITE REFUSE")
+            print("=" * 46)
+            print("Windows n'a pas accepte clavier + souris :", exc)
+            print("Repli automatique : CLAVIER SEUL, joystick inactif.")
+            print("Mets JOYSTICK_ENABLED = False dans config.py pour")
+            print("ne plus voir ce message.")
+            runtime.interface = create_interface()
     except Exception as exc:
         # On n'avale jamais silencieusement une erreur de clavier :
         # elle est affichée et mémorisée pour que main.py la signale.
@@ -1229,7 +1281,7 @@ else:
 
 ## device/main.py
 
-`661 lignes - sha256 cf95ceaef832f33b`
+`833 lignes - sha256 6f268d4328c469d6`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1292,6 +1344,24 @@ from hid_keyboard import HIDKeyboard
 from layouts import compile_actions
 from link import Link, EVT_PROFIL, EVT_DOCUMENT, EVT_RECHARGER, EVT_AGENDA
 
+# Les intentions du joystick. Import tolerant : joystick.py peut manquer sur
+# une carte dont on n'a televerse qu'une partie des fichiers, et ce n'est pas
+# une raison pour que le macropad cesse de taper. diag.py le nommera.
+try:
+    from joystick import (RIEN as JOY_RIEN, COMMENCER as JOY_COMMENCER,
+                          BOUGER as JOY_BOUGER, TERMINER as JOY_TERMINER,
+                          MODE_TOUCHES as JOY_TOUCHES,
+                          direction as joy_direction)
+except ImportError:
+    JOY_RIEN = "rien"
+    JOY_COMMENCER = "commencer"
+    JOY_BOUGER = "bouger"
+    JOY_TERMINER = "terminer"
+    JOY_TOUCHES = "touches"
+
+    def joy_direction(fx, fy):
+        return None
+
 NB_TOUCHES = len(C.BUTTON_PINS)
 
 # Les reglages que ce firmware attend de config.py, avec leur valeur de
@@ -1303,6 +1373,19 @@ REGLAGES_NEUFS = (
     ("RGB_RESPIRATION_MAX", 0.55),
     ("ESC_MAINTIEN_MS", 700),
     ("HID_HORS_BOUCLE_MS", 100),
+    # Le joystick 3D. Tous ces reglages ont un repli : un config.py
+    # d'avant le joystick ne doit pas empecher la carte de demarrer.
+    ("JOYSTICK_ENABLED", False),
+    ("JOYSTICK_X_PIN", 1),
+    ("JOYSTICK_Y_PIN", 2),
+    ("JOYSTICK_ATTEN", "ATTN_11DB"),
+    ("JOYSTICK_ETALON_LECTURES", 16),
+    ("JOYSTICK_ETALON_MS", 20),
+    ("JOYSTICK_CADENCE_MS", 12),
+    ("JOYSTICK_TOUCHES_MS", 180),
+    ("JOYSTICK_FIN_MS", 120),
+    ("JOYSTICK_CLIC_AVEUGLE_MS", 80),
+    ("JOYSTICK_CLIC_INDEX", 0),
 )
 _manquants = []
 
@@ -1503,6 +1586,48 @@ def run():
     from rgb import Rgb
     rgb = Rgb()
 
+    # --- Le joystick 3D -------------------------------------------
+    # Trois objets, et chacun peut manquer sans gener les autres :
+    #   axes   lit les deux entrees analogiques (le seul materiel)
+    #   stick  la logique : centre, zone morte, machine a etats
+    #   souris l'envoi USB, qui n'existe que si boot.py a reussi
+    stick = axes = souris = None
+    if reglage("JOYSTICK_ENABLED", False):
+        try:
+            from joystick import Joystick
+            from inputs import Axes
+            axes = Axes(reglage("JOYSTICK_X_PIN", 1),
+                        reglage("JOYSTICK_Y_PIN", 2),
+                        reglage("JOYSTICK_ATTEN", "ATTN_11DB"))
+            stick = Joystick()
+            # ETALONNAGE : NE TOUCHE PAS AU STICK MAINTENANT.
+            # On moyenne plusieurs lectures au repos. Si elles se
+            # dispersent, l'etalonnage ECHOUE expres : un centre pris
+            # stick pousse ferait deriver la vue sans fin, et personne ne
+            # comprendrait pourquoi. On bloque ici quelques centaines de
+            # millisecondes, et c'est le seul endroit du firmware ou l'on
+            # s'autorise a attendre - la boucle n'a pas encore demarre.
+            lectures = []
+            for _ in range(reglage("JOYSTICK_ETALON_LECTURES", 16)):
+                lectures.append(axes.lire())
+                sleep_ms(reglage("JOYSTICK_ETALON_MS", 20))
+            if stick.etalonner(lectures):
+                print("Joystick : centre mesure a", stick.centre_x,
+                      "/", stick.centre_y)
+            else:
+                print("Joystick : ETALONNAGE REFUSE - le stick bougeait ?")
+                print("Joystick : inactif. Fais RESET sans y toucher.")
+            if runtime.souris is not None:
+                from hid_mouse import HIDMouse
+                souris = HIDMouse(runtime.souris)
+            else:
+                print("Joystick : pas de souris USB, seul le mode")
+                print("           \"touches\" d'un profil fonctionnera.")
+        except Exception as exc:
+            # Meme regle que partout : on signale, et le macropad TAPE.
+            print("Joystick indisponible (%s) : le reste fonctionne." % exc)
+            stick = axes = souris = None
+
     # --- L'agenda du jour sur l'ecran -----------------------------
     # Livre a False : l'ecran garde le tableau des macros tant que tu n'as
     # pas dit le contraire. Sans compagnon PC, cette vue n'aurait de toute
@@ -1536,6 +1661,13 @@ def run():
         # La couleur suit le logiciel : c'est le profil actif qui la donne,
         # et le PC change de profil tout seul selon la fenetre active.
         rgb.profil(couleurs.get(manager.name), couleurs2.get(manager.name))
+        # LE JOYSTICK SUIT AUSSI LE LOGICIEL, et c'est tout l'interet :
+        # dans Blender l'orbite est le clic du milieu seul, dans Civil 3D
+        # c'est Maj + clic du milieu. Les reglages d'un logiciel ne doivent
+        # jamais finir un mouvement commence dans un autre : regler()
+        # signale un glissement en cours, et on le referme proprement.
+        if stick is not None and stick.regler(joysticks.get(manager.name)):
+            joystick_relacher()
 
     def recharger_profils():
         """Relit profils.json et applique la nouvelle configuration.
@@ -1544,6 +1676,7 @@ def run():
         prennent effet immediatement, sans RESET.
         """
         nonlocal manager, titres, ordre, couleurs, couleurs2, table_combos
+        nonlocal joysticks
         try:
             (neufs, ordre_neuf, titres_neufs, couleurs_neuves, secondes_neuves,
              _noms_neufs, combos_neuves, _apps, _repli, joysticks_neufs,
@@ -1560,11 +1693,65 @@ def run():
             # zero, ce qui est bienvenu apres une relecture de fichier.
             keyboard.cancel()
         manager, titres, ordre = nouveau, titres_neufs, ordre_neuf
+        # Un enregistrement depuis la page web peut avoir change le mode du
+        # joystick ou son modificateur : on referme un glissement en cours
+        # avant d'adopter les nouveaux reglages, sinon le bouton du milieu
+        # resterait enfonce avec les regles de l'ancien profil.
+        if stick is not None and stick.abandonner():
+            joystick_relacher()
+        joysticks = joysticks_neufs
         couleurs = couleurs_neuves
         couleurs2 = secondes_neuves
         table_combos = combos_neuves
         afficher(False)
         print("Macros rechargees depuis :", origine_neuve)
+
+    def joystick_relacher():
+        """Referme un glissement : bouton du milieu, puis modificateur.
+
+        DANS CET ORDRE. Relacher Maj avant le bouton laisserait, pendant
+        quelques millisecondes, un clic du milieu SANS Maj - ce qui dans
+        Civil 3D veut dire "translate la vue". Le mouvement finirait donc
+        par un petit saut lateral, a chaque fois.
+        """
+        if souris is not None:
+            souris.milieu(False)
+        if keyboard is not None:
+            keyboard.relacher_joystick()
+
+    def joystick_agir(action, dx, dy):
+        """Traduit ce que demande joystick.py en actions USB.
+
+        joystick.py ne sait rien de l'USB - c'est ce qui le rend testable
+        sur un PC. La traduction se fait donc ici, et seulement ici.
+        """
+        mode = stick.mode()
+
+        if mode == JOY_TOUCHES:
+            # Mode sans souris : on envoie un RACCOURCI du profil. Utilisable
+            # meme si le peripherique composite a ete refuse par Windows.
+            if action in (JOY_COMMENCER, JOY_BOUGER) and keyboard is not None:
+                sens = joy_direction(*stick.derniere)
+                actions = (stick.reglages.get("directions") or {}).get(sens)
+                if actions:
+                    keyboard.submit(actions)
+            return
+
+        if souris is None:
+            return
+
+        if action == JOY_COMMENCER:
+            # LE MODIFICATEUR D'ABORD, LE BOUTON ENSUITE. Un Maj qui arrive
+            # apres le clic n'est pas vu par le logiciel 3D : il a deja
+            # decide que ce glissement serait une translation.
+            modif = stick.modificateur()
+            if modif and keyboard is not None:
+                keyboard.maintenir_joystick([("maintien", (modif,))])
+            souris.milieu(True)
+        elif action == JOY_BOUGER:
+            souris.bouger(dx, dy)
+        elif action == JOY_TERMINER:
+            joystick_relacher()
 
     def declencher(index, geste):
         """Execute la macro correspondant a un geste sur une touche."""
@@ -1709,6 +1896,11 @@ def run():
                         # ESC annule aussi une combinaison en train de se
                         # former, sans rien declencher.
                         combos.reinitialiser()
+                        # ESC referme aussi un glissement de vue en cours.
+                        # C'est une touche d'annulation : elle doit TOUT
+                        # arreter, y compris une orbite partie de travers.
+                        if stick is not None and stick.abandonner():
+                            joystick_relacher()
                         if keyboard:
                             keyboard.escape(now)
                             # tick() tout de suite : le paquet part dans le
@@ -1755,6 +1947,15 @@ def run():
                             # perceptible sous le doigt.
                             display.surligner(index, now)
                             rgb.touche(index, now)
+                            # LE CLIC DU STICK EST B1, et sur un module a
+                            # quelques euros il est dur et decentre : en
+                            # enfoncant, on BOUGE le stick. On ferme donc
+                            # les yeux sur les axes le temps de l'appui,
+                            # sinon chaque B1 enverrait un petit sursaut a
+                            # la vue 3D.
+                            if (stick is not None and index
+                                    == reglage("JOYSTICK_CLIC_INDEX", 0)):
+                                stick.ignorer(now)
                             combo, differes = combos.appui(index, now)
                         else:
                             combo, differes = combos.relachement(index, now)
@@ -1783,7 +1984,24 @@ def run():
                 for index, geste in gestes.service(now):
                     declencher(index, geste)
 
+                # --- 3 bis. LE JOYSTICK 3D ------------------------
+                # Lire deux entrees analogiques prend quelques
+                # microsecondes : on le fait a chaque tour. Ce qui est
+                # limite, c'est l'ENVOI - l'USB ne transporte qu'environ
+                # 125 rapports de souris par seconde - et c'est la cadence
+                # interne du joystick qui s'en occupe.
+                if stick is not None and axes is not None:
+                    brut_x, brut_y = axes.lire()
+                    action, dx, dy = stick.service(brut_x, brut_y, now)
+                    if action != JOY_RIEN:
+                        joystick_agir(action, dx, dy)
+
             # --- 4. Travaux de fond, tous non bloquants -------------
+            # La souris d'abord : son rapport porte l'etat du bouton du
+            # milieu, et un bouton qui tarde a s'enfoncer fait rater le
+            # debut du mouvement.
+            if souris:
+                souris.tick(now)
             if keyboard:
                 keyboard.tick(now)
                 pret = keyboard.ready()
@@ -1843,6 +2061,12 @@ def run():
         # Ce bloc s'execute TOUJOURS : arret normal, Ctrl-C, ou erreur.
         # C'est la qu'on garantit qu'aucune touche ne reste enfoncee cote
         # Windows, que la LED est eteinte et que les compteurs sont sauves.
+        # LA SOURIS EN PREMIER, et ce n'est pas un detail : un bouton du
+        # milieu reste enfonce cote Windows fait tourner la vue 3D SANS
+        # FIN, et il faut aller cliquer dans le logiciel pour s'en sortir.
+        # C'est pire qu'un Ctrl bloque.
+        if souris:
+            souris.close()
         if keyboard:
             keyboard.close()
         if led:
@@ -1899,7 +2123,7 @@ if __name__ == "__main__":
 
 ## device/runtime.py
 
-`17 lignes - sha256 bec7ef35eb2d5495`
+`19 lignes - sha256 d52d5df8576fb954`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1915,17 +2139,19 @@ Rien n'est écrit dans la mémoire flash : tout est perdu au RESET, ce qui
 est voulu (aucune usure de la flash, aucun état bizarre qui survivrait).
 """
 
-safe_mode = False    # True si B1 était maintenu au démarrage
+safe_mode = False    # True si la touche de mode sans échec était maintenue
 config_mode = False  # True si B2 était maintenu au démarrage (WiFi + page web)
 interface = None     # l'objet clavier USB, ou None si HID désactivé
+souris = None        # l'objet souris USB, ou None si pas de joystick
 hid_error = None     # message d'erreur si la création du clavier a échoué
+souris_error = None  # message d'erreur si la souris n'a pas pu être créée
 ```
 
 ---
 
 ## device/inputs.py
 
-`166 lignes - sha256 bc8cce45dea26cb6`
+`230 lignes - sha256 4b502aaf1c9354fa`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2094,6 +2320,70 @@ class Inputs:
         for _, item in self.sequence:
             if item.active():
                 item.filter.armed = False
+
+
+class Axes:
+    """Les deux axes du joystick. LE SEUL ENDROIT QUI TOUCHE L'ANALOGIQUE.
+
+    Tout le calcul - centre, zone morte, sensibilité, bornage - vit dans
+    joystick.py, qui ne touche aucun matériel et se teste donc sur un PC.
+    Ici, on ne fait que lire deux nombres.
+
+    POURQUOI UNE CLASSE POUR SI PEU : parce que l'interface analogique de
+    MicroPython a changé de forme au fil des versions, et qu'on ne veut pas
+    que le reste du firmware s'en occupe. Trois façons de régler
+    l'atténuation sont essayées dans l'ordre, de la plus récente à la plus
+    ancienne, et celle qui marche est annoncée au démarrage.
+    """
+
+    def __init__(self, broche_x, broche_y, atten=None):
+        from machine import ADC
+        self.x = self._ouvrir(ADC, broche_x, atten)
+        self.y = self._ouvrir(ADC, broche_y, atten)
+
+    def _ouvrir(self, ADC, numero, atten):
+        """Ouvre une entrée analogique, atténuation maximale si possible.
+
+        L'ATTÉNUATION N'EST PAS UN DÉTAIL : sans elle, l'entrée sature très
+        en dessous de 3,3 V, et le joystick semble bloqué en butée sur une
+        bonne partie de sa course. Avec elle, toute la course est lue.
+
+        Le nom de la constante vient de config.py sous forme de TEXTE,
+        volontairement : il dépend du port MicroPython, et un nom écrit en
+        dur ferait tomber le firmware sur une carte qui ne le connaît pas.
+        """
+        broche = Pin(numero)
+        valeur = getattr(ADC, str(atten), None) if atten else None
+        if valeur is None:
+            if atten:
+                print("Joystick : attenuation %s inconnue de ce firmware."
+                      % atten)
+                print("Joystick : lecture par defaut. Verifie avec "
+                      "print(dir(ADC)) si la course semble tronquee.")
+            return ADC(broche)
+        try:
+            return ADC(broche, atten=valeur)          # forme actuelle
+        except TypeError:
+            pass
+        adc = ADC(broche)
+        try:
+            adc.atten(valeur)                         # forme plus ancienne
+        except Exception as exc:
+            print("Joystick : attenuation non appliquee (%s)" % exc)
+        return adc
+
+    def lire(self):
+        """(x, y) bruts, de 0 a 65535. Jamais bloquant, jamais d'exception.
+
+        Une lecture qui echoue rend le CENTRE APPARENT plutot que zero :
+        zero serait interprete comme "stick pousse a fond" et ferait partir
+        la vue toute seule. Au milieu, il ne se passe rien - c'est le bon
+        comportement quand on ne sait plus lire.
+        """
+        try:
+            return (self.x.read_u16(), self.y.read_u16())
+        except Exception:
+            return (32768, 32768)
 ```
 
 ---
@@ -5182,7 +5472,7 @@ class Link:
 
 ## device/hid_keyboard.py
 
-`509 lignes - sha256 201234afb0c70afd`
+`527 lignes - sha256 9f422839d70affac`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -5658,7 +5948,7 @@ class HIDKeyboard:
         usb.device.get().active(False)
 
 
-def create_interface():
+def create_interface(souris=None):
     """Crée le clavier USB et le déclare à Windows.
 
     Appelé UNE SEULE FOIS depuis boot.py. À cet instant Windows découvre un
@@ -5667,6 +5957,17 @@ def create_interface():
 
     builtin_driver=True demande à MicroPython de GARDER le port série CDC
     en plus du clavier. Sans lui, on perdrait le REPL sur le port natif.
+
+    SOURIS : si on en passe une, le macropad se présente comme UN SEUL
+    périphérique qui porte deux interfaces — c'est ce qu'on appelle un
+    périphérique composite. init() accepte plusieurs interfaces
+    (sa signature est `init(self, *itfs, **kwargs)` dans la bibliothèque),
+    et c'est l'usage documenté.
+
+    MAIS C'EST LE MOMENT LE PLUS RISQUÉ DE TOUT LE PROJET : si Windows
+    refuse le nouveau jeu de descripteurs, on ne perd pas la souris, on
+    perd LE CLAVIER. C'est pour cela que boot.py rattrape l'échec et
+    réessaie sans souris, et que le mode sans échec a déménagé sur B6.
     """
     import machine
     if not hasattr(machine, "USBDevice"):
@@ -5692,7 +5993,14 @@ def create_interface():
             self.led_mask = mask
 
     interface = KeyboardWithLEDs()
-    usb.device.get().init(interface, builtin_driver=True)
+    if souris is None:
+        usb.device.get().init(interface, builtin_driver=True)
+    else:
+        # L'ORDRE COMPTE : le clavier en premier. Windows numérote les
+        # interfaces dans l'ordre déclaré, et un clavier en première
+        # position est ce que tous les systèmes attendent d'un périphérique
+        # de saisie. La souris derrière ne gêne personne.
+        usb.device.get().init(interface, souris, builtin_driver=True)
     return interface
 ```
 
@@ -6007,7 +6315,7 @@ def creer_interface():
 
 ## device/joystick.py
 
-`445 lignes - sha256 392cfc0b6c03a1a9`
+`453 lignes - sha256 b56f2d097d574af7`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -6449,6 +6757,14 @@ class Joystick:
         return (TERMINER, 0, 0)
 
     def _cadence(self):
+        if self.mode() == MODE_TOUCHES:
+            # UN RACCOURCI NE SE REPETE PAS QUATRE-VINGTS FOIS PAR SECONDE.
+            # En mode "touches" on n'envoie pas un deplacement mais une
+            # frappe - le pave numerique 4 de Blender, par exemple. A la
+            # cadence de la souris, une seconde d'inclinaison enverrait
+            # quatre-vingts rotations de 15 degres : la vue partirait en
+            # vrille. On vise donc le rythme d'une touche maintenue.
+            return int(reglage("JOYSTICK_TOUCHES_MS", 180))
         valeur = int(reglage("JOYSTICK_CADENCE_MS", 12))
         # En dessous de 8 ms on depasse ce que l'interface accepte
         # (interval_ms=8 par defaut dans la bibliotheque) : les rapports
@@ -8045,7 +8361,7 @@ def limiter(couleur):
 
 ## device/diag.py
 
-`773 lignes - sha256 b76969c9adb05e7e`
+`934 lignes - sha256 bb540d9ea57dc9f9`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -8101,8 +8417,8 @@ import config as C
 # Les fichiers que le firmware attend sur la carte.
 MODULES_ATTENDUS = ("config", "profiles", "runtime", "inputs", "gestures",
                     "combos", "layouts", "store", "stats", "link",
-                    "hid_keyboard", "display", "agenda", "led", "rgb",
-                    "sh1106")
+                    "hid_keyboard", "hid_mouse", "joystick", "display",
+                    "agenda", "led", "rgb", "sh1106")
 
 # Nombre de valeurs que store.charger() doit rendre. Il a grandi trois fois
 # (les combinaisons, les noms complets, puis le joystick), et chaque fois
@@ -8378,6 +8694,14 @@ def roles_declares():
     poser(getattr(C, "TTP_NEXT_PIN", None), "TTP profil suivant")
     poser(getattr(C, "OLED_SDA", None), "OLED SDA")
     poser(getattr(C, "OLED_SCL", None), "OLED SCL")
+    # Le joystick n'est declare que s'il est active : sans cela, broches()
+    # reprocherait une collision sur des broches que personne n'utilise.
+    # Son CLIC n'apparait pas ici, et c'est normal : le fil SW est soude sur
+    # la broche de B1, qui est deja declaree plus haut. Ce n'est pas une
+    # collision, c'est le montage.
+    if getattr(C, "JOYSTICK_ENABLED", False):
+        poser(getattr(C, "JOYSTICK_X_PIN", None), "joystick axe X")
+        poser(getattr(C, "JOYSTICK_Y_PIN", None), "joystick axe Y")
     if getattr(C, "RGB_TYPE", "") == "WS2812":
         poser(getattr(C, "RGB_PIN", None), "donnees des LED RGB")
     else:
@@ -8489,6 +8813,159 @@ def broches(secondes=60):
         print("Arret demande.")
     print("-" * 46)
     return refusees == 0
+
+
+def joystick(secondes=20):
+    """Le controle du joystick, A FAIRE AVANT DE REFERMER LE BOITIER.
+
+        import diag; diag.joystick()
+
+    Il repond aux cinq questions qui comptent, dans l'ordre ou elles
+    peuvent te couter du temps :
+
+      1. les broches choisies sont-elles sur ADC1 ?
+      2. l'attenuation reglee dans config.py existe-t-elle ici ?
+      3. les deux axes se lisent-ils ?
+      4. QUEL EST LE CENTRE, et est-il stable ?
+      5. la course va-t-elle d'un bout a l'autre ?
+
+    ADC1, PARCE QUE ADC2 MEURT AVEC LE WIFI. L'ESP32-S3 a deux
+    convertisseurs. ADC2 devient inutilisable des que la radio est
+    allumee - et le mode configuration allume la radio. Un joystick sur
+    ADC2 marcherait donc tres bien jusqu'au jour ou tu entrerais en mode
+    configuration, et tomberait sans explication. Sur un S3, ADC1 est
+    GPIO1 a GPIO10.
+    """
+    print("-" * 46)
+    print("JOYSTICK 3D")
+    print("-" * 46)
+
+    if not getattr(C, "JOYSTICK_ENABLED", False):
+        print("JOYSTICK_ENABLED = False dans config.py.")
+        print("Le test continue quand meme - c'est fait pour ca - mais le")
+        print("macropad ne s'en servira pas tant que tu ne l'auras pas")
+        print("mis a True.")
+        print("")
+
+    bx = getattr(C, "JOYSTICK_X_PIN", None)
+    by = getattr(C, "JOYSTICK_Y_PIN", None)
+    if bx is None or by is None:
+        print("Aucune broche declaree (JOYSTICK_X_PIN / JOYSTICK_Y_PIN).")
+        return False
+
+    # --- 1. les broches sont-elles sur ADC1 ? ---
+    souci = 0
+    for nom, numero in (("X", bx), ("Y", by)):
+        verdict, raison = verifier_broche(numero)
+        if verdict == "reservee":
+            print("  AXE %s  GPIO%-2s  INTERDITE : %s" % (nom, numero, raison))
+            souci += 1
+            continue
+        if not (1 <= int(numero) <= 10):
+            print("  AXE %s  GPIO%-2s  PAS SUR ADC1 : la lecture tombera des"
+                  % (nom, numero))
+            print("                   que le WiFi s'allumera (mode config).")
+            souci += 1
+            continue
+        if verdict == "deconseillee":
+            print("  AXE %s  GPIO%-2s  deconseillee : %s" % (nom, numero, raison))
+        else:
+            print("  AXE %s  GPIO%-2s  sur ADC1, bon choix." % (nom, numero))
+    if souci:
+        print("")
+        print("%d broche(s) a corriger dans config.py AVANT de souder." % souci)
+
+    # --- 2. l'attenuation existe-t-elle sur ce firmware ? ---
+    try:
+        from machine import ADC
+    except ImportError as exc:
+        print("machine.ADC indisponible (%s)" % exc)
+        return False
+    voulue = getattr(C, "JOYSTICK_ATTEN", "ATTN_11DB")
+    noms = [n for n in dir(ADC) if n.startswith("ATTN")]
+    if voulue in noms:
+        print("  ATTENUATION  %s : disponible." % voulue)
+    else:
+        print("  ATTENUATION  %s INCONNUE de ce firmware." % voulue)
+        print("               disponibles : %s" % (", ".join(noms) or "aucune"))
+        print("               Sans attenuation, l'entree sature bien avant")
+        print("               3,3 V : le stick semblera bloque en butee sur")
+        print("               une bonne partie de sa course.")
+
+    # --- 3 a 5. la lecture reelle ---
+    try:
+        from inputs import Axes
+        axes = Axes(bx, by, voulue)
+    except Exception as exc:
+        print("Ouverture des axes impossible : %s" % exc)
+        return False
+
+    print("")
+    print("ETAPE 1 - NE TOUCHE PAS AU STICK pendant trois secondes.")
+    sleep_ms(400)
+    repos = []
+    for _ in range(30):
+        repos.append(axes.lire())
+        sleep_ms(100)
+    xs = [v[0] for v in repos]
+    ys = [v[1] for v in repos]
+    print("  centre X : %d  (de %d a %d)" % (sum(xs) // len(xs), min(xs), max(xs)))
+    print("  centre Y : %d  (de %d a %d)" % (sum(ys) // len(ys), min(ys), max(ys)))
+    marge = 65535 * 4 // 100
+    bruit = max(max(xs) - min(xs), max(ys) - min(ys))
+    if bruit > marge:
+        print("")
+        print("  CENTRE INSTABLE : %d points d'ecart au repos." % bruit)
+        print("  L'etalonnage du demarrage REFUSERA ce stick, et c'est voulu.")
+        print("  Causes, de la plus probable a la moins probable :")
+        print("   - tu as touche le stick pendant la mesure ;")
+        print("   - le cable des axes est trop long (reste sous 30 cm) ;")
+        print("   - il manque les condensateurs de 100 nF vers GND ;")
+        print("   - l'alimentation du module n'est pas sur 3V3.")
+    else:
+        print("  Centre stable (%d points d'ecart). Bon." % bruit)
+    if min(xs) == 0 or min(ys) == 0:
+        print("")
+        print("  UNE LECTURE A ZERO AU REPOS n'est pas normale : verifie que")
+        print("  VCC du module est bien relie a 3V3, et GND a GND.")
+
+    # --- la course ---
+    print("")
+    print("ETAPE 2 - pousse le stick dans TOUS les coins, puis relache.")
+    print("Ctrl-C pour arreter (%d s sinon)." % secondes)
+    bas_x = haut_x = xs[0]
+    bas_y = haut_y = ys[0]
+    debut = ticks_ms()
+    try:
+        while ticks_diff(ticks_ms(), debut) < int(secondes * 1000):
+            x, y = axes.lire()
+            bas_x = min(bas_x, x)
+            haut_x = max(haut_x, x)
+            bas_y = min(bas_y, y)
+            haut_y = max(haut_y, y)
+            print("  X=%5d [%5d..%5d]   Y=%5d [%5d..%5d]"
+                  % (x, bas_x, haut_x, y, bas_y, haut_y))
+            sleep_ms(250)
+    except KeyboardInterrupt:
+        print("Arret demande.")
+
+    print("")
+    course_x = haut_x - bas_x
+    course_y = haut_y - bas_y
+    for nom, course in (("X", course_x), ("Y", course_y)):
+        part = course * 100 // 65535
+        if part >= 70:
+            print("  AXE %s : course de %d%% de l'echelle. Bon." % (nom, part))
+        elif part >= 30:
+            print("  AXE %s : course de %d%% SEULEMENT." % (nom, part))
+            print("           Soit tu ne l'as pas pousse a fond, soit")
+            print("           l'attenuation n'est pas appliquee.")
+        else:
+            print("  AXE %s : course de %d%%, c'est trop peu." % (nom, part))
+            print("           Verifie le fil de cet axe et son marquage")
+            print("           sur le module (VRx / VRy).")
+    print("-" * 46)
+    return souci == 0
 
 
 def keymap(text="_MATCHPROP"):

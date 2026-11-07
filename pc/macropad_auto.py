@@ -1386,6 +1386,21 @@ cursor:pointer}
 input[type=color]:disabled{opacity:.3;cursor:default}
 input.alt{width:auto;flex:0 0 auto;margin:0 0 0 2px;cursor:pointer}
 .val{display:flex;gap:5px;align-items:center}
+/* Le bloc du joystick. Une grille qui se replie en une colonne sur un
+   telephone : la page de configuration s'ouvre souvent depuis un mobile,
+   par le point d'acces WiFi du macropad. */
+.joy{border-top:1px solid #262c3a;margin-top:12px;padding-top:12px}
+.joy .titre{font:11px ui-monospace,monospace;text-transform:uppercase;
+letter-spacing:1px;color:#8b94a6;margin-bottom:8px}
+.joy .grille{display:grid;gap:8px;
+grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.joy label{display:block;font-size:11px;color:#8b94a6;margin-bottom:3px}
+.joy .case{display:flex;gap:6px;align-items:center;font-size:12px;
+color:#e8eaee}
+.joy .case input{width:auto;flex:0 0 auto;cursor:pointer}
+.joy .dirs{margin-top:10px;display:grid;gap:8px;
+grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.joy .aide{font-size:11px;color:#8b94a6;margin-top:8px;line-height:1.45}
 .pile{display:flex;flex-direction:column;gap:5px}
 .pile select{flex:0 0 138px}
 .pile .add{align-self:flex-start;padding:4px 9px;font-size:11px}
@@ -1910,6 +1925,115 @@ function tableauCombos(p){
 // serait pire que le defilement.
 var VU=null;
 
+// =====================================================================
+// LE JOYSTICK 3D, PROFIL PAR PROFIL
+// =====================================================================
+// POURQUOI CE REGLAGE N'EST PAS GLOBAL, et c'est le point important :
+// chaque logiciel 3D a SA convention de navigation.
+//
+//   Blender    orbite = clic du milieu glisse, SANS modificateur
+//   Civil 3D   orbite = MAJ + clic du milieu glisse
+//
+// C'est INVERSE entre les deux. Le meme geste physique fait tourner dans
+// l'un et translater dans l'autre. Un reglage unique est donc impossible,
+// et c'est pour cela qu'il vit dans le profil - qui bascule tout seul
+// quand le compagnon PC voit changer la fenetre active.
+var JOY_MODES=[["eteint","eteint"],["souris","souris (orbite)"],
+["touches","raccourcis clavier"]];
+var JOY_MODIFS=[["","aucun"],["MAJ","MAJ"],["CTRL","CTRL"],["ALT","ALT"]];
+var JOY_DIRS=[["gauche","vers la gauche"],["droite","vers la droite"],
+["haut","vers le haut"],["bas","vers le bas"]];
+
+function choix(liste,val,cb){
+ var s=el("select");
+ liste.forEach(function(t){
+  var o=el("option",{value:t[0]},[t[1]]);
+  if(t[0]==val)o.selected=true;s.appendChild(o);});
+ s.onchange=function(){cb(s.value);render();};return s;}
+
+function nombre(val,mini,maxi,titre,cb){
+ var i=el("input",{type:"number",min:mini,max:maxi,title:titre});
+ i.value=val;
+ i.onchange=function(){
+  var v=parseInt(i.value,10);
+  if(isNaN(v))v=mini;
+  if(v<mini)v=mini;if(v>maxi)v=maxi;
+  i.value=v;cb(v);};
+ return i;}
+
+function coche(val,texte,titre,cb){
+ var b=el("input",{type:"checkbox",title:titre});
+ b.checked=!!val;
+ b.onchange=function(){cb(b.checked);};
+ return el("div",{cls:"case"},[b,texte]);}
+
+function champ(nom,titre,widget){
+ return el("div",{},[el("label",{title:titre},[nom]),widget]);}
+
+function blocJoystick(p){
+ if(!p.joystick)p.joystick={};
+ var j=p.joystick;
+ if(j.mode===undefined)j.mode="eteint";
+ if(!j.directions)j.directions={};
+
+ var bloc=el("div",{cls:"joy"},[]);
+ bloc.appendChild(el("div",{cls:"titre"},["Joystick 3D"]));
+
+ var grille=el("div",{cls:"grille"},[]);
+ grille.appendChild(champ("Mode",
+  "eteint = le joystick ne fait rien dans ce logiciel",
+  choix(JOY_MODES,j.mode,function(v){j.mode=v;})));
+
+ if(j.mode=="souris"){
+  grille.appendChild(champ("Maintenu pendant l'orbite",
+   "Blender : aucun. Civil 3D : MAJ. Releve-le a la souris dans les "+
+   "autres logiciels.",
+   choix(JOY_MODIFS,j.modificateur||"",
+    function(v){j.modificateur=v;})));
+ }
+ if(j.mode!="eteint"){
+  grille.appendChild(champ("Sensibilite",
+   "deplacement a pleine inclinaison. Monte-la si la vue tourne trop "+
+   "lentement.",
+   nombre(j.sensibilite===undefined?6:j.sensibilite,1,15,
+    "1 a 15",function(v){j.sensibilite=v;})));
+  grille.appendChild(champ("Zone morte (%)",
+   "en dessous, le stick est considere au repos. Monte-la si la vue "+
+   "derive toute seule.",
+   nombre(j.zone_morte===undefined?12:j.zone_morte,1,60,
+    "1 a 60 %",function(v){j.zone_morte=v;})));
+  grille.appendChild(el("div",{},[
+   el("label",{},["Sens"]),
+   coche(j.inverser_x,"inverser X",
+    "si la vue part a droite quand tu pousses a gauche",
+    function(v){j.inverser_x=v;}),
+   coche(j.inverser_y,"inverser Y",
+    "si la vue monte quand tu pousses vers le bas",
+    function(v){j.inverser_y=v;})]));
+ }
+ bloc.appendChild(grille);
+
+ if(j.mode=="touches"){
+  var dirs=el("div",{cls:"dirs"},[]);
+  JOY_DIRS.forEach(function(d){
+   etapes(j.directions,d[0]);
+   dirs.appendChild(el("div",{},[
+    el("label",{},[d[1]]),
+    ligneEtape(j.directions,d[0],0)]));});
+  bloc.appendChild(dirs);
+  bloc.appendChild(el("div",{cls:"aide"},[
+   "Mode sans souris : le joystick envoie un raccourci par direction. "+
+   "Dans Blender, le pave numerique 4 et 6 tournent la vue par pas de "+
+   "15 degres, 8 et 2 la font basculer (KP_4, KP_6, KP_8, KP_2)."]));
+ }
+ if(j.mode=="souris"){
+  bloc.appendChild(el("div",{cls:"aide"},[
+   "Le joystick tient le clic du milieu et deplace : c'est le geste "+
+   "d'orbite de presque tous les logiciels 3D. Il faut une souris USB, "+
+   "donc JOYSTICK_ENABLED = True dans config.py et un redemarrage."]));
+ }
+ return bloc;}
+
 function onglets(zone){
  var barre=el("div",{},[]);barre.id="onglets";
  D.ordre.forEach(function(nom){
@@ -1962,7 +2086,8 @@ function render(){
    el("th",{},["Libelle"]),el("th",{},["Action"]),
    el("th",{},["Usage"])])]);
   for(var i=0;i<N;i++)ligne(p,i,tb,mx);
-  zone.appendChild(el("div",{cls:"card"},[head,tb,tableauCombos(p)]));
+  zone.appendChild(el("div",{cls:"card"},
+   [head,tb,tableauCombos(p),blocJoystick(p)]));
  });
  renderApps();
 }

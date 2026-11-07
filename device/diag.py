@@ -51,8 +51,8 @@ import config as C
 # Les fichiers que le firmware attend sur la carte.
 MODULES_ATTENDUS = ("config", "profiles", "runtime", "inputs", "gestures",
                     "combos", "layouts", "store", "stats", "link",
-                    "hid_keyboard", "display", "agenda", "led", "rgb",
-                    "sh1106")
+                    "hid_keyboard", "hid_mouse", "joystick", "display",
+                    "agenda", "led", "rgb", "sh1106")
 
 # Nombre de valeurs que store.charger() doit rendre. Il a grandi trois fois
 # (les combinaisons, les noms complets, puis le joystick), et chaque fois
@@ -328,6 +328,14 @@ def roles_declares():
     poser(getattr(C, "TTP_NEXT_PIN", None), "TTP profil suivant")
     poser(getattr(C, "OLED_SDA", None), "OLED SDA")
     poser(getattr(C, "OLED_SCL", None), "OLED SCL")
+    # Le joystick n'est declare que s'il est active : sans cela, broches()
+    # reprocherait une collision sur des broches que personne n'utilise.
+    # Son CLIC n'apparait pas ici, et c'est normal : le fil SW est soude sur
+    # la broche de B1, qui est deja declaree plus haut. Ce n'est pas une
+    # collision, c'est le montage.
+    if getattr(C, "JOYSTICK_ENABLED", False):
+        poser(getattr(C, "JOYSTICK_X_PIN", None), "joystick axe X")
+        poser(getattr(C, "JOYSTICK_Y_PIN", None), "joystick axe Y")
     if getattr(C, "RGB_TYPE", "") == "WS2812":
         poser(getattr(C, "RGB_PIN", None), "donnees des LED RGB")
     else:
@@ -439,6 +447,159 @@ def broches(secondes=60):
         print("Arret demande.")
     print("-" * 46)
     return refusees == 0
+
+
+def joystick(secondes=20):
+    """Le controle du joystick, A FAIRE AVANT DE REFERMER LE BOITIER.
+
+        import diag; diag.joystick()
+
+    Il repond aux cinq questions qui comptent, dans l'ordre ou elles
+    peuvent te couter du temps :
+
+      1. les broches choisies sont-elles sur ADC1 ?
+      2. l'attenuation reglee dans config.py existe-t-elle ici ?
+      3. les deux axes se lisent-ils ?
+      4. QUEL EST LE CENTRE, et est-il stable ?
+      5. la course va-t-elle d'un bout a l'autre ?
+
+    ADC1, PARCE QUE ADC2 MEURT AVEC LE WIFI. L'ESP32-S3 a deux
+    convertisseurs. ADC2 devient inutilisable des que la radio est
+    allumee - et le mode configuration allume la radio. Un joystick sur
+    ADC2 marcherait donc tres bien jusqu'au jour ou tu entrerais en mode
+    configuration, et tomberait sans explication. Sur un S3, ADC1 est
+    GPIO1 a GPIO10.
+    """
+    print("-" * 46)
+    print("JOYSTICK 3D")
+    print("-" * 46)
+
+    if not getattr(C, "JOYSTICK_ENABLED", False):
+        print("JOYSTICK_ENABLED = False dans config.py.")
+        print("Le test continue quand meme - c'est fait pour ca - mais le")
+        print("macropad ne s'en servira pas tant que tu ne l'auras pas")
+        print("mis a True.")
+        print("")
+
+    bx = getattr(C, "JOYSTICK_X_PIN", None)
+    by = getattr(C, "JOYSTICK_Y_PIN", None)
+    if bx is None or by is None:
+        print("Aucune broche declaree (JOYSTICK_X_PIN / JOYSTICK_Y_PIN).")
+        return False
+
+    # --- 1. les broches sont-elles sur ADC1 ? ---
+    souci = 0
+    for nom, numero in (("X", bx), ("Y", by)):
+        verdict, raison = verifier_broche(numero)
+        if verdict == "reservee":
+            print("  AXE %s  GPIO%-2s  INTERDITE : %s" % (nom, numero, raison))
+            souci += 1
+            continue
+        if not (1 <= int(numero) <= 10):
+            print("  AXE %s  GPIO%-2s  PAS SUR ADC1 : la lecture tombera des"
+                  % (nom, numero))
+            print("                   que le WiFi s'allumera (mode config).")
+            souci += 1
+            continue
+        if verdict == "deconseillee":
+            print("  AXE %s  GPIO%-2s  deconseillee : %s" % (nom, numero, raison))
+        else:
+            print("  AXE %s  GPIO%-2s  sur ADC1, bon choix." % (nom, numero))
+    if souci:
+        print("")
+        print("%d broche(s) a corriger dans config.py AVANT de souder." % souci)
+
+    # --- 2. l'attenuation existe-t-elle sur ce firmware ? ---
+    try:
+        from machine import ADC
+    except ImportError as exc:
+        print("machine.ADC indisponible (%s)" % exc)
+        return False
+    voulue = getattr(C, "JOYSTICK_ATTEN", "ATTN_11DB")
+    noms = [n for n in dir(ADC) if n.startswith("ATTN")]
+    if voulue in noms:
+        print("  ATTENUATION  %s : disponible." % voulue)
+    else:
+        print("  ATTENUATION  %s INCONNUE de ce firmware." % voulue)
+        print("               disponibles : %s" % (", ".join(noms) or "aucune"))
+        print("               Sans attenuation, l'entree sature bien avant")
+        print("               3,3 V : le stick semblera bloque en butee sur")
+        print("               une bonne partie de sa course.")
+
+    # --- 3 a 5. la lecture reelle ---
+    try:
+        from inputs import Axes
+        axes = Axes(bx, by, voulue)
+    except Exception as exc:
+        print("Ouverture des axes impossible : %s" % exc)
+        return False
+
+    print("")
+    print("ETAPE 1 - NE TOUCHE PAS AU STICK pendant trois secondes.")
+    sleep_ms(400)
+    repos = []
+    for _ in range(30):
+        repos.append(axes.lire())
+        sleep_ms(100)
+    xs = [v[0] for v in repos]
+    ys = [v[1] for v in repos]
+    print("  centre X : %d  (de %d a %d)" % (sum(xs) // len(xs), min(xs), max(xs)))
+    print("  centre Y : %d  (de %d a %d)" % (sum(ys) // len(ys), min(ys), max(ys)))
+    marge = 65535 * 4 // 100
+    bruit = max(max(xs) - min(xs), max(ys) - min(ys))
+    if bruit > marge:
+        print("")
+        print("  CENTRE INSTABLE : %d points d'ecart au repos." % bruit)
+        print("  L'etalonnage du demarrage REFUSERA ce stick, et c'est voulu.")
+        print("  Causes, de la plus probable a la moins probable :")
+        print("   - tu as touche le stick pendant la mesure ;")
+        print("   - le cable des axes est trop long (reste sous 30 cm) ;")
+        print("   - il manque les condensateurs de 100 nF vers GND ;")
+        print("   - l'alimentation du module n'est pas sur 3V3.")
+    else:
+        print("  Centre stable (%d points d'ecart). Bon." % bruit)
+    if min(xs) == 0 or min(ys) == 0:
+        print("")
+        print("  UNE LECTURE A ZERO AU REPOS n'est pas normale : verifie que")
+        print("  VCC du module est bien relie a 3V3, et GND a GND.")
+
+    # --- la course ---
+    print("")
+    print("ETAPE 2 - pousse le stick dans TOUS les coins, puis relache.")
+    print("Ctrl-C pour arreter (%d s sinon)." % secondes)
+    bas_x = haut_x = xs[0]
+    bas_y = haut_y = ys[0]
+    debut = ticks_ms()
+    try:
+        while ticks_diff(ticks_ms(), debut) < int(secondes * 1000):
+            x, y = axes.lire()
+            bas_x = min(bas_x, x)
+            haut_x = max(haut_x, x)
+            bas_y = min(bas_y, y)
+            haut_y = max(haut_y, y)
+            print("  X=%5d [%5d..%5d]   Y=%5d [%5d..%5d]"
+                  % (x, bas_x, haut_x, y, bas_y, haut_y))
+            sleep_ms(250)
+    except KeyboardInterrupt:
+        print("Arret demande.")
+
+    print("")
+    course_x = haut_x - bas_x
+    course_y = haut_y - bas_y
+    for nom, course in (("X", course_x), ("Y", course_y)):
+        part = course * 100 // 65535
+        if part >= 70:
+            print("  AXE %s : course de %d%% de l'echelle. Bon." % (nom, part))
+        elif part >= 30:
+            print("  AXE %s : course de %d%% SEULEMENT." % (nom, part))
+            print("           Soit tu ne l'as pas pousse a fond, soit")
+            print("           l'attenuation n'est pas appliquee.")
+        else:
+            print("  AXE %s : course de %d%%, c'est trop peu." % (nom, part))
+            print("           Verifie le fil de cet axe et son marquage")
+            print("           sur le module (VRx / VRy).")
+    print("-" * 46)
+    return souci == 0
 
 
 def keymap(text="_MATCHPROP"):

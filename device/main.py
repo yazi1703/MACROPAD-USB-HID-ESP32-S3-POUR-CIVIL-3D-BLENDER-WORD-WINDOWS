@@ -58,6 +58,24 @@ from hid_keyboard import HIDKeyboard
 from layouts import compile_actions
 from link import Link, EVT_PROFIL, EVT_DOCUMENT, EVT_RECHARGER, EVT_AGENDA
 
+# Les intentions du joystick. Import tolerant : joystick.py peut manquer sur
+# une carte dont on n'a televerse qu'une partie des fichiers, et ce n'est pas
+# une raison pour que le macropad cesse de taper. diag.py le nommera.
+try:
+    from joystick import (RIEN as JOY_RIEN, COMMENCER as JOY_COMMENCER,
+                          BOUGER as JOY_BOUGER, TERMINER as JOY_TERMINER,
+                          MODE_TOUCHES as JOY_TOUCHES,
+                          direction as joy_direction)
+except ImportError:
+    JOY_RIEN = "rien"
+    JOY_COMMENCER = "commencer"
+    JOY_BOUGER = "bouger"
+    JOY_TERMINER = "terminer"
+    JOY_TOUCHES = "touches"
+
+    def joy_direction(fx, fy):
+        return None
+
 NB_TOUCHES = len(C.BUTTON_PINS)
 
 # Les reglages que ce firmware attend de config.py, avec leur valeur de
@@ -69,6 +87,19 @@ REGLAGES_NEUFS = (
     ("RGB_RESPIRATION_MAX", 0.55),
     ("ESC_MAINTIEN_MS", 700),
     ("HID_HORS_BOUCLE_MS", 100),
+    # Le joystick 3D. Tous ces reglages ont un repli : un config.py
+    # d'avant le joystick ne doit pas empecher la carte de demarrer.
+    ("JOYSTICK_ENABLED", False),
+    ("JOYSTICK_X_PIN", 1),
+    ("JOYSTICK_Y_PIN", 2),
+    ("JOYSTICK_ATTEN", "ATTN_11DB"),
+    ("JOYSTICK_ETALON_LECTURES", 16),
+    ("JOYSTICK_ETALON_MS", 20),
+    ("JOYSTICK_CADENCE_MS", 12),
+    ("JOYSTICK_TOUCHES_MS", 180),
+    ("JOYSTICK_FIN_MS", 120),
+    ("JOYSTICK_CLIC_AVEUGLE_MS", 80),
+    ("JOYSTICK_CLIC_INDEX", 0),
 )
 _manquants = []
 
@@ -269,6 +300,48 @@ def run():
     from rgb import Rgb
     rgb = Rgb()
 
+    # --- Le joystick 3D -------------------------------------------
+    # Trois objets, et chacun peut manquer sans gener les autres :
+    #   axes   lit les deux entrees analogiques (le seul materiel)
+    #   stick  la logique : centre, zone morte, machine a etats
+    #   souris l'envoi USB, qui n'existe que si boot.py a reussi
+    stick = axes = souris = None
+    if reglage("JOYSTICK_ENABLED", False):
+        try:
+            from joystick import Joystick
+            from inputs import Axes
+            axes = Axes(reglage("JOYSTICK_X_PIN", 1),
+                        reglage("JOYSTICK_Y_PIN", 2),
+                        reglage("JOYSTICK_ATTEN", "ATTN_11DB"))
+            stick = Joystick()
+            # ETALONNAGE : NE TOUCHE PAS AU STICK MAINTENANT.
+            # On moyenne plusieurs lectures au repos. Si elles se
+            # dispersent, l'etalonnage ECHOUE expres : un centre pris
+            # stick pousse ferait deriver la vue sans fin, et personne ne
+            # comprendrait pourquoi. On bloque ici quelques centaines de
+            # millisecondes, et c'est le seul endroit du firmware ou l'on
+            # s'autorise a attendre - la boucle n'a pas encore demarre.
+            lectures = []
+            for _ in range(reglage("JOYSTICK_ETALON_LECTURES", 16)):
+                lectures.append(axes.lire())
+                sleep_ms(reglage("JOYSTICK_ETALON_MS", 20))
+            if stick.etalonner(lectures):
+                print("Joystick : centre mesure a", stick.centre_x,
+                      "/", stick.centre_y)
+            else:
+                print("Joystick : ETALONNAGE REFUSE - le stick bougeait ?")
+                print("Joystick : inactif. Fais RESET sans y toucher.")
+            if runtime.souris is not None:
+                from hid_mouse import HIDMouse
+                souris = HIDMouse(runtime.souris)
+            else:
+                print("Joystick : pas de souris USB, seul le mode")
+                print("           \"touches\" d'un profil fonctionnera.")
+        except Exception as exc:
+            # Meme regle que partout : on signale, et le macropad TAPE.
+            print("Joystick indisponible (%s) : le reste fonctionne." % exc)
+            stick = axes = souris = None
+
     # --- L'agenda du jour sur l'ecran -----------------------------
     # Livre a False : l'ecran garde le tableau des macros tant que tu n'as
     # pas dit le contraire. Sans compagnon PC, cette vue n'aurait de toute
@@ -302,6 +375,13 @@ def run():
         # La couleur suit le logiciel : c'est le profil actif qui la donne,
         # et le PC change de profil tout seul selon la fenetre active.
         rgb.profil(couleurs.get(manager.name), couleurs2.get(manager.name))
+        # LE JOYSTICK SUIT AUSSI LE LOGICIEL, et c'est tout l'interet :
+        # dans Blender l'orbite est le clic du milieu seul, dans Civil 3D
+        # c'est Maj + clic du milieu. Les reglages d'un logiciel ne doivent
+        # jamais finir un mouvement commence dans un autre : regler()
+        # signale un glissement en cours, et on le referme proprement.
+        if stick is not None and stick.regler(joysticks.get(manager.name)):
+            joystick_relacher()
 
     def recharger_profils():
         """Relit profils.json et applique la nouvelle configuration.
@@ -310,6 +390,7 @@ def run():
         prennent effet immediatement, sans RESET.
         """
         nonlocal manager, titres, ordre, couleurs, couleurs2, table_combos
+        nonlocal joysticks
         try:
             (neufs, ordre_neuf, titres_neufs, couleurs_neuves, secondes_neuves,
              _noms_neufs, combos_neuves, _apps, _repli, joysticks_neufs,
@@ -326,11 +407,74 @@ def run():
             # zero, ce qui est bienvenu apres une relecture de fichier.
             keyboard.cancel()
         manager, titres, ordre = nouveau, titres_neufs, ordre_neuf
+        # Un enregistrement depuis la page web peut avoir change le mode du
+        # joystick ou son modificateur : on referme un glissement en cours
+        # avant d'adopter les nouveaux reglages, sinon le bouton du milieu
+        # resterait enfonce avec les regles de l'ancien profil.
+        if stick is not None and stick.abandonner():
+            joystick_relacher()
+        joysticks = joysticks_neufs
         couleurs = couleurs_neuves
         couleurs2 = secondes_neuves
         table_combos = combos_neuves
         afficher(False)
         print("Macros rechargees depuis :", origine_neuve)
+
+    def joystick_relacher():
+        """Referme un glissement : bouton du milieu, puis modificateur.
+
+        DANS CET ORDRE. Relacher Maj avant le bouton laisserait, pendant
+        quelques millisecondes, un clic du milieu SANS Maj - ce qui dans
+        Civil 3D veut dire "translate la vue". Le mouvement finirait donc
+        par un petit saut lateral, a chaque fois.
+        """
+        if souris is not None:
+            souris.milieu(False)
+        if keyboard is not None:
+            keyboard.relacher_joystick()
+
+    def joystick_agir(action, dx, dy, now):
+        """Traduit ce que demande joystick.py en actions USB.
+
+        joystick.py ne sait rien de l'USB - c'est ce qui le rend testable
+        sur un PC. La traduction se fait donc ici, et seulement ici.
+        """
+        mode = stick.mode()
+
+        if mode == JOY_TOUCHES:
+            # Mode sans souris : on envoie un RACCOURCI du profil. Utilisable
+            # meme si le peripherique composite a ete refuse par Windows.
+            if action in (JOY_COMMENCER, JOY_BOUGER) and keyboard is not None:
+                sens = joy_direction(*stick.derniere)
+                actions = (stick.reglages.get("directions") or {}).get(sens)
+                if actions:
+                    keyboard.submit(actions)
+            return
+
+        if souris is None:
+            return
+
+        if action == JOY_COMMENCER:
+            # LE MODIFICATEUR D'ABORD, LE BOUTON ENSUITE, ET CE N'EST PAS
+            # UNE PRECAUTION THEORIQUE. Un Maj qui arrive APRES le clic
+            # n'est pas vu par le logiciel 3D : Civil 3D a deja decide que
+            # ce glissement serait une translation, et la vue se deplace au
+            # lieu de tourner.
+            #
+            # Demander ne suffit pas : il faut que le paquet PARTE. On
+            # appelle donc tick() tout de suite, exactement comme le fait
+            # la branche du bouton ESC juste au-dessus - sans cela, l'ordre
+            # dependrait de celui des taches de fond, et un test de bout en
+            # bout a montre que le clic partait bel et bien en premier.
+            modif = stick.modificateur()
+            if modif and keyboard is not None:
+                keyboard.maintenir_joystick([("maintien", (modif,))])
+                keyboard.tick(now)
+            souris.milieu(True)
+        elif action == JOY_BOUGER:
+            souris.bouger(dx, dy)
+        elif action == JOY_TERMINER:
+            joystick_relacher()
 
     def declencher(index, geste):
         """Execute la macro correspondant a un geste sur une touche."""
@@ -475,6 +619,11 @@ def run():
                         # ESC annule aussi une combinaison en train de se
                         # former, sans rien declencher.
                         combos.reinitialiser()
+                        # ESC referme aussi un glissement de vue en cours.
+                        # C'est une touche d'annulation : elle doit TOUT
+                        # arreter, y compris une orbite partie de travers.
+                        if stick is not None and stick.abandonner():
+                            joystick_relacher()
                         if keyboard:
                             keyboard.escape(now)
                             # tick() tout de suite : le paquet part dans le
@@ -521,6 +670,15 @@ def run():
                             # perceptible sous le doigt.
                             display.surligner(index, now)
                             rgb.touche(index, now)
+                            # LE CLIC DU STICK EST B1, et sur un module a
+                            # quelques euros il est dur et decentre : en
+                            # enfoncant, on BOUGE le stick. On ferme donc
+                            # les yeux sur les axes le temps de l'appui,
+                            # sinon chaque B1 enverrait un petit sursaut a
+                            # la vue 3D.
+                            if (stick is not None and index
+                                    == reglage("JOYSTICK_CLIC_INDEX", 0)):
+                                stick.ignorer(now)
                             combo, differes = combos.appui(index, now)
                         else:
                             combo, differes = combos.relachement(index, now)
@@ -549,9 +707,36 @@ def run():
                 for index, geste in gestes.service(now):
                     declencher(index, geste)
 
+                # --- 3 bis. LE JOYSTICK 3D ------------------------
+                # Lire deux entrees analogiques prend quelques
+                # microsecondes : on le fait a chaque tour. Ce qui est
+                # limite, c'est l'ENVOI - l'USB ne transporte qu'environ
+                # 125 rapports de souris par seconde - et c'est la cadence
+                # interne du joystick qui s'en occupe.
+                if stick is not None and axes is not None:
+                    # LA SOURIS A DISPARU PENDANT UN GLISSEMENT. Elle a
+                    # oublie l'etat du bouton, donc nous aussi : on ferme
+                    # le glissement et on relache le modificateur tenu,
+                    # sinon un Maj resterait enfonce cote Windows sans
+                    # plus rien pour le relacher.
+                    if (souris is not None and not souris.ready()
+                            and stick.abandonner()):
+                        joystick_relacher()
+                    brut_x, brut_y = axes.lire()
+                    action, dx, dy = stick.service(brut_x, brut_y, now)
+                    if action != JOY_RIEN:
+                        joystick_agir(action, dx, dy, now)
+
             # --- 4. Travaux de fond, tous non bloquants -------------
+            # LE CLAVIER D'ABORD. Une premiere version mettait la souris en
+            # tete, pour que le bouton du milieu ne tarde pas a s'enfoncer.
+            # C'etait exactement l'inverse de ce qu'il faut : le Maj d'une
+            # orbite Civil 3D passe par le clavier, et il doit partir AVANT
+            # le clic, sinon le logiciel translate au lieu de tourner.
             if keyboard:
                 keyboard.tick(now)
+            if souris:
+                souris.tick(now)
                 pret = keyboard.ready()
                 if pret and not etait_pret:
                     controls.disarm_held()
@@ -609,6 +794,12 @@ def run():
         # Ce bloc s'execute TOUJOURS : arret normal, Ctrl-C, ou erreur.
         # C'est la qu'on garantit qu'aucune touche ne reste enfoncee cote
         # Windows, que la LED est eteinte et que les compteurs sont sauves.
+        # LA SOURIS EN PREMIER, et ce n'est pas un detail : un bouton du
+        # milieu reste enfonce cote Windows fait tourner la vue 3D SANS
+        # FIN, et il faut aller cliquer dans le logiciel pour s'en sortir.
+        # C'est pire qu'un Ctrl bloque.
+        if souris:
+            souris.close()
         if keyboard:
             keyboard.close()
         if led:

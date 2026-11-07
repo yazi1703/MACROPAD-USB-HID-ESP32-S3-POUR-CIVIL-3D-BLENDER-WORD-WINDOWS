@@ -437,6 +437,14 @@ class Joystick:
         return (TERMINER, 0, 0)
 
     def _cadence(self):
+        if self.mode() == MODE_TOUCHES:
+            # UN RACCOURCI NE SE REPETE PAS QUATRE-VINGTS FOIS PAR SECONDE.
+            # En mode "touches" on n'envoie pas un deplacement mais une
+            # frappe - le pave numerique 4 de Blender, par exemple. A la
+            # cadence de la souris, une seconde d'inclinaison enverrait
+            # quatre-vingts rotations de 15 degres : la vue partirait en
+            # vrille. On vise donc le rythme d'une touche maintenue.
+            return int(reglage("JOYSTICK_TOUCHES_MS", 180))
         valeur = int(reglage("JOYSTICK_CADENCE_MS", 12))
         # En dessous de 8 ms on depasse ce que l'interface accepte
         # (interval_ms=8 par defaut dans la bibliotheque) : les rapports

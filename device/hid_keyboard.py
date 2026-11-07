@@ -471,7 +471,7 @@ class HIDKeyboard:
         usb.device.get().active(False)
 
 
-def create_interface():
+def create_interface(souris=None):
     """Crée le clavier USB et le déclare à Windows.
 
     Appelé UNE SEULE FOIS depuis boot.py. À cet instant Windows découvre un
@@ -480,6 +480,17 @@ def create_interface():
 
     builtin_driver=True demande à MicroPython de GARDER le port série CDC
     en plus du clavier. Sans lui, on perdrait le REPL sur le port natif.
+
+    SOURIS : si on en passe une, le macropad se présente comme UN SEUL
+    périphérique qui porte deux interfaces — c'est ce qu'on appelle un
+    périphérique composite. init() accepte plusieurs interfaces
+    (sa signature est `init(self, *itfs, **kwargs)` dans la bibliothèque),
+    et c'est l'usage documenté.
+
+    MAIS C'EST LE MOMENT LE PLUS RISQUÉ DE TOUT LE PROJET : si Windows
+    refuse le nouveau jeu de descripteurs, on ne perd pas la souris, on
+    perd LE CLAVIER. C'est pour cela que boot.py rattrape l'échec et
+    réessaie sans souris, et que le mode sans échec a déménagé sur B6.
     """
     import machine
     if not hasattr(machine, "USBDevice"):
@@ -505,5 +516,12 @@ def create_interface():
             self.led_mask = mask
 
     interface = KeyboardWithLEDs()
-    usb.device.get().init(interface, builtin_driver=True)
+    if souris is None:
+        usb.device.get().init(interface, builtin_driver=True)
+    else:
+        # L'ORDRE COMPTE : le clavier en premier. Windows numérote les
+        # interfaces dans l'ordre déclaré, et un clavier en première
+        # position est ce que tous les systèmes attendent d'un périphérique
+        # de saisie. La souris derrière ne gêne personne.
+        usb.device.get().init(interface, souris, builtin_driver=True)
     return interface

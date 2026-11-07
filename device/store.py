@@ -269,9 +269,20 @@ def joystick_depuis_json(bloc):
     """
     bloc = bloc if isinstance(bloc, dict) else {}
     propre = _reglages_joystick(bloc)
+    # "directions" doit etre un dictionnaire. Un fichier edite a la main
+    # peut y avoir mis n'importe quoi - une chaine, une liste, null - et la
+    # promesse de cette fonction est de NE JAMAIS LEVER : une configuration
+    # abimee doit degrader vers un joystick eteint, pas empecher la carte
+    # de demarrer.
+    brutes = bloc.get("directions")
+    if not isinstance(brutes, dict):
+        brutes = {}
     directions = {}
     for sens in _DIRECTIONS:
-        actions = _actions_direction((bloc.get("directions") or {}).get(sens))
+        try:
+            actions = _actions_direction(brutes.get(sens))
+        except Exception:
+            actions = []
         if actions:
             directions[sens] = actions
     propre["directions"] = directions
