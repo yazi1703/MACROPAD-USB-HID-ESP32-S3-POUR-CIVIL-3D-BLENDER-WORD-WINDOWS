@@ -1,0 +1,1217 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Joystick 3D du Macropad</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>:root{padding:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+<style>
+/* Mise en page : une colonne de lecture (68ch), tableaux et schemas en pleine
+   largeur dans leur propre conteneur a defilement. Barre de navigation collante.
+   Chaque affirmation technique porte un badge de provenance. */
+:root{
+  --paper:#eceff3; --card:#f8fafc; --band:#e2e7ee;
+  --ink:#111820; --ink2:#4d5a68; --ink3:#71808f;
+  --rule:#ccd5de; --rule2:#b4c1cd;
+  --accent:#0a6e7d; --accent-soft:#d8ecef;
+  --copper:#8f5518; --copper-soft:#f3e4d4;
+  --danger:#a3201a; --danger-soft:#f7e0de;
+  --ok:#1d6540; --ok-soft:#dcefe3;
+  --f-disp:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0d1217; --card:#161d25; --band:#131a21;
+  --ink:#e7edf3; --ink2:#9eabb8; --ink3:#7b8895;
+  --rule:#293340; --rule2:#38444f;
+  --accent:#4fc3d4; --accent-soft:#11323a;
+  --copper:#d79a56; --copper-soft:#33250f;
+  --danger:#f0867c; --danger-soft:#3a1715;
+  --ok:#62c98c; --ok-soft:#102c1d;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --paper:#0d1217; --card:#161d25; --band:#131a21;
+  --ink:#e7edf3; --ink2:#9eabb8; --ink3:#7b8895;
+  --rule:#293340; --rule2:#38444f;
+  --accent:#4fc3d4; --accent-soft:#11323a;
+  --copper:#d79a56; --copper-soft:#33250f;
+  --danger:#f0867c; --danger-soft:#3a1715;
+  --ok:#62c98c; --ok-soft:#102c1d;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);
+  font-size:1.0625rem;line-height:1.65;margin:0;
+  -webkit-text-size-adjust:100%}
+body::before{content:"";position:fixed;inset:0 0 auto;
+  height:env(safe-area-inset-top,0px);z-index:10;background:var(--card)}
+
+.wrap{max-width:54rem;margin:0 auto;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:0 4rem}
+
+/* ---------- navigation collante ---------- */
+nav.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;
+  background:var(--card);border-bottom:1px solid var(--rule)}
+nav.top .inner{max-width:54rem;margin:0 auto;display:flex;gap:.1rem;
+  overflow-x:auto;scrollbar-width:thin;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:.45rem}
+nav.top a{font-family:var(--f-disp);font-size:.7rem;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);
+  text-decoration:none;white-space:nowrap;padding:.35rem .55rem;
+  border-radius:3px}
+nav.top a:hover{color:var(--accent);background:var(--accent-soft)}
+nav.top a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* ---------- en-tete ---------- */
+header.doc{border-bottom:3px solid var(--ink);padding-block:2.4rem 1.3rem;
+  margin-bottom:2rem}
+.kicker{font-family:var(--f-disp);font-size:.68rem;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+  margin:0 0 .7rem}
+h1{font-family:var(--f-disp);font-weight:700;font-size:clamp(1.9rem,6vw,2.9rem);
+  line-height:1.07;letter-spacing:-.02em;margin:0 0 .7rem;text-wrap:balance}
+.sub{font-size:1.1rem;color:var(--ink2);margin:0 0 1.3rem;max-width:40rem}
+.meta{display:flex;flex-wrap:wrap;gap:.4rem 1.6rem;font-family:var(--f-mono);
+  font-size:.74rem;color:var(--ink3)}
+.meta b{color:var(--ink2);font-weight:600}
+
+/* ---------- titres ---------- */
+h2{font-family:var(--f-disp);font-weight:700;font-size:clamp(1.35rem,4vw,1.75rem);
+  line-height:1.15;letter-spacing:-.01em;margin:3.2rem 0 .3rem;
+  padding-top:1.1rem;border-top:1px solid var(--rule2);text-wrap:balance}
+h2 .num{display:block;font-size:.66rem;font-weight:600;letter-spacing:.16em;
+  color:var(--copper);margin-bottom:.45rem}
+h3{font-family:var(--f-disp);font-weight:600;font-size:1.1rem;
+  margin:2.1rem 0 .4rem;text-wrap:balance}
+h4{font-family:var(--f-disp);font-weight:600;font-size:.95rem;
+  margin:1.5rem 0 .3rem;color:var(--ink2)}
+p{margin:.75rem 0;max-width:40rem}
+ul,ol{margin:.75rem 0;padding-left:1.3rem;max-width:40rem}
+li{margin:.3rem 0}
+a{color:var(--accent)}
+strong{font-weight:600}
+.lead{font-size:1.15rem;color:var(--ink2);max-width:40rem}
+
+/* ---------- badges de provenance ---------- */
+.b{display:inline-block;font-family:var(--f-mono);font-size:.63rem;
+  font-weight:600;letter-spacing:.03em;padding:.12em .45em;border-radius:3px;
+  vertical-align:.1em;white-space:nowrap}
+.b-code{background:var(--ok-soft);color:var(--ok)}
+.b-up{background:var(--accent-soft);color:var(--accent)}
+.b-you{background:var(--copper-soft);color:var(--copper)}
+.legend{display:flex;flex-direction:column;gap:.5rem;background:var(--card);
+  border:1px solid var(--rule);border-radius:5px;padding:1rem 1.1rem;
+  margin:1.6rem 0;font-size:.92rem}
+.legend div{display:flex;gap:.6rem;align-items:baseline}
+
+/* ---------- encarts ---------- */
+.box{border-left:4px solid var(--rule2);background:var(--card);
+  padding:.95rem 1.1rem;margin:1.4rem 0;border-radius:0 5px 5px 0}
+.box>:first-child{margin-top:0}.box>:last-child{margin-bottom:0}
+.box .t{font-family:var(--f-disp);font-weight:700;font-size:.72rem;
+  letter-spacing:.1em;text-transform:uppercase;margin:0 0 .4rem}
+.box.danger{border-left-color:var(--danger);background:var(--danger-soft)}
+.box.danger .t{color:var(--danger)}
+.box.warn{border-left-color:var(--copper);background:var(--copper-soft)}
+.box.warn .t{color:var(--copper)}
+.box.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+.box.ok .t{color:var(--ok)}
+.box.info{border-left-color:var(--accent);background:var(--accent-soft)}
+.box.info .t{color:var(--accent)}
+
+/* ---------- code ---------- */
+pre{font-family:var(--f-mono);font-size:.78rem;line-height:1.55;
+  background:var(--card);border:1px solid var(--rule);border-radius:5px;
+  padding:.85rem .95rem;overflow-x:auto;margin:1.1rem 0}
+code{font-family:var(--f-mono);font-size:.86em;background:var(--band);
+  padding:.1em .32em;border-radius:3px}
+pre code{background:none;padding:0;font-size:1em}
+.fname{font-family:var(--f-mono);font-size:.68rem;font-weight:600;
+  letter-spacing:.04em;color:var(--ink3);text-transform:none;
+  margin:1.1rem 0 -.75rem;display:block}
+
+/* ---------- tableaux ---------- */
+.tw{overflow-x:auto;margin:1.3rem 0;border:1px solid var(--rule);
+  border-radius:5px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:.84rem;
+  font-variant-numeric:tabular-nums}
+th{font-family:var(--f-disp);font-size:.67rem;font-weight:700;
+  letter-spacing:.07em;text-transform:uppercase;text-align:left;
+  color:var(--ink2);background:var(--band);padding:.55rem .7rem;
+  border-bottom:1px solid var(--rule2);white-space:nowrap}
+td{padding:.5rem .7rem;border-bottom:1px solid var(--rule);
+  vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.pin{font-family:var(--f-mono);font-weight:600;white-space:nowrap}
+.r-free td{background:var(--ok-soft)}
+.r-res td{color:var(--ink3)}
+.r-new td{background:var(--accent-soft)}
+caption{caption-side:bottom;text-align:left;font-size:.76rem;
+  color:var(--ink3);padding:.6rem .7rem;font-style:italic}
+
+/* ---------- schemas ---------- */
+figure{margin:1.6rem 0}
+figure svg{display:block;max-width:100%;height:auto}
+.sw{overflow-x:auto;border:1px solid var(--rule);border-radius:5px;
+  background:var(--card);padding:.8rem}
+figcaption{font-size:.78rem;color:var(--ink3);margin-top:.55rem;
+  font-style:italic;max-width:40rem}
+
+/* ---------- etapes ---------- */
+ol.steps{list-style:none;padding:0;counter-reset:s;max-width:100%}
+ol.steps>li{counter-increment:s;position:relative;padding-left:2.6rem;
+  margin:1.5rem 0}
+ol.steps>li::before{content:counter(s);position:absolute;left:0;top:-.1rem;
+  width:1.85rem;height:1.85rem;border-radius:50%;
+  background:var(--ink);color:var(--paper);
+  font-family:var(--f-disp);font-weight:700;font-size:.85rem;
+  display:flex;align-items:center;justify-content:center}
+ol.steps>li>.h{font-family:var(--f-disp);font-weight:600;font-size:1.02rem;
+  display:block;margin-bottom:.2rem}
+
+footer.doc{margin-top:3.5rem;padding-top:1.3rem;border-top:3px solid var(--ink);
+  font-size:.85rem;color:var(--ink3)}
+
+@media print{
+  body{background:#fff;color:#000;font-size:10.5pt}
+  nav.top,body::before{display:none}
+  .wrap{max-width:none;padding:0}
+  h2{break-after:avoid;page-break-after:avoid}
+  pre,.tw,figure,.box{break-inside:avoid;page-break-inside:avoid}
+  .box,pre,.tw,.sw{background:#fff}
+  a{color:#000;text-decoration:underline}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<nav class="top"><div class="inner">
+  <a href="#verdict">Verdict</a>
+  <a href="#projet">1 · Le projet</a>
+  <a href="#broches">2 · Broches</a>
+  <a href="#cablage">3 · Câblage</a>
+  <a href="#obstacles">4 · Obstacles</a>
+  <a href="#archi">5 · Architecture</a>
+  <a href="#logiciels">6 · Par logiciel</a>
+  <a href="#boitier">7 · Boîtier</a>
+  <a href="#plan">8 · Plan de travail</a>
+  <a href="#reserves">9 · Réserves</a>
+  <a href="#fiche">Fiche atelier</a>
+</div></nav>
+
+<div class="wrap">
+
+<header class="doc">
+  <p class="kicker">Macropad ESP32-S3 · Étude d'intégration</p>
+  <h1>Ajouter un joystick 3D au macropad</h1>
+  <p class="sub">Étude du projet existant, puis l'intégration complète d'un
+  joystick analogique pour la navigation 3D dans Civil&nbsp;3D, Blender,
+  InfraWorks et RealWorks.</p>
+  <div class="meta">
+    <span><b>Carte</b> ESP32-S3 N16R8</span>
+    <span><b>Firmware</b> MicroPython 1.29.0</span>
+    <span><b>Main</b> gauche, 6 touches + ESC déporté</span>
+    <span><b>Écran</b> OLED SH1106 conservé</span>
+  </div>
+</header>
+
+<section id="verdict">
+<h2><span class="num">Verdict</span>Faisable. Le câblage est facile, le logiciel ne l'est pas.</h2>
+
+<p class="lead">Deux broches analogiques restent libres, et c'est exactement ce
+qu'il faut pour deux axes. En revanche le firmware est un clavier, uniquement
+un clavier, et le rendre aussi souris touche à la seule chose qui marche de
+façon stable depuis le début du projet.</p>
+
+<p>L'étude a sorti <strong>six obstacles logiciels</strong>. Quatre sont des
+pièges réels dans la bibliothèque USB, vérifiés dans le code source. Deux
+viennent du projet lui-même : une méthode qui s'écraserait avec la touche
+modificatrice du pouce, et le mode sans échec qui se déclencherait tout seul.
+Aucun n'est bloquant. Tous demandent d'être traités avant de souder.</p>
+
+<div class="box ok">
+  <p class="t">Recommandation</p>
+  <p>Avancer en deux temps. D'abord un joystick qui envoie <strong>des
+  raccourcis clavier</strong> : aucune modification USB, aucun risque pour le
+  clavier, et tout l'étalonnage des axes est fait. Ensuite seulement, la vraie
+  souris HID, avec une sauvegarde du firmware qui fonctionne.</p>
+</div>
+
+<div class="legend">
+  <div><span class="b b-code">code</span><span>Vérifié dans les fichiers du
+  projet, à la ligne indiquée. C'est un fait.</span></div>
+  <div><span class="b b-up">amont</span><span>Vérifié dans le code source de
+  micropython-lib ou dans une documentation officielle.</span></div>
+  <div><span class="b b-you">à toi</span><span>Je n'ai pas pu le vérifier : pas
+  d'accès à ta carte, ni à tes logiciels. À confirmer avant de souder.</span></div>
+</div>
+
+<p>Ces badges sont là parce que tu as posé une règle : ne jamais inventer une
+API. Tout ce qui porte <span class="b b-you">à toi</span> est une chose que je
+ne sais pas, dite comme telle, et non une affirmation déguisée.</p>
+</section>
+
+<section id="projet">
+<h2><span class="num">Partie 1</span>Le projet tel qu'il est aujourd'hui</h2>
+
+<p>Avant d'ajouter quoi que ce soit, voilà la machine dans laquelle le joystick
+doit entrer. Ce ne sont pas des généralités : ce sont les contraintes qui vont
+décider de la forme du code.</p>
+
+<h3>Une seule boucle, qui n'attend jamais</h3>
+
+<p>Tout le firmware tient dans une boucle coopérative qui tourne environ 500
+fois par seconde <span class="b b-code">code</span> : <code>LOOP_MS = 2</code>
+dans <code>config.py:352</code>. À chaque tour, chaque tâche fait un petit
+morceau de son travail puis rend la main volontairement.</p>
+
+<pre><code>0. ecouter le PC (profil automatique, configuration)
+1. lire les entrees
+2. traiter ESC en priorite
+3. profils, verrouillage, gestes des touches
+4. envoyer AU PLUS un paquet clavier
+5. mettre a jour la LED
+6. envoyer AU PLUS une page d'ecran
+7. dormir 2 ms, et on recommence</code></pre>
+
+<p>C'est ce découpage qui fait qu'écrire une commande de seize caractères
+(environ 400&nbsp;ms de paquets USB) n'empêche jamais le bouton ESC de
+répondre. <strong>Le joystick devra respecter la même règle</strong>, et on
+verra plus loin que la bibliothèque souris officielle, elle, ne la respecte
+pas.</p>
+
+<div class="box info">
+  <p class="t">La règle qui gouverne tout</p>
+  <p>Aucun appel bloquant dans la boucle. Le clavier envoie ses paquets avec
+  <code>timeout_ms=0</code> <span class="b b-code">code</span>
+  (<code>hid_keyboard.py:205</code>), et les tests le vérifient activement : le
+  faux transport de <code>tests/test_logic.py:48</code> contient
+  <code>assert timeout_ms == 0</code>. Un code qui attendrait ferait échouer la
+  suite de tests, et c'est voulu.</p>
+</div>
+
+<h3>Les couches, et qui parle à qui</h3>
+
+<div class="tw"><table>
+<caption>Les modules concernés par l'ajout du joystick. Le reste du firmware
+(layouts, combos, gestures, stats, portal, link) n'est pas touché.</caption>
+<thead><tr><th>Fichier</th><th>Rôle</th><th>Touché par le joystick ?</th></tr></thead>
+<tbody>
+<tr><td class="pin">boot.py</td><td>Décide du mode de démarrage, crée l'interface USB</td><td>Oui — descripteur composite</td></tr>
+<tr><td class="pin">main.py</td><td>La boucle, 661 lignes</td><td>Oui — une étape de plus</td></tr>
+<tr><td class="pin">config.py</td><td>Toutes les broches et tous les réglages</td><td>Oui — un bloc JOYSTICK</td></tr>
+<tr><td class="pin">inputs.py</td><td>Lecture des boutons, anti-rebond</td><td>Non — les axes ne rebondissent pas</td></tr>
+<tr><td class="pin">hid_keyboard.py</td><td>Le clavier USB, machine à états</td><td>Oui — conflit sur les touches tenues</td></tr>
+<tr><td class="pin">store.py</td><td>Lecture/écriture de profils.json</td><td>Oui — un réglage par profil</td></tr>
+<tr><td class="pin">profiles.py</td><td>Valeurs d'usine, table logiciel → profil</td><td>Oui — réglages d'usine</td></tr>
+<tr><td class="pin">display.py</td><td>L'écran OLED</td><td>Facultatif — afficher l'état du stick</td></tr>
+<tr><td class="pin">diag.py</td><td>Diagnostics, table des broches</td><td>Oui — déclarer les nouvelles broches</td></tr>
+<tr><td class="pin">lib/usb/device/</td><td>Bibliothèque USB officielle, MIT</td><td>Oui — ajouter mouse.py</td></tr>
+</tbody></table></div>
+
+<h3>Les règles du projet qu'il ne faut pas casser</h3>
+
+<p>Elles ne sont pas décoratives : chacune existe parce qu'une panne l'a
+imposée, et plusieurs sont écrites noir sur blanc dans les fichiers.</p>
+
+<ul>
+<li><strong>On garde ton <code>config.py</code></strong> lors d'un
+téléversement. Conséquence : un firmware neuf tourne presque toujours avec un
+<code>config.py</code> ancien. C'est pourquoi <code>main.py</code> lit ses
+réglages via <code>reglage(nom, defaut)</code> et une table
+<code>REGLAGES_NEUFS</code> <span class="b b-code">code</span>. Toute constante
+neuve du joystick doit passer par là, sinon elle fait planter la carte au
+démarrage.</li>
+<li><strong>Un repli d'usine toujours disponible.</strong>
+<code>store.charger()</code> retourne les valeurs de <code>profiles.py</code>
+dès que <code>profils.json</code> est absent, illisible ou refusé par
+<code>verifier()</code>.</li>
+<li><strong>Une fonctionnalité neuve démarre à False.</strong>
+<code>HID_ENABLED</code>, <code>RGB_ENABLED</code> et
+<code>AGENDA_ENABLED</code> valent <code>False</code> dans le dépôt
+<span class="b b-code">code</span>. <code>JOYSTICK_ENABLED</code> suivra la
+même convention.</li>
+<li><strong>Un périphérique absent ne doit rien aggraver.</strong>
+<code>display.py</code> démarre avec <code>self.oled = None</code>, l'agenda
+s'importe dans un <code>try</code>. Un joystick débranché doit laisser le
+macropad taper normalement.</li>
+<li><strong>Tout fichier neuf doit être inscrit à trois endroits</strong> :
+<code>diag.MODULES_ATTENDUS</code>, <code>tools/generer_code_complet.py</code>
+et, pour un fichier tiers, <code>DEPENDENCIES.lock.json</code>. Un oubli ici
+a déjà coûté une séance de recherche : l'agenda manquait dans le générateur,
+et c'est un test d'inventaire qui l'a rattrapé.</li>
+</ul>
+</section>
+
+<section id="broches">
+<h2><span class="num">Partie 2</span>Le budget de broches, au complet</h2>
+
+<p>C'est la contrainte dure. Voici tout ce que <code>config.py</code> déclare
+aujourd'hui, et ce que <code>diag.py</code> interdit.</p>
+
+<div class="tw"><table>
+<caption>Relevé effectué dans <code>device/config.py</code> et
+<code>device/diag.py</code> (tables <code>BROCHES_RESERVEES</code> et
+<code>BROCHES_DECONSEILLEES</code>). En vert, ce qui reste disponible.</caption>
+<thead><tr><th>GPIO</th><th>Occupation actuelle</th><th>Déclaré dans</th><th>ADC1 ?</th></tr></thead>
+<tbody>
+<tr class="r-free"><td class="pin">0</td><td>Libre mais <em>déconseillée</em> : bouton BOOT</td><td>BROCHES_DECONSEILLEES</td><td>non</td></tr>
+<tr class="r-new"><td class="pin">1</td><td><strong>LIBRE → axe X du joystick</strong></td><td>—</td><td><strong>oui</strong></td></tr>
+<tr class="r-new"><td class="pin">2</td><td><strong>LIBRE → axe Y du joystick</strong></td><td>—</td><td><strong>oui</strong></td></tr>
+<tr><td class="pin">3</td><td>Libre mais <em>déconseillée</em> : strapping JTAG au démarrage</td><td>BROCHES_DECONSEILLEES</td><td>oui</td></tr>
+<tr><td class="pin">4</td><td>Touche B1 — pouce</td><td>BUTTON_PINS</td><td>oui</td></tr>
+<tr><td class="pin">5</td><td>Touche B2 — index</td><td>BUTTON_PINS</td><td>oui</td></tr>
+<tr><td class="pin">6</td><td>Touche B3 — index</td><td>BUTTON_PINS</td><td>oui</td></tr>
+<tr><td class="pin">7</td><td>Touche B4 — majeur</td><td>BUTTON_PINS</td><td>oui</td></tr>
+<tr><td class="pin">8</td><td>OLED SDA (I2C)</td><td>OLED_SDA</td><td>oui</td></tr>
+<tr><td class="pin">9</td><td>OLED SCL (I2C)</td><td>OLED_SCL</td><td>oui</td></tr>
+<tr><td class="pin">10</td><td>TTP223 « profil précédent »</td><td>TTP_PREVIOUS_PIN</td><td>oui</td></tr>
+<tr><td class="pin">11</td><td>TTP223 « profil suivant »</td><td>TTP_NEXT_PIN</td><td>non</td></tr>
+<tr><td class="pin">12</td><td>Touche B5 — annulaire</td><td>BUTTON_PINS</td><td>non</td></tr>
+<tr><td class="pin">13</td><td>Touche B6 — auriculaire</td><td>BUTTON_PINS</td><td>non</td></tr>
+<tr><td class="pin">14</td><td>Bouton ESC déporté</td><td>ESC_PIN</td><td>non</td></tr>
+<tr><td class="pin">15</td><td>LED du bouton ESC (base du BC547)</td><td>LED_PIN</td><td>non</td></tr>
+<tr><td class="pin">16</td><td>RGB rouge (mode trois broches)</td><td>RGB_PIN_R</td><td>non</td></tr>
+<tr><td class="pin">17</td><td>Données du ruban RGB / RGB vert</td><td>RGB_PIN, RGB_PIN_V</td><td>non</td></tr>
+<tr><td class="pin">18</td><td>RGB bleu (mode trois broches)</td><td>RGB_PIN_B</td><td>non</td></tr>
+<tr class="r-res"><td class="pin">19, 20</td><td>USB D− et D+. <strong>Ne rien connecter.</strong></td><td>BROCHES_RESERVEES</td><td>non</td></tr>
+<tr class="r-free"><td class="pin">21</td><td>LIBRE (numérique seulement)</td><td>—</td><td>non</td></tr>
+<tr class="r-res"><td class="pin">26–32</td><td>Flash SPI interne</td><td>BROCHES_RESERVEES</td><td>non</td></tr>
+<tr class="r-res"><td class="pin">33–37</td><td>PSRAM octale (c'est le cas d'un N16R8)</td><td>BROCHES_RESERVEES</td><td>non</td></tr>
+<tr><td class="pin">38–46</td><td>Déconseillées : LED soudée, JTAG, console série, strapping</td><td>BROCHES_DECONSEILLEES</td><td>non</td></tr>
+<tr class="r-free"><td class="pin">47, 48</td><td>LIBRES (numérique seulement)</td><td>—</td><td>non</td></tr>
+</tbody></table></div>
+
+<h3>Pourquoi ADC1, et pas n'importe quelle broche</h3>
+
+<p>L'ESP32-S3 a deux convertisseurs analogiques. <strong>ADC2 devient
+inutilisable dès que le WiFi est allumé</strong> — et ton mode configuration
+allume le WiFi (<code>portal.py</code>, point d'accès sur
+<code>192.168.4.1</code>). Si les axes étaient sur ADC2, le joystick
+fonctionnerait... jusqu'au jour où tu entrerais en mode configuration, et il
+tomberait sans explication.</p>
+
+<p>Donc : <strong>les deux axes vont sur ADC1</strong>. Et sur ADC1, après
+avoir retiré tout ce qui est occupé, il reste exactement <strong>GPIO1 et
+GPIO2</strong>. Deux voies pour deux axes. Zéro marge.</p>
+
+<div class="box warn">
+  <p class="t">Point à vérifier sur ta carte <span class="b b-you">à toi</span></p>
+  <p>La correspondance « ADC1 = GPIO1 à GPIO10 » vaut pour l'ESP32-<strong>S3</strong>.
+  Le guide rapide de MicroPython, lui, parle des broches 32 à 39 : ce sont
+  celles de l'ESP32 <em>classique</em>, pas du S3. Je n'ai pas pu ouvrir la page
+  de référence (domaine bloqué dans ma session), donc la source qui fait foi
+  c'est ta carte. Trois lignes dans Thonny, et le doute est levé :</p>
+<pre><code>from machine import ADC, Pin
+print([n for n in dir(ADC) if n.startswith("ATTN")])
+print(ADC(Pin(1), atten=ADC.ATTN_11DB).read_u16())</code></pre>
+  <p>La première ligne donne les noms exacts des constantes d'atténuation de
+  <em>ton</em> firmware. La seconde doit rendre un nombre entre 0 et 65535. Si
+  elle lève une exception, la broche n'est pas sur un ADC et il faut en changer
+  avant de souder.</p>
+</div>
+
+<h3>L'API analogique, telle qu'elle est documentée</h3>
+
+<p><span class="b b-up">amont</span> La documentation MicroPython décrit un
+constructeur qui accepte un mot-clé <code>atten</code>, et deux méthodes de
+lecture : <code>read_u16()</code>, qui rend une valeur brute de 0 à 65535, et
+<code>read_uv()</code>, qui rend des microvolts. Sur les versions anciennes,
+<code>ADC.atten(x)</code> est l'équivalent de <code>ADC.init(atten=x)</code>.</p>
+
+<p>Pour l'atténuation 11&nbsp;dB, les sources ne s'accordent pas : la
+documentation annonce une entrée maximale d'environ 3,6&nbsp;V, d'autres
+sources et une discussion sur le dépôt MicroPython retiennent plutôt
+3,3&nbsp;V. <strong>Cela ne change rien à notre câblage</strong>, puisque le
+joystick sera alimenté en 3,3&nbsp;V et ne pourra donc jamais sortir plus que
+3,3&nbsp;V. Mais c'est une raison de plus de ne pas l'alimenter en 5&nbsp;V.</p>
+</section>
+
+<section id="cablage">
+<h2><span class="num">Partie 3</span>Câblage</h2>
+
+<h3>Ce qu'il y a dans un joystick</h3>
+
+<p>Un module de type KY-023 contient trois choses, et aucune n'est compliquée :
+<strong>deux potentiomètres</strong> (un par axe) et <strong>un bouton
+poussoir</strong> qu'on actionne en enfonçant le stick. Les potentiomètres
+sortent une tension proportionnelle à la position. Le poussoir, lui, est un
+simple contact.</p>
+
+<div class="box ok">
+  <p class="t">La bonne nouvelle : le clic est déjà prévu par ton firmware</p>
+  <p><code>config.py:35</code> dit : « Chaque interrupteur relie sa broche à
+  GND », et <code>inputs.py:140</code> crée chaque touche avec
+  <code>Input(pin, False, ...)</code>, c'est-à-dire <em>actif à l'état
+  bas</em> <span class="b b-code">code</span>. C'est exactement ce qu'est la
+  sortie SW d'un joystick.</p>
+  <p>Donc tu soudes SW là où allait l'interrupteur de B1, sur GPIO4.
+  <code>BUTTON_PINS</code> ne change pas, <code>DOIGTS</code> ne change pas :
+  <strong>le clic du stick devient B1, sans une ligne de code</strong>.</p>
+</div>
+
+<h3>Le schéma</h3>
+
+<figure>
+<div class="sw">
+<svg viewBox="0 0 760 330" role="img" aria-label="Schéma de câblage du joystick vers l'ESP32-S3 : VCC vers 3,3 V, GND vers GND, VRx vers GPIO1, VRy vers GPIO2, SW vers GPIO4, avec deux condensateurs de 100 nF sur les axes.">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="var(--ink2)"/>
+    </marker>
+  </defs>
+
+  <!-- module joystick -->
+  <rect x="18" y="56" width="188" height="200" rx="6" fill="var(--band)" stroke="var(--ink2)" stroke-width="1.5"/>
+  <text x="112" y="46" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="700" fill="var(--ink)">MODULE JOYSTICK</text>
+  <text x="112" y="277" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink3)">KY-023 — 2 potentiomètres + 1 poussoir</text>
+  <circle cx="78" cy="156" r="34" fill="var(--card)" stroke="var(--ink2)" stroke-width="1.5"/>
+  <circle cx="78" cy="156" r="13" fill="var(--accent)"/>
+  <text x="78" y="212" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink3)">stick</text>
+
+  <!-- pads -->
+  <g font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--ink)">
+    <text x="150" y="92">VCC</text>
+    <text x="150" y="124">GND</text>
+    <text x="150" y="156">VRx</text>
+    <text x="150" y="188">VRy</text>
+    <text x="150" y="220">SW</text>
+  </g>
+
+  <!-- esp32 -->
+  <rect x="556" y="36" width="186" height="248" rx="6" fill="var(--band)" stroke="var(--ink2)" stroke-width="1.5"/>
+  <text x="649" y="26" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="700" fill="var(--ink)">ESP32-S3 N16R8</text>
+  <g font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--ink)">
+    <text x="578" y="92">3V3</text>
+    <text x="578" y="124">GND</text>
+    <text x="578" y="156">GPIO1</text>
+    <text x="578" y="188">GPIO2</text>
+    <text x="578" y="220">GPIO4</text>
+  </g>
+  <g font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--ink3)">
+    <text x="640" y="156">ADC1</text>
+    <text x="640" y="188">ADC1</text>
+    <text x="640" y="220">= B1</text>
+  </g>
+
+  <!-- fils -->
+  <g stroke-width="1.6" fill="none" marker-end="url(#ar)">
+    <path d="M206 88 H548" stroke="var(--danger)"/>
+    <path d="M206 120 H548" stroke="var(--ink2)"/>
+    <path d="M206 152 H548" stroke="var(--accent)"/>
+    <path d="M206 184 H548" stroke="var(--accent)"/>
+    <path d="M206 216 H548" stroke="var(--copper)"/>
+  </g>
+
+  <!-- condensateurs -->
+  <g stroke="var(--ink2)" stroke-width="1.4" fill="none">
+    <path d="M330 152 V246"/>
+    <path d="M378 184 V246"/>
+    <path d="M318 246 H342"/><path d="M318 254 H342"/>
+    <path d="M366 246 H390"/><path d="M366 254 H390"/>
+    <path d="M330 254 V276"/><path d="M378 254 V276"/>
+    <path d="M300 288 H410"/>
+  </g>
+  <circle cx="330" cy="152" r="3" fill="var(--ink2)"/>
+  <circle cx="378" cy="184" r="3" fill="var(--ink2)"/>
+  <text x="355" y="308" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink3)">2 × 100 nF vers GND</text>
+
+  <!-- etiquettes fils -->
+  <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink3)">
+    <text x="440" y="82" text-anchor="middle">3,3 V — jamais 5 V</text>
+    <text x="462" y="114" text-anchor="middle">masse commune</text>
+    <text x="470" y="146" text-anchor="middle">axe X analogique</text>
+    <text x="470" y="178" text-anchor="middle">axe Y analogique</text>
+    <text x="462" y="210" text-anchor="middle">clic → contact vers GND</text>
+  </g>
+</svg>
+</div>
+<figcaption>Les deux condensateurs de 100 nF se soudent au plus près de la
+carte ESP32, pas du joystick : ils sont là pour filtrer le bruit capté par le
+câble, et doivent donc être du côté de la lecture.</figcaption>
+</figure>
+
+<div class="tw"><table>
+<caption>Table de câblage à recopier sur l'établi.</caption>
+<thead><tr><th>Fil du module</th><th>Va sur</th><th>Pourquoi cette broche</th></tr></thead>
+<tbody>
+<tr><td class="pin">VCC / +5V</td><td class="pin">3V3</td><td>L'entrée ADC n'accepte pas plus de 3,3 V. En 5 V, le curseur renverrait jusqu'à 5 V.</td></tr>
+<tr><td class="pin">GND</td><td class="pin">GND</td><td>Masse commune, sinon les mesures n'ont aucune référence.</td></tr>
+<tr><td class="pin">VRx</td><td class="pin">GPIO1</td><td>Seule voie ADC1 libre, et ADC1 survit au WiFi.</td></tr>
+<tr><td class="pin">VRy</td><td class="pin">GPIO2</td><td>Seconde voie ADC1 libre.</td></tr>
+<tr><td class="pin">SW</td><td class="pin">GPIO4</td><td>Reprend l'interrupteur de B1 : contact vers GND, exactement ce qu'attend <code>inputs.py</code>.</td></tr>
+</tbody></table></div>
+
+<div class="box danger">
+  <p class="t">Les choses qui risquent de cramer</p>
+  <ul>
+  <li><strong>L'alimentation en 5 V.</strong> C'est le seul vrai risque de
+  destruction du lot. Le curseur d'un potentiomètre alimenté en 5 V peut sortir
+  5 V, et une entrée ADC de l'ESP32-S3 n'accepte pas plus de 3,3 V. La broche
+  s'abîme sans bruit : rien ne fume, et la lecture devient fausse pour
+  toujours. <strong>3,3 V, point.</strong></li>
+  <li><strong>GPIO19 et GPIO20.</strong> Réservées à l'USB. Un fil posé dessus
+  et le macropad n'est plus un clavier. Ne rien y connecter, jamais.</li>
+  <li><strong>Souder le module à demeure.</strong> Monte-le sur entretoises et
+  passe ses cinq fils par un connecteur débrochable. Sinon tu ne pourras plus
+  ouvrir le boîtier sans dessouder.</li>
+  <li><strong>Un câble long sur les axes.</strong> Ce sont des signaux
+  analogiques : au-delà de 30 cm environ, ils captent le bruit et la vue
+  tremblera toute seule, stick au repos. Les deux condensateurs de 100 nF
+  limitent le phénomène ; ils ne le suppriment pas.</li>
+  </ul>
+  <p>Et la règle qui reste valable : <strong>la LED ne doit jamais être
+  branchée directement sur un GPIO.</strong> Le joystick ne change rien là,
+  le BC547 reste indispensable.</p>
+</div>
+
+<h3>Avant le câblage définitif</h3>
+
+<p><span class="b b-you">à toi</span> Je ne vais pas te dire quelle patte est
+laquelle sur ton module. Les clones varient, et l'ordre des pastilles n'est pas
+le même d'un fabricant à l'autre. <strong>Lis le marquage imprimé sur le
+circuit</strong> (généralement +5V, GND, VRx, VRy, SW) et au besoin vérifie au
+multimètre : entre VCC et GND tu dois mesurer environ 10 kΩ sur chaque
+potentiomètre, et la valeur entre un curseur et GND doit changer quand tu
+bouges le stick.</p>
+</section>
+
+<section id="obstacles">
+<h2><span class="num">Partie 4</span>Les six obstacles logiciels</h2>
+
+<p>C'est le cœur de l'étude. Chacun est vérifié, et chacun a une parade.</p>
+
+<h3>Obstacle 1 — <code>mouse.py</code> n'est pas embarqué</h3>
+
+<p><span class="b b-code">code</span> Le dossier
+<code>device/lib/usb/device/</code> contient quatre fichiers :
+<code>__init__.py</code>, <code>core.py</code>, <code>hid.py</code>,
+<code>keyboard.py</code>. <strong>Il n'y a pas de <code>mouse.py</code></strong>.</p>
+
+<p><span class="b b-up">amont</span> Le fichier existe dans micropython-lib,
+dans le paquet <code>usb-device-mouse</code>, sous licence MIT (© 2023-2024
+Angus Gratton — le même auteur que le clavier déjà embarqué). Voici son API
+réelle, relevée dans le source :</p>
+
+<pre><code>class MouseInterface(HIDInterface):
+    def __init__(self, interface_str="MicroPython Mouse")
+    def send_report(self, dx=0, dy=0)
+    def click_left(self, down=True)
+    def click_middle(self, down=True)
+    def click_right(self, down=True)
+    def move_by(self, dx, dy)</code></pre>
+
+<p>À faire pour l'intégrer proprement, dans l'esprit du projet :</p>
+<ul>
+<li>recopier le fichier tel quel dans <code>device/lib/usb/device/mouse.py</code> ;</li>
+<li>ajouter son empreinte dans <code>DEPENDENCIES.lock.json</code>, section
+<code>files_sha256</code>, comme les quatre autres ;</li>
+<li>l'ajouter à la liste de <code>tools/generer_code_complet.py</code>, avec sa
+mention « Fichier TIERS repris sans modification (micropython-lib, MIT) » ;</li>
+<li>la licence MIT est déjà dans <code>licenses/MICROPYTHON-LIB-MIT.txt</code> :
+rien de plus à faire de ce côté.</li>
+</ul>
+
+<h3>Obstacle 2 — la méthode d'envoi de la souris <em>bloque</em></h3>
+
+<p>C'est le piège le plus sérieux, et il est invisible si on ne lit pas le
+source.</p>
+
+<p><span class="b b-up">amont</span> <code>MouseInterface.send_report()</code>
+contient ceci :</p>
+
+<pre><code>while self.busy():
+    machine.idle()</code></pre>
+
+<p>Aucune limite de temps. Si l'hôte cesse d'interroger le périphérique — PC en
+veille, câble arraché, pilote qui tousse — <strong>cette boucle ne rend jamais
+la main</strong>. Et comme tout le firmware vit dans une seule boucle
+coopérative, cela veut dire : écran figé, LED figée, et surtout
+<strong>bouton ESC inopérant</strong>.</p>
+
+<p><span class="b b-up">amont</span> La classe parente, elle, fait les choses
+correctement : <code>HIDInterface.send_report(report_data, timeout_ms=100)</code>
+calcule une échéance et rend <code>False</code> quand elle est dépassée. La
+sous-classe souris <em>masque</em> cette méthode et perd la protection au
+passage.</p>
+
+<div class="box ok">
+  <p class="t">La parade</p>
+  <p>Ne pas appeler <code>MouseInterface.send_report()</code>. Écrire une
+  sous-classe qui fabrique le paquet puis passe par la méthode du parent avec
+  <code>timeout_ms=0</code>, exactement comme <code>hid_keyboard.py</code> le
+  fait déjà pour le clavier. Un rapport perdu de temps en temps n'a aucune
+  importance pour un mouvement relatif : le suivant arrive 8 ms plus tard.</p>
+</div>
+
+<h3>Obstacle 3 — il n'y a pas de molette</h3>
+
+<p><span class="b b-up">amont</span> Le descripteur de rapport de
+<code>mouse.py</code> déclare <strong>trois boutons, un axe X et un axe
+Y</strong>. Rien d'autre. Pas de molette, pas de défilement, et aucune méthode
+pour en envoyer.</p>
+
+<p>Conséquence directe, et elle compte : <strong>le zoom ne peut pas passer par
+la molette</strong>. Or dans Blender comme dans Civil 3D, le zoom à la souris,
+c'est la molette. Trois possibilités :</p>
+
+<ul>
+<li><strong>Zoomer au clavier.</strong> Dans Blender, le pavé numérique
+<code>+</code> et <code>−</code> zooment. Dans AutoCAD et Civil 3D, la commande
+<code>_ZOOM</code> existe et le profil CIVIL3D s'en sert déjà. Solution sans
+risque, et elle réutilise la machinerie en place.</li>
+<li><strong>Écrire notre propre descripteur</strong> avec une molette. C'est
+faisable — <code>hid.py</code> accepte n'importe quel descripteur — mais c'est
+précisément le terrain où l'on invente, et un descripteur mal formé fait
+refuser le périphérique en entier par Windows. À ne pas mélanger avec la
+première mise en service.</li>
+<li><strong>Ne pas zoomer avec le joystick.</strong> Les deux axes servent à
+tourner, et le zoom reste à la souris, sous la main droite. C'est honnêtement
+le plus confortable au début.</li>
+</ul>
+
+<h3>Obstacle 4 — <code>move_by()</code> lève une exception</h3>
+
+<p><span class="b b-up">amont</span> Dans le source :
+<code>move_by()</code> lève <code>ValueError("dx")</code> ou
+<code>ValueError("dy")</code> dès qu'une valeur sort de l'intervalle
+−127…127. Et <code>send_report()</code>, qui ne vérifie rien, empaquette avec
+<code>struct.pack_into("Bbb", ...)</code> — ce qui lèverait aussi sur un
+dépassement.</p>
+
+<p>Une erreur de réglage de sensibilité suffirait donc à faire tomber la
+boucle. La parade est triviale mais elle doit être écrite : <strong>borner dx
+et dy avant l'appel</strong>, et de toute façon bien en dessous, car à
+125&nbsp;rapports par seconde une valeur de 10 donne déjà un mouvement
+rapide.</p>
+
+<h3>Obstacle 5 — le conflit avec la touche modificatrice du pouce</h3>
+
+<p>Celui-là, je ne l'avais pas vu avant de lire le code.</p>
+
+<p>Pour faire une orbite dans Civil 3D, il faut <strong>Maj maintenu +
+clic-molette glissé</strong>. Le maintien de Maj passerait naturellement par
+<code>hid_keyboard.maintenir()</code>, qui existe déjà et qui est testé.</p>
+
+<p><span class="b b-code">code</span> Sauf que <code>maintenir()</code>
+(<code>hid_keyboard.py:129</code>) fait ceci :</p>
+
+<pre><code>self.tenus = codes</code></pre>
+
+<p>Une <strong>affectation</strong>, pas un ajout. Elle remplace l'intégralité
+des touches tenues. Et la première touche de chaque profil est justement
+<code>modificateur()</code> <span class="b b-code">code</span> — le rôle du
+pouce, celui qui tient Ctrl ou Maj pendant que tu cliques.</p>
+
+<p>Donc, si le joystick appelle <code>maintenir()</code> pendant que tu tiens
+le modificateur, l'un écrase l'autre. Dans un sens le Ctrl de ta touche
+disparaît au milieu d'une sélection ; dans l'autre, l'orbite part sans son
+Maj et Civil 3D translate au lieu de tourner. Les deux symptômes sont du
+genre « ça marche une fois sur trois » — le pire à diagnostiquer.</p>
+
+<div class="box ok">
+  <p class="t">La parade</p>
+  <p>Faire de <code>self.tenus</code> une <strong>union de deux
+  sources</strong> : ce que tient la touche, et ce que tient le joystick. Deux
+  champs séparés, recombinés au moment de fabriquer le rapport. C'est une
+  dizaine de lignes dans <code>hid_keyboard.py</code>, et c'est un endroit où
+  un test a toute sa place : « le modificateur du pouce survit à une orbite ».</p>
+</div>
+
+<h3>Obstacle 6 — le mode sans échec se déclencherait tout seul</h3>
+
+<p>Celui-là découle directement du câblage recommandé, et il tranche une
+question qu'on avait laissée ouverte.</p>
+
+<p><span class="b b-code">code</span> <code>config.py:145</code> :
+<code>SAFE_MODE_BUTTON_INDEX = 0</code>, c'est-à-dire <strong>B1, le
+pouce</strong>. Et <code>boot.py</code> lit cette touche pendant le RESET :
+maintenue, le clavier USB n'est même pas créé.</p>
+
+<p>Or on vient de décider que <strong>B1 devient le clic du joystick</strong>.
+Un joystick dont on enfonce le stick, c'est beaucoup plus facile à faire par
+accident qu'un bouton mécanique — en posant la main, en rangeant le pad, en le
+branchant d'une main. Résultat : un macropad qui démarre régulièrement en mode
+sans échec, sans clavier, pour une raison invisible.</p>
+
+<div class="box ok">
+  <p class="t">La parade, et c'est une décision à prendre maintenant</p>
+  <p>Déplacer le mode sans échec sur <strong>B6, l'auriculaire</strong> :
+  <code>SAFE_MODE_BUTTON_INDEX = 5</code>. C'est la touche la plus difficile à
+  enfoncer sans le vouloir, et elle reste parfaitement accessible quand tu la
+  veux. Même raisonnement pour le mode configuration, aujourd'hui sur B2
+  (index) : il peut rester où il est, l'index ne touche pas le stick.</p>
+</div>
+
+<h3>Et le descripteur composite</h3>
+
+<p><span class="b b-code">code</span> <code>boot.py</code> appelle
+<code>create_interface()</code>, qui finit par
+<code>usb.device.get().init(interface, builtin_driver=True)</code>
+(<code>hid_keyboard.py:434</code>). <span class="b b-up">amont</span> Et
+<code>core.py</code> déclare <code>def init(self, *itfs, **kwargs)</code> :
+<strong>plusieurs interfaces sont acceptées</strong>. Un périphérique
+clavier + souris est donc possible, et c'est même l'usage documenté
+(<code>init(m, builtin_driver=True)</code> dans le README du paquet souris).</p>
+
+<p>Mais changer le jeu de descripteurs, c'est toucher à ce qui marche. Si
+Windows refuse le nouveau périphérique, <strong>tu perds le clavier</strong>,
+pas seulement la souris. D'où la règle, et elle est à toi :
+<em>ne pas supprimer une solution fonctionnelle sans sauvegarde</em>. Avant de
+modifier <code>boot.py</code>, copier le dossier <code>device/</code> complet
+ailleurs, et savoir comment y revenir.</p>
+
+<p>Et noter que le filet de secours — maintenir la touche de mode sans échec
+au RESET pour démarrer sans aucun HID — est précisément ce que l'obstacle 6
+vient de rendre fragile. Les deux se règlent ensemble, et dans cet ordre :
+d'abord déplacer le mode sans échec, ensuite toucher au descripteur.</p>
+</section>
+
+<section id="archi">
+<h2><span class="num">Partie 5</span>Architecture proposée</h2>
+
+<h3>Un fichier de logique pure, comme <code>agenda.py</code></h3>
+
+<p>Le projet a déjà le bon modèle : <code>agenda.py</code> ne connaît ni
+l'écran, ni le port série, ce qui le rend testable sur un PC en une
+milliseconde. Le joystick suit le même principe.</p>
+
+<p><strong><code>device/joystick.py</code></strong> ne touche aucun matériel.
+Il reçoit deux nombres bruts et répond à trois questions :</p>
+
+<pre><code>etalonner(x, y)        memorise le centre au repos
+lire(x, y)             -> (dx, dy) bornes, ou (0, 0) dans la zone morte
+actif()                -> True si le stick est sorti de la zone morte</code></pre>
+
+<p>Toute la partie délicate est là, et elle se teste sans carte : le centre
+réel n'est jamais à 32768, les deux axes n'ont pas la même course, la zone
+morte doit être assez large pour qu'un stick au repos ne dérive pas, et assez
+étroite pour que le mouvement démarre sans effort.</p>
+
+<p>Le pilote matériel, lui, reste minuscule et vit à part : un
+<code>ADC(Pin(...), atten=...)</code> par axe, lu à chaque tour de boucle.</p>
+
+<h3>Où ça s'insère dans la boucle</h3>
+
+<p>Une étape de plus, entre les gestes des touches et l'envoi clavier :</p>
+
+<pre><code>3.   profils, verrouillage, gestes des touches
+3bis. lire les deux axes, et envoyer AU PLUS un rapport souris
+4.   envoyer AU PLUS un paquet clavier</code></pre>
+
+<p><span class="b b-up">amont</span> Le rythme est imposé par l'USB :
+<code>HIDInterface.__init__</code> prend <code>interval_ms=8</code> par défaut,
+soit <strong>125 rapports par seconde au maximum</strong>. La boucle tourne à
+500 Hz : il faut donc n'émettre qu'un tour sur quatre environ, et surtout ne
+rien émettre quand le stick est au repos.</p>
+
+<h3>Les réglages, par profil</h3>
+
+<p>C'est la réponse à ta question « est-ce que ce sera configurable ». Le
+projet a déjà tout ce qu'il faut : un profil par logiciel, une table
+<code>APPS</code> qui associe un <code>.exe</code> à un profil, et une bascule
+automatique pilotée par le compagnon PC selon la fenêtre active
+<span class="b b-code">code</span>.</p>
+
+<p>Le joystick ajoute un bloc par profil, à côté des touches et des
+couleurs :</p>
+
+<div class="tw"><table>
+<caption>Réglages proposés. Ils vivent dans <code>profils.json</code>, se
+modifient dans la page web, et basculent tout seuls avec le profil.</caption>
+<thead><tr><th>Réglage</th><th>Valeurs</th><th>À quoi ça sert</th></tr></thead>
+<tbody>
+<tr><td class="pin">mode</td><td>souris · touches · éteint</td><td>Clic-molette glissé, ou envoi de raccourcis, ou rien du tout dans Word.</td></tr>
+<tr><td class="pin">modificateur</td><td>aucun · MAJ · CTRL · ALT</td><td>Ce qui est maintenu pendant le glissement. C'est lui qui distingue Blender de Civil 3D.</td></tr>
+<tr><td class="pin">sensibilite</td><td>1 à 15</td><td>Pixels de mouvement par cran de stick. À régler au doigt, pas au calcul.</td></tr>
+<tr><td class="pin">zone_morte</td><td>5 à 25 %</td><td>En dessous, le stick est considéré au repos. Trop petit : la vue dérive seule.</td></tr>
+<tr><td class="pin">inverser_x / y</td><td>oui · non</td><td>Parce que certains logiciels inversent, et que c'est une affaire de goût.</td></tr>
+</tbody></table></div>
+
+<h3>La machine à états d'une orbite</h3>
+
+<p>Un geste d'orbite n'est pas une suite de mouvements : c'est un
+<em>glissement</em>, avec un début et une fin. D'où quatre états :</p>
+
+<ol>
+<li><strong>Repos.</strong> Le stick est dans la zone morte. Rien n'est envoyé,
+aucun bouton n'est tenu.</li>
+<li><strong>Début.</strong> Le stick sort de la zone morte. On maintient le
+modificateur du profil (s'il y en a un), puis on enfonce le bouton du milieu.
+Dans cet ordre : un Maj qui arrive après le clic ne serait pas vu.</li>
+<li><strong>Glissement.</strong> Un rapport toutes les 8 à 16 ms, avec dx et dy
+bornés.</li>
+<li><strong>Fin.</strong> Le stick est revenu au repos depuis un court délai —
+pas immédiatement, sinon traverser le centre couperait l'orbite en deux. On
+relâche le bouton du milieu, puis le modificateur.</li>
+</ol>
+
+<div class="box warn">
+  <p class="t">Et si l'USB se coupe au milieu d'un glissement</p>
+  <p>C'est exactement la panne que <code>hid_keyboard.py</code> a été écrit
+  pour éviter côté clavier : un Ctrl resté enfoncé côté Windows transforme tous
+  tes clics en sélections multiples. Un <strong>bouton du milieu</strong> resté
+  enfoncé est pire : la vue tourne sans fin. Le relâchement doit donc être
+  garanti dans le <code>finally</code> de la boucle, comme
+  <code>keyboard.close()</code> l'est déjà.</p>
+</div>
+
+<h3>La liste de ce qu'il faut toucher</h3>
+
+<div class="tw"><table>
+<caption>Dix points d'insertion. Les quatre derniers sont ceux qu'on oublie, et
+chacun a déjà causé une panne dans ce projet.</caption>
+<thead><tr><th>#</th><th>Fichier</th><th>Modification</th></tr></thead>
+<tbody>
+<tr><td>1</td><td class="pin">device/joystick.py</td><td><em>Nouveau.</em> Logique pure : étalonnage, zone morte, bornage.</td></tr>
+<tr><td>2</td><td class="pin">device/lib/usb/device/mouse.py</td><td><em>Nouveau, tiers.</em> Recopié de micropython-lib sans modification.</td></tr>
+<tr><td>3</td><td class="pin">device/hid_mouse.py</td><td><em>Nouveau.</em> Sous-classe non bloquante, bornage, garantie de relâchement.</td></tr>
+<tr><td>4</td><td class="pin">device/config.py</td><td>Bloc JOYSTICK : broches, <code>JOYSTICK_ENABLED = False</code>, réglages. Et <code>SAFE_MODE_BUTTON_INDEX = 5</code>.</td></tr>
+<tr><td>5</td><td class="pin">device/hid_keyboard.py</td><td>Union des touches tenues (obstacle 5).</td></tr>
+<tr><td>6</td><td class="pin">device/boot.py</td><td>Descripteur composite clavier + souris.</td></tr>
+<tr><td>7</td><td class="pin">device/main.py</td><td>Étape 3bis, et les nouvelles constantes dans <code>REGLAGES_NEUFS</code>.</td></tr>
+<tr><td>8</td><td class="pin">device/store.py + profiles.py + page_config.html</td><td>Le bloc de réglages par profil, lecture, écriture, édition web.</td></tr>
+<tr><td>9</td><td class="pin">device/diag.py</td><td><code>MODULES_ATTENDUS</code>, les broches déclarées, <code>CHAMPS_CHARGER</code> si <code>store.charger()</code> grandit.</td></tr>
+<tr><td>10</td><td class="pin">tools/generer_code_complet.py + DEPENDENCIES.lock.json</td><td>Inventaire des fichiers et empreinte du fichier tiers.</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="logiciels">
+<h2><span class="num">Partie 6</span>Le comportement logiciel par logiciel</h2>
+
+<p class="lead">Non, ce ne sera pas identique partout. Et ce n'est pas une
+limite du macropad : <strong>chaque logiciel 3D a sa propre convention de
+navigation</strong>, et certains laissent l'utilisateur l'inverser.</p>
+
+<div class="tw"><table>
+<caption>Conventions de navigation. Les deux premières lignes sont des
+conventions stables et largement documentées ; les deux suivantes doivent être
+relevées dans <em>ta</em> version.</caption>
+<thead><tr><th>Logiciel</th><th>Orbite</th><th>Translation</th><th>Réglage proposé</th><th>Source</th></tr></thead>
+<tbody>
+<tr><td><strong>Blender</strong></td><td>clic-molette glissé</td><td>Maj + clic-molette glissé</td><td>souris, modificateur <em>aucun</em></td><td><span class="b b-up">amont</span></td></tr>
+<tr><td><strong>Civil 3D / AutoCAD</strong></td><td><strong>Maj</strong> + clic-molette glissé</td><td>clic-molette glissé</td><td>souris, modificateur <em>MAJ</em></td><td><span class="b b-up">amont</span></td></tr>
+<tr><td><strong>InfraWorks</strong></td><td colspan="2">Variable selon la version, et inversable par option</td><td>à régler après relevé</td><td><span class="b b-you">à toi</span></td></tr>
+<tr><td><strong>RealWorks</strong></td><td colspan="2">Non documenté de façon fiable</td><td>à régler après relevé</td><td><span class="b b-you">à toi</span></td></tr>
+<tr><td><strong>Word / Windows</strong></td><td colspan="2">Sans objet</td><td>éteint, ou défilement</td><td>—</td></tr>
+</tbody></table></div>
+
+<p>Regarde bien les deux premières lignes : <strong>c'est inversé entre Blender
+et Civil 3D</strong>. Le même geste physique fait tourner dans l'un et
+translater dans l'autre. C'est exactement pourquoi un comportement unique est
+impossible, et pourquoi le réglage doit vivre dans le profil.</p>
+
+<div class="box warn">
+  <p class="t">Pourquoi je ne tranche pas pour InfraWorks et RealWorks</p>
+  <p>Pour <strong>InfraWorks</strong>, la documentation Autodesk se contredit
+  d'une version à l'autre : une page donne le clic gauche pour la translation,
+  un tutoriel plus ancien le donne pour l'orbite. Et il existe une option
+  « Invert Pan/Orbit Mouse Buttons » qui échange les deux. Même en lisant la
+  documentation, seule <em>ton</em> installation fait foi.</p>
+  <p>Pour <strong>RealWorks</strong>, je n'ai pas trouvé de documentation
+  Trimble fiable sur le clic-molette. Ce que j'ai trouvé concerne Trimble
+  Business Center et Trimble Connect, qui sont d'autres produits. Je ne vais pas
+  te les présenter comme équivalents.</p>
+</div>
+
+<h3>Le relevé qui tranche, et il ne coûte rien</h3>
+
+<p>Tu n'as pas besoin du joystick pour répondre. Avec ta souris, dans chaque
+logiciel :</p>
+
+<ol class="steps">
+<li><span class="h">Clic-molette maintenu, et tu déplaces</span>
+Note ce qui se passe : ça tourne, ou ça translate ?</li>
+<li><span class="h">Recommence avec Maj, puis Ctrl, puis Alt maintenu</span>
+L'un des quatre donnera l'orbite. C'est celui-là qui va dans le réglage
+<code>modificateur</code> du profil.</li>
+</ol>
+
+<p>Deux minutes par logiciel, et tu as un tableau vérifié sur ta machine et tes
+versions — pas sur une documentation qui parle d'une autre version que la
+tienne.</p>
+
+<h3>Ce qui restera hors de portée</h3>
+
+<p>Même parfaitement réglé, un joystick ne donnera pas la sensation d'une
+<strong>SpaceMouse</strong>. Celle-ci a six axes, elle est proportionnelle à la
+pression, et elle agit <em>sans mode</em> : pas de bouton à maintenir, la vue
+suit la main en continu. Cela demande le pilote 3Dconnexion, qui ne reconnaît
+que les identifiants USB de ses propres appareils. Ce n'est pas une question de
+difficulté, c'est fermé.</p>
+
+<p>Ce que le joystick donnera, et qui est déjà beaucoup : tourner la vue
+<strong>sans lâcher la souris</strong>, main gauche sur le pad, main droite sur
+la souris.</p>
+</section>
+
+<section id="boitier">
+<h2><span class="num">Partie 7</span>Le boîtier</h2>
+
+<h3>Le pouce, et pourquoi il n'y a pas d'alternative</h3>
+
+<p>C'est le fait qui décide de toute la géométrie. L'index, le majeur,
+l'annulaire et l'auriculaire ne font qu'<strong>un seul mouvement</strong> :
+ils se plient et se déplient. Très bien pour appuyer, inutilisable pour un
+joystick, qui demande deux directions indépendantes.</p>
+
+<p>Le pouce, lui, est <strong>opposable</strong> : il part dans toutes les
+directions. C'est pour cela que toutes les manettes de jeu depuis trente ans
+mettent le stick sous le pouce.</p>
+
+<figure>
+<div class="sw">
+<svg viewBox="0 0 700 300" role="img" aria-label="Vue de dessus du macropad : six touches en arc sous les doigts de la main gauche, le joystick sur une tablette inclinée côté pouce, l'écran OLED sur le bord opposé, le bouton ESC déporté.">
+  <!-- corps du pad -->
+  <path d="M60 196 C64 112 118 62 206 54 C300 46 392 54 452 72 C492 84 506 122 498 164 C492 202 470 226 430 234 C330 254 160 252 100 238 C72 230 58 218 60 196 Z"
+        fill="var(--card)" stroke="var(--ink2)" stroke-width="1.8"/>
+
+  <!-- touches -->
+  <g>
+    <circle cx="122" cy="150" r="21" fill="var(--band)" stroke="var(--ink2)" stroke-width="1.4"/>
+    <circle cx="180" cy="124" r="21" fill="var(--band)" stroke="var(--ink2)" stroke-width="1.4"/>
+    <circle cx="240" cy="110" r="21" fill="var(--band)" stroke="var(--ink2)" stroke-width="1.4"/>
+    <circle cx="300" cy="106" r="21" fill="var(--band)" stroke="var(--ink2)" stroke-width="1.4"/>
+    <circle cx="300" cy="162" r="21" fill="var(--band)" stroke="var(--ink2)" stroke-width="1.4"/>
+    <circle cx="360" cy="112" r="21" fill="var(--band)" stroke="var(--ink2)" stroke-width="1.4"/>
+  </g>
+  <g font-family="IBM Plex Mono, monospace" font-size="10.5" font-weight="600" fill="var(--ink)" text-anchor="middle">
+    <text x="122" y="154">B6</text><text x="180" y="128">B5</text>
+    <text x="240" y="114">B4</text><text x="300" y="110">B3</text>
+    <text x="300" y="166">B2</text><text x="360" y="116">B1*</text>
+  </g>
+  <g font-family="IBM Plex Mono, monospace" font-size="8.5" fill="var(--ink3)" text-anchor="middle">
+    <text x="122" y="186">auricul.</text><text x="180" y="160">annul.</text>
+    <text x="240" y="146">majeur</text><text x="300" y="196">index</text>
+    <text x="360" y="148">pouce</text>
+  </g>
+
+  <!-- tablette pouce -->
+  <path d="M404 142 L486 120 L512 196 L430 222 Z" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.8"/>
+  <circle cx="458" cy="172" r="25" fill="var(--card)" stroke="var(--accent)" stroke-width="1.6"/>
+  <circle cx="458" cy="172" r="10" fill="var(--accent)"/>
+  <text x="458" y="252" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="700" fill="var(--accent)">JOYSTICK</text>
+  <text x="458" y="268" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--ink3)">tablette inclinée 30–45°</text>
+  <text x="458" y="282" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--ink3)">et 15–25 mm plus bas</text>
+
+  <!-- ecran oled -->
+  <rect x="150" y="196" width="118" height="34" rx="3" fill="var(--ink)" stroke="var(--ink2)" stroke-width="1.4"/>
+  <text x="209" y="218" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--paper)">OLED 128×64</text>
+  <text x="209" y="248" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--ink3)">bord opposé au pouce</text>
+
+  <!-- esc deporte -->
+  <circle cx="616" cy="92" r="33" fill="var(--danger-soft)" stroke="var(--danger)" stroke-width="1.8"/>
+  <text x="616" y="97" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="700" fill="var(--danger)">ESC</text>
+  <text x="616" y="146" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--ink3)">déporté, à part</text>
+  <path d="M520 118 C560 126 586 118 592 110" fill="none" stroke="var(--ink3)" stroke-width="1.3" stroke-dasharray="4 3"/>
+
+  <text x="60" y="38" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink3)">* B1 = le clic du joystick</text>
+</svg>
+</div>
+<figcaption>Vue de dessus, main gauche posée. La forme qui épouse la paume est
+conservée : on lui ajoute une tablette pour le pouce, qui n'est pas dans le
+même plan que les touches.</figcaption>
+</figure>
+
+<h3>Les cotes</h3>
+
+<div class="tw"><table>
+<caption><span class="b b-you">à toi</span> Dimensions de modules du commerce.
+Vérifie celles de ton joystick au pied à coulisse : les clones varient.</caption>
+<thead><tr><th>Grandeur</th><th>Valeur</th><th>Pourquoi</th></tr></thead>
+<tbody>
+<tr><td>Platine du module</td><td>≈ 26 × 34 mm</td><td>Format courant d'un KY-023.</td></tr>
+<tr><td>Empreinte à réserver</td><td>35 × 35 mm</td><td>La platine plus le cône de débattement du stick, environ ±25°.</td></tr>
+<tr><td>Profondeur sous le capot</td><td>30 mm</td><td>Hauteur du stick plus le dégagement. C'est ce qui épaissit le boîtier.</td></tr>
+<tr><td>Descente sous le plan des touches</td><td>15 à 25 mm</td><td>Le pouce est naturellement plus bas que les autres doigts, main posée.</td></tr>
+<tr><td>Inclinaison de la tablette</td><td>30 à 45° vers l'intérieur</td><td>Le pouce attaque de côté, pas de face.</td></tr>
+<tr><td>Distance au premier bouton d'index</td><td>30 à 45 mm</td><td>Position du bout du pouce <strong>main détendue</strong>, pas tendue. À mesurer sur ta main.</td></tr>
+</tbody></table></div>
+
+<h3>Deux détails qu'on oublie, et qui gâchent tout</h3>
+
+<ul>
+<li><strong>L'écran doit rester lisible.</strong> La tablette prend le bord
+intérieur ; mets l'OLED sur le bord opposé (côté auriculaire) ou sur une facette
+arrière relevée vers ton visage. Pas entre les deux, où le pouce la masquera.
+Tu as décidé de le garder parce qu'il indique le profil actif : autant qu'il
+reste visible pendant que le pouce travaille.</li>
+<li><strong>Le pad va se mettre à glisser.</strong> Jusqu'ici tu n'appliquais
+que des forces <em>verticales</em> : on appuie vers le bas. Un joystick, on le
+pousse <em>latéralement</em>. Il faut des patins antidérapants, ou du lest dans
+le fond. C'est contre-intuitif et c'est ce qui fera la différence entre
+agréable et pénible.</li>
+</ul>
+
+<div class="box info">
+  <p class="t">Avant d'imprimer quoi que ce soit</p>
+  <p>Fais une <strong>maquette en carton</strong>, avec le vrai module posé
+  dessus et scotché. Dix minutes, zéro euro, et c'est le seul moyen de savoir si
+  l'angle et la hauteur te vont. La position du pouce ne se calcule pas :
+  5 mm de trop et c'est fatigant au bout d'une heure.</p>
+</div>
+</section>
+
+<section id="plan">
+<h2><span class="num">Partie 8</span>Plan de travail</h2>
+
+<p class="lead">Six étapes, dans cet ordre. Chacune se vérifie avant de passer
+à la suivante, et les trois premières ne touchent <strong>pas du tout</strong>
+à l'USB — donc ne peuvent pas casser le clavier.</p>
+
+<ol class="steps">
+
+<li><span class="h">Mesurer, et faire la maquette carton</span>
+Pied à coulisse sur le module, relevé du marquage des pastilles, maquette avec
+le stick scotché à l'endroit prévu. Décision ferme sur la position du pouce
+avant tout achat de matière.
+</li>
+
+<li><span class="h">Câbler les deux axes seuls, sur plaque d'essai</span>
+Pas de boîtier, pas de SW, pas de code définitif. Juste 3,3 V, GND, GPIO1,
+GPIO2, et au REPL une boucle qui affiche les deux valeurs brutes. Tu dois voir
+deux nombres qui bougent entre environ 0 et 65535, et qui reviennent toujours
+au même centre. <strong>Note ce centre</strong> : c'est lui qui va dans
+l'étalonnage, et il ne vaut jamais 32768.
+</li>
+
+<li><span class="h">Écrire <code>joystick.py</code> et ses tests PC</span>
+Logique pure : étalonnage, zone morte, bornage, inversion. Aucun matériel,
+aucun HID. Les tests tournent sur PC comme ceux de l'agenda, et c'est là qu'on
+règle les cas pénibles : un axe qui ne va pas jusqu'au bout, un centre décalé,
+une sensibilité absurde qui doit être bornée et non lever une exception.
+</li>
+
+<li><span class="h">Mode « touches » : aucune modification USB</span>
+Le joystick envoie des <strong>raccourcis clavier existants</strong>, par la
+machinerie déjà en place. Dans Blender, le pavé numérique 4/6/8/2 tourne la vue
+par pas de 15°. C'est moins fluide qu'une orbite, mais c'est utilisable tout de
+suite, sans aucun risque pour le clavier — et ça valide le câblage, l'étalonnage
+et la bascule par profil.
+<div class="box ok" style="margin-top:.7rem">
+  <p class="t">C'est ici qu'on s'arrête si le reste n'en vaut pas la peine</p>
+  <p>À la fin de cette étape tu as un joystick qui marche. Tout ce qui suit est
+  un confort, pas une nécessité.</p>
+</div>
+</li>
+
+<li><span class="h">Sauvegarder, puis la vraie souris</span>
+Dans cet ordre strict : copier le dossier <code>device/</code> complet ailleurs
+→ déplacer <code>SAFE_MODE_BUTTON_INDEX</code> sur B6 → vérifier que le mode
+sans échec répond bien sur l'auriculaire → ajouter <code>mouse.py</code> et son
+empreinte → écrire la sous-classe non bloquante → régler l'union des touches
+tenues → et seulement alors modifier <code>boot.py</code> pour le descripteur
+composite.
+</li>
+
+<li><span class="h">Réglage par profil, page web, diagnostics, documentation</span>
+Le bloc de réglages dans <code>profils.json</code>, l'édition dans la page web,
+les nouvelles broches déclarées dans <code>diag.py</code>, l'inventaire des
+fichiers à jour, et le tableau logiciel par logiciel une fois que tu as fait le
+relevé de la partie 6.
+</li>
+
+</ol>
+</section>
+
+<section id="reserves">
+<h2><span class="num">Partie 9</span>Ce que je n'ai pas pu vérifier</h2>
+
+<p>Par honnêteté, et parce que c'est la règle que tu as posée. Tout ce qui suit
+porte le badge <span class="b b-you">à toi</span> et ne doit pas être pris pour
+acquis.</p>
+
+<ul>
+<li><strong>Rien n'a été testé sur la carte.</strong> Je n'y ai pas accès. Tout
+ce qui est écrit sur les broches vient de la lecture de tes fichiers, et tout ce
+qui est écrit sur la bibliothèque USB vient de la lecture de son code
+source.</li>
+<li><strong>La correspondance ADC1 de l'ESP32-S3.</strong> Le guide rapide
+MicroPython décrit l'ESP32 classique, et je n'ai pas pu ouvrir la page de
+référence depuis cette session. Le contrôle en trois lignes de la partie 2 est
+la seule source qui fait foi.</li>
+<li><strong>Les conventions d'InfraWorks et de RealWorks.</strong> Détaillé en
+partie 6. Le relevé à la souris les tranche en deux minutes chacun.</li>
+<li><strong>Les cotes exactes de ton module joystick.</strong> Les clones
+varient, parfois beaucoup.</li>
+<li><strong>Le comportement de Windows face au descripteur composite.</strong>
+L'API l'autorise et l'usage est documenté en amont. Que <em>ton</em> Windows
+l'accepte sans broncher, je ne peux pas le promettre. D'où la sauvegarde
+obligatoire à l'étape 5.</li>
+<li><strong>La force et le centrage du clic du stick.</strong> Sur un module à
+quelques euros, le clic est souvent dur et décentré : en appuyant, tu bouges le
+stick. Il faudra probablement ignorer les axes pendant 80 ms environ autour d'un
+clic. Ce chiffre est une estimation de départ, pas une mesure.</li>
+</ul>
+
+<div class="box warn">
+  <p class="t">Et un point resté en suspens, indépendant du joystick</p>
+  <p>Ta capture du panneau PC montrait le nom complet d'une touche dans la
+  colonne <em>action</em> : <code>B1 / appui court / « Ctrl maintenu, Maj en
+  double appui »</code>. Si c'est bien ce que contient
+  <code>profils.json</code>, les champs sont décalés — probablement écrits par
+  les fichiers dépareillés qu'on a diagnostiqués. <strong>Appuie sur B1 dans le
+  Bloc-notes</strong> : si la phrase s'écrit, le bouton <em>Valeurs d'usine</em>
+  de la page web règle le problème. Autant le savoir avant de rebâtir le
+  câblage du pouce.</p>
+</div>
+</section>
+
+<section id="fiche">
+<h2><span class="num">Annexe</span>Fiche atelier</h2>
+
+<p>À garder sous les yeux pendant le câblage.</p>
+
+<div class="tw"><table>
+<thead><tr><th colspan="2">Câblage du joystick</th></tr></thead>
+<tbody>
+<tr><td class="pin">VCC</td><td class="pin">→ 3V3 &nbsp;&nbsp;<strong>jamais 5 V</strong></td></tr>
+<tr><td class="pin">GND</td><td class="pin">→ GND</td></tr>
+<tr><td class="pin">VRx</td><td class="pin">→ GPIO1 &nbsp;+ 100 nF vers GND côté carte</td></tr>
+<tr><td class="pin">VRy</td><td class="pin">→ GPIO2 &nbsp;+ 100 nF vers GND côté carte</td></tr>
+<tr><td class="pin">SW</td><td class="pin">→ GPIO4 &nbsp;(reprend B1)</td></tr>
+</tbody></table></div>
+
+<div class="tw"><table>
+<thead><tr><th colspan="2">Interdits absolus</th></tr></thead>
+<tbody>
+<tr><td class="pin">GPIO19 / GPIO20</td><td>USB. Rien dessus, jamais.</td></tr>
+<tr><td class="pin">GPIO26–32</td><td>Flash SPI interne.</td></tr>
+<tr><td class="pin">GPIO33–37</td><td>PSRAM octale du N16R8.</td></tr>
+<tr><td class="pin">LED sur GPIO</td><td>Toujours par le BC547. Jamais en direct.</td></tr>
+<tr><td class="pin">5 V sur un axe</td><td>Abîme l'entrée ADC, silencieusement.</td></tr>
+</tbody></table></div>
+
+<div class="tw"><table>
+<thead><tr><th colspan="2">Contrôles, dans cet ordre</th></tr></thead>
+<tbody>
+<tr><td class="pin">1</td><td><code>print([n for n in dir(ADC) if n.startswith("ATTN")])</code> → les constantes de ton firmware</td></tr>
+<tr><td class="pin">2</td><td><code>ADC(Pin(1), atten=ADC.ATTN_11DB).read_u16()</code> → un nombre de 0 à 65535</td></tr>
+<tr><td class="pin">3</td><td>Les deux axes reviennent-ils toujours au même centre au repos ?</td></tr>
+<tr><td class="pin">4</td><td><code>import diag; diag.controle()</code> → fichiers présents et de la même version</td></tr>
+<tr><td class="pin">5</td><td><code>diag.broches()</code> → aucune collision, aucune broche réservée utilisée</td></tr>
+<tr><td class="pin">6</td><td>Mode sans échec : il répond bien sur <strong>B6</strong> et plus sur le pouce ?</td></tr>
+</tbody></table></div>
+</section>
+
+<footer class="doc">
+<p><strong>Joystick 3D du Macropad</strong> — étude d'intégration pour le
+macropad USB HID ESP32-S3. Les relevés de broches, de constantes et d'API
+viennent de la lecture du dépôt et du code source de micropython-lib. Rien n'a
+été testé sur la carte.</p>
+</footer>
+
+</div>
+</body>
+</html>
