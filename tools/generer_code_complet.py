@@ -35,6 +35,8 @@ ORDRE = [
     "portal.py",
     "link.py",
     "hid_keyboard.py",
+    "hid_mouse.py",
+    "joystick.py",
     "display.py",
     "agenda.py",
     "led.py",
@@ -45,6 +47,7 @@ ORDRE = [
     "lib/usb/device/core.py",
     "lib/usb/device/hid.py",
     "lib/usb/device/keyboard.py",
+    "lib/usb/device/mouse.py",
 ]
 
 TIERS = {
@@ -53,6 +56,7 @@ TIERS = {
     "lib/usb/device/core.py": "Fichier TIERS repris sans modification (micropython-lib, MIT).",
     "lib/usb/device/hid.py": "Fichier TIERS repris sans modification (micropython-lib, MIT).",
     "lib/usb/device/keyboard.py": "Fichier TIERS repris sans modification (micropython-lib, MIT).",
+    "lib/usb/device/mouse.py": "Fichier TIERS repris sans modification (micropython-lib, MIT).",
 }
 
 

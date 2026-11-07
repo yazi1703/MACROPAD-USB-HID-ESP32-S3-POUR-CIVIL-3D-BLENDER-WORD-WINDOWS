@@ -142,7 +142,21 @@ HID_TEST = None
 # permettrait à quelqu'un à portée de reprogrammer ce qu'il tape. Ici la
 # radio ne s'allume que si TU maintiens un bouton, et dans ce mode le
 # clavier USB n'existe même pas.
-SAFE_MODE_BUTTON_INDEX = 0          # index dans BUTTON_PINS : 0 = B1
+# POURQUOI LE MODE SANS ÉCHEC EST SUR B6 ET PLUS SUR B1
+# Il était sur B1, le pouce — la touche la plus facile à atteindre, ce qui
+# semblait raisonnable pour un filet de secours. Mais le pouce a reçu le
+# JOYSTICK, et le clic du joystick EST devenu B1 (son fil SW est soudé sur
+# la broche de B1 ; voir le bloc 7 plus bas).
+#
+# Or un stick, on l'enfonce sans le vouloir : en posant la main, en
+# rangeant le pad, en le branchant d'une seule main. Le macropad aurait
+# donc démarré régulièrement SANS clavier, pour une raison invisible.
+#
+# B6 est l'auriculaire : la touche la plus difficile à enfoncer par
+# accident, et parfaitement accessible quand tu la veux vraiment.
+# Le mode configuration reste sur B2 (index) : l'index ne touche pas le
+# stick, il n'y a donc rien à y changer.
+SAFE_MODE_BUTTON_INDEX = 5          # index dans BUTTON_PINS : 5 = B6
 CONFIG_MODE_BUTTON_INDEX = 1        # index dans BUTTON_PINS : 1 = B2
 
 AP_SSID = "MACROPAD"                # nom du réseau créé par le macropad
@@ -457,3 +471,101 @@ LED_FLASH_MS = 120      # durée de l'éclat quand tu appuies sur ESC
 LED_RETURN_MS = 350     # retour progressif du flash vers la respiration
 # Note : le flash monte à 100 %, sans aucun risque, parce que le courant
 # est limité par la résistance de 330 ohms montée en série avec la LED.
+
+
+# =====================================================================
+# 7. JOYSTICK 3D (deux axes analogiques + son clic)
+# =====================================================================
+# À QUOI IL SERT : tourner la vue dans Civil 3D, Blender, InfraWorks ou
+# RealWorks SANS lâcher la souris. Main gauche sur le pad, main droite sur
+# la souris.
+#
+# ------------------------------------------------------------------
+# POURQUOI CES DEUX BROCHES-LÀ, ET PAS D'AUTRES
+# ------------------------------------------------------------------
+# L'ESP32-S3 a deux convertisseurs analogiques, ADC1 et ADC2. **ADC2
+# devient inutilisable dès que le WiFi est allumé** — et le mode
+# configuration allume le WiFi. Un joystick sur ADC2 fonctionnerait donc
+# jusqu'au jour où tu entrerais en mode configuration, et tomberait sans
+# explication.
+#
+# Sur ADC1 (GPIO1 à GPIO10), après avoir retiré tout ce qui est déjà
+# occupé — B1..B4 sur 4-7, l'écran sur 8-9, un TTP223 sur 10 — il reste
+# exactement GPIO1 et GPIO2. Deux voies pour deux axes, zéro marge.
+# GPIO3 est libre aussi mais DÉCONSEILLÉE : c'est une broche de strapping,
+# lue au démarrage pour choisir la source JTAG.
+JOYSTICK_X_PIN = 1          # VRx du module
+JOYSTICK_Y_PIN = 2          # VRy du module
+
+# Le clic du stick (fil SW) n'est PAS déclaré ici : il se soude sur la
+# broche de B1, c'est-à-dire BUTTON_PINS[0]. Un joystick a un poussoir qui
+# relie sa sortie à la masse, et c'est exactement ce qu'attend inputs.py.
+# Le clic du stick EST donc la touche B1, sans une ligne de code en plus.
+
+# ------------------------------------------------------------------
+# DANGER : 3,3 V, JAMAIS 5 V
+# ------------------------------------------------------------------
+# Beaucoup de modules portent « +5V » sur leur pastille d'alimentation.
+# NE LA BRANCHE PAS SUR 5 V. Le curseur d'un potentiomètre alimenté en
+# 5 V peut renvoyer jusqu'à 5 V sur une entrée analogique qui n'accepte
+# pas plus de 3,3 V. La broche s'abîme sans bruit : rien ne fume, et la
+# lecture devient fausse pour toujours. Un joystick marche très bien en
+# 3,3 V, il sort juste une plage un peu plus petite.
+
+# False tant que le joystick n'est pas soudé ET vérifié. Même convention
+# que HID_ENABLED et RGB_ENABLED : une fonctionnalité neuve ne s'active
+# que quand tu l'as éprouvée.
+JOYSTICK_ENABLED = False
+
+# Atténuation de l'entrée analogique. 11 dB est le réglage qui accepte la
+# plage la plus large, donc le bon pour un signal qui va de 0 à 3,3 V.
+# VÉRIFIE LE NOM EXACT SUR TA CARTE — les constantes dépendent du port :
+#     from machine import ADC
+#     print([n for n in dir(ADC) if n.startswith("ATTN")])
+# Si ATTN_11DB n'existe pas sous ce nom, mets ici celui que la commande
+# ci-dessus affiche. diag.py le vérifie aussi et te le dira.
+JOYSTICK_ATTEN = "ATTN_11DB"
+
+# --- Étalonnage -----------------------------------------------------
+# Le centre d'un joystick ne vaut JAMAIS la moitié de l'échelle : chaque
+# exemplaire a le sien, souvent 2 à 10 % à côté. On le mesure donc au
+# démarrage, stick au repos, en moyennant plusieurs lectures.
+#
+# NE TOUCHE PAS AU STICK PENDANT LES PREMIÈRES SECONDES. Si les lectures
+# se dispersent trop, l'étalonnage ÉCHOUE exprès et le joystick reste
+# inactif : un centre pris stick poussé ferait dériver la vue sans fin,
+# et personne ne comprendrait pourquoi.
+JOYSTICK_ETALON_LECTURES = 16       # nombre de mesures moyennées
+JOYSTICK_ETALON_MS = 20             # délai entre deux mesures
+
+# --- Cadence --------------------------------------------------------
+# L'USB ne transporte qu'environ 125 rapports de souris par seconde
+# (interval_ms=8 dans la bibliothèque). La boucle principale, elle, tourne
+# 500 fois par seconde. On n'envoie donc qu'un tour sur six environ.
+# Descendre sous 8 ms ne rend rien de plus : les rapports seraient
+# simplement perdus, ce qui donne un mouvement saccadé sans que rien ne
+# le signale.
+JOYSTICK_CADENCE_MS = 12
+
+# --- Le piège du retour au centre -----------------------------------
+# Pour passer d'une rotation à gauche à une rotation à droite, le stick
+# TRAVERSE le centre. Pendant un instant très court il est donc « au
+# repos ». Sans ce délai, le glissement serait coupé en deux — bouton
+# relâché, bouton re-enfoncé — et la vue sauterait.
+JOYSTICK_FIN_MS = 120
+
+# --- Le clic qui bouge le stick -------------------------------------
+# Sur un module à quelques euros, le poussoir est dur et décentré : en
+# enfonçant, tu BOUGES le stick. Comme ce clic est devenu B1, chaque appui
+# enverrait un petit mouvement parasite à la vue. On ferme donc les yeux
+# sur les axes pendant ce délai autour d'un appui.
+# Mets 0 pour désactiver, si ton module a un clic franc.
+JOYSTICK_CLIC_AVEUGLE_MS = 80
+
+# --- Réglages de repli ----------------------------------------------
+# Les vrais réglages vivent DANS CHAQUE PROFIL (voir profiles.py et la
+# page web) : chaque logiciel 3D a sa propre convention de navigation, et
+# Blender et Civil 3D sont même inversés l'un de l'autre. Les valeurs
+# ci-dessous ne servent que si un profil n'en déclare aucun.
+JOYSTICK_SENSIBILITE = 6            # pas de souris à pleine inclinaison
+JOYSTICK_ZONE_MORTE = 12            # en % de la course, autour du centre

@@ -103,6 +103,39 @@ SPECIAL = {
     "DELETE": 76, "SUPPR": 76, "END": 77, "PAGEDOWN": 78,
     "RIGHT": 79, "LEFT": 80, "DOWN": 81, "UP": 82,
     "MENU": 101,
+
+    # --- PAVE NUMERIQUE -------------------------------------------------
+    # Ce sont des touches A PART, avec leurs propres numeros HID : le 4 du
+    # pave numerique n'est PAS le 4 de la rangee du haut, et beaucoup de
+    # logiciels les distinguent.
+    #
+    # Blender en est l'exemple parfait : le pave numerique 4 et 6 font
+    # TOURNER la vue par pas de 15 degres, 8 et 2 la font basculer, et le 5
+    # bascule entre vue en perspective et vue orthographique. C'est ce qui
+    # permet au joystick de naviguer en 3D SANS avoir besoin de la souris
+    # USB - le mode "touches" du bloc joystick de chaque profil.
+    #
+    # ATTENTION A VERR. NUM : ces touches n'envoient des chiffres que si
+    # Verr. Num est actif. Pour la navigation dans Blender cela n'a aucune
+    # importance - il lit la touche, pas le caractere - mais pour taper un
+    # nombre, si.
+    "KP_0": 98, "NUM0": 98,
+    "KP_1": 89, "NUM1": 89,
+    "KP_2": 90, "NUM2": 90,
+    "KP_3": 91, "NUM3": 91,
+    "KP_4": 92, "NUM4": 92,
+    "KP_5": 93, "NUM5": 93,
+    "KP_6": 94, "NUM6": 94,
+    "KP_7": 95, "NUM7": 95,
+    "KP_8": 96, "NUM8": 96,
+    "KP_9": 97, "NUM9": 97,
+    "KP_DOT": 99, "NUMDOT": 99,
+    "KP_PLUS": 87, "NUMPLUS": 87,
+    "KP_MINUS": 86, "NUMMINUS": 86,
+    "KP_MULTIPLY": 85, "NUMMULTIPLY": 85,
+    "KP_DIVIDE": 84, "NUMDIVIDE": 84,
+    "KP_ENTER": 88, "NUMENTER": 88,
+    "NUMLOCK": 83, "VERRNUM": 83,
 }
 
 

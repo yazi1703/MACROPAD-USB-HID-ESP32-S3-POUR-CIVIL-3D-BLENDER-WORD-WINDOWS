@@ -21,6 +21,7 @@
     "device/lib/usb/device/core.py": "b1402506cda2ac3dbd0d488d63fc9c1cd9c1d62c35cf3ffabb4d37e85941db8b",
     "device/lib/usb/device/hid.py": "16a5226a9d7909f2de54b339f49ec5f119fc0c6ea2467b4163cc11719efbcdc8",
     "device/lib/usb/device/keyboard.py": "8e6fd53c299a34b5f7d8ee6b6d66cbbb726bea5cbe6515299e7ca182517717b6",
+    "device/lib/usb/device/mouse.py": "651de586bfa1a6f79497ec9c7aa58583d8c0b4e68d554dadfa40edaec797fdc8",
     "device/sh1106.py": "a0b7c0465eb05fb7f1b8008755ea9b28858461f31b4f579ac1462daa21c57a8d"
   }
 }

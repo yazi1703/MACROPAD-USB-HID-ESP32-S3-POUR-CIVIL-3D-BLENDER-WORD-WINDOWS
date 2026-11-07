@@ -82,6 +82,25 @@ class HIDKeyboard:
         # qui permet à une touche du pad de se comporter comme la touche
         # Ctrl d'un vrai clavier : Ctrl reste enfoncé pendant que tu
         # cliques à la souris.
+        #
+        # DEUX SOURCES, ET C'EST UNE CORRECTION DE BOGUE. Avant le joystick,
+        # une seule chose pouvait maintenir des touches : le doigt sur une
+        # touche du pad. maintenir() faisait donc simplement
+        # "self.tenus = codes", une AFFECTATION.
+        #
+        # Le joystick a besoin du meme mecanisme : dans Civil 3D, l'orbite
+        # est Maj + clic du milieu, et ce Maj doit rester enfonce pendant
+        # tout le glissement. Avec une affectation, les deux s'ecrasaient :
+        # ton Ctrl disparaissait au milieu d'une selection, ou l'orbite
+        # partait sans son Maj et Civil 3D translatait au lieu de tourner.
+        # Deux symptomes du genre "ca marche une fois sur trois", les pires
+        # a diagnostiquer.
+        #
+        # On garde donc les deux sources separement, et self.tenus est leur
+        # UNION, recalculee a chaque changement. Tout le reste du fichier
+        # continue de lire self.tenus sans rien savoir de cette histoire.
+        self._tenus_touche = ()
+        self._tenus_joystick = ()
         self.tenus = ()
         self.fault = False
 
@@ -137,23 +156,74 @@ class HIDKeyboard:
         if not self.accepting():
             print("HID : maintien ignore, interface non prete")
             return False
-        # Traduit tout de suite pour verifier, comme submit().
-        frappes = compile_actions(actions, C.KEYBOARD_LAYOUT)
-        codes = ()
-        for frappe in frappes:
-            codes += frappe
-        self.tenus = codes
+        self._tenus_touche = self._codes(actions)
+        self._recalculer_tenus()
         self.release_needed = True     # provoque l'envoi de l'etat courant
         self.progress = ticks_ms()
         return True
 
     def relacher_maintien(self):
-        """Relâche les touches maintenues. Sans effet s'il n'y en a pas."""
-        if not self.tenus:
+        """Relâche les touches maintenues PAR UNE TOUCHE DU PAD.
+
+        Ne touche pas à ce que le joystick maintient : voir l'explication
+        des deux sources dans __init__.
+        """
+        if not self._tenus_touche:
             return
-        self.tenus = ()
+        self._tenus_touche = ()
+        self._recalculer_tenus()
         self.release_needed = True
         self.progress = ticks_ms()
+
+    def maintenir_joystick(self, actions):
+        """Enfonce et garde des touches POUR LE JOYSTICK (le Maj d'une orbite).
+
+        Même mécanisme que maintenir(), mais sur l'autre source : un
+        glissement de vue 3D et un modificateur tenu au pouce peuvent donc
+        coexister, ce qui est exactement ce qu'on fait dans Civil 3D.
+        """
+        if not self.accepting():
+            return False
+        self._tenus_joystick = self._codes(actions)
+        self._recalculer_tenus()
+        self.release_needed = True
+        self.progress = ticks_ms()
+        return True
+
+    def relacher_joystick(self):
+        """Relâche ce que le joystick maintenait. Sans effet s'il n'y a rien."""
+        if not self._tenus_joystick:
+            return
+        self._tenus_joystick = ()
+        self._recalculer_tenus()
+        self.release_needed = True
+        self.progress = ticks_ms()
+
+    def _codes(self, actions):
+        """Traduit une macro en codes de touches, tout de suite.
+
+        Comme submit() : on compile IMMEDIATEMENT pour qu'une macro
+        impossible a taper echoue ici, et pas au milieu d'un rapport USB.
+        """
+        codes = ()
+        for frappe in compile_actions(actions, C.KEYBOARD_LAYOUT):
+            codes += frappe
+        return codes
+
+    def _recalculer_tenus(self):
+        """self.tenus = union des deux sources, sans doublon.
+
+        L'ordre est stable - d'abord la touche, puis le joystick - pour que
+        les paquets envoyes soient reproductibles, ce dont les tests ont
+        besoin. Les modificateurs sont des valeurs negatives et ne comptent
+        pas dans la limite de six touches du rapport HID ; _avec_tenus() s'en
+        occupe deja plus bas.
+        """
+        tenus = tuple(self._tenus_touche)
+        for code in self._tenus_joystick:
+            if code not in tenus:
+                tenus += (code,)
+        self.tenus = tenus
 
     def cancel(self):
         """Oublie tout ce qui était prévu et programme un relâchement."""
@@ -163,6 +233,10 @@ class HIDKeyboard:
         # Un ESC, un changement de profil ou une panne doivent TOUT
         # relâcher, y compris un Ctrl resté enfoncé. Sinon le PC garde un
         # modificateur bloqué, ce qui est la pire panne possible.
+        # LES DEUX SOURCES, donc : le Maj d'une orbite en cours n'a aucune
+        # raison de survivre a un ESC ou a un changement de logiciel.
+        self._tenus_touche = ()
+        self._tenus_joystick = ()
         self.tenus = ()
         self.release_needed = True
         # INDISPENSABLE : le relâchement qu'on vient de programmer est une

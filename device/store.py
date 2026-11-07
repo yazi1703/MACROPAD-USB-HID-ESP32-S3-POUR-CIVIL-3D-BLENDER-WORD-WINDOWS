@@ -216,6 +216,94 @@ def combos_depuis_json(champ):
     return combos
 
 
+# IMPORT TOLERANT, et c'est une regle du projet : un fichier qui manque se
+# SIGNALE (diag.py le nomme), il n'empeche pas le macropad de TAPER. Si
+# joystick.py n'a pas ete televerse, les reglages du joystick traversent
+# sans verification - ce qui est sans danger, puisque sans ce fichier il
+# n'y a de toute facon aucun joystick pour les utiliser.
+try:
+    from joystick import reglages_valides as _reglages_joystick
+    from joystick import DIRECTIONS as _DIRECTIONS
+except ImportError:
+    _DIRECTIONS = ("gauche", "droite", "haut", "bas")
+
+    def _reglages_joystick(brut):
+        return dict(brut) if isinstance(brut, dict) else {}
+
+
+def joysticks_usine():
+    """Les reglages joystick d'usine, profil par profil.
+
+    getattr : un profiles.py televerse depuis une version anterieure n'a
+    pas de table JOYSTICK. Le firmware demarre quand meme, joystick eteint,
+    plutot que de refuser de booter.
+    """
+    table = {}
+    for nom in getattr(P, "PROFILES", {}):
+        table[nom] = joystick_depuis_json(
+            getattr(P, "JOYSTICK", {}).get(nom))
+    return table
+
+
+def joystick_vers_json(reglages):
+    """Forme interne -> forme web. Toujours un bloc complet, jamais None.
+
+    La page web a besoin de TOUS les champs, meme vides : un selecteur sans
+    valeur ne saurait pas quoi afficher.
+    """
+    reglages = reglages or {}
+    propre = _reglages_joystick(reglages)
+    directions = {}
+    for sens in _DIRECTIONS:
+        directions[sens] = actions_vers_json(
+            (reglages.get("directions") or {}).get(sens))
+    propre["directions"] = directions
+    return propre
+
+
+def joystick_depuis_json(bloc):
+    """Forme web -> forme interne. Ne leve jamais.
+
+    Un profils.json edite a la main, tronque, ou ecrit par une version plus
+    ancienne doit degrader proprement - pas faire tomber la carte.
+    """
+    bloc = bloc if isinstance(bloc, dict) else {}
+    propre = _reglages_joystick(bloc)
+    directions = {}
+    for sens in _DIRECTIONS:
+        actions = _actions_direction((bloc.get("directions") or {}).get(sens))
+        if actions:
+            directions[sens] = actions
+    propre["directions"] = directions
+    return propre
+
+
+def _actions_direction(brut):
+    """Les actions d'une direction, quelle que soit la forme recue.
+
+    DEUX FORMES ARRIVENT ICI, ET LES CONFONDRE EST UN BOGUE QUE LE TEST
+    D'ALLER-RETOUR A ATTRAPE :
+
+      la page web envoie   [{"type": "key", "valeur": "KP_4"}]
+      profiles.py donne    [("key", "KP_4")]
+
+    Les deux sont des listes. Si l'on range la premiere telle quelle comme
+    si c'etait la seconde, action_vers_json() deballe ensuite le
+    dictionnaire au lieu du couple et rend ("type", "valeur") - les NOMS
+    des champs a la place de leur contenu. La macro devient
+    silencieusement illisible, et l'aller-retour perd la touche.
+
+    On regarde donc ce que contient la liste, pas seulement son type.
+    """
+    if not brut:
+        return []
+    if isinstance(brut, dict):
+        return actions_depuis_json(brut)          # une action seule
+    if isinstance(brut[0], dict):
+        return actions_depuis_json(brut)          # forme web
+    return [tuple(action) for action in brut]     # forme interne
+
+
 def combos_usine():
     """Copie des combinaisons d'usine, profil par profil."""
     table = {}
@@ -405,7 +493,12 @@ def verifier(profils, ordre, nb_touches, combos=None):
 # Valeurs d'usine
 # =====================================================================
 def defauts():
-    """Copie des valeurs d'usine, dans la forme interne."""
+    """Copie des valeurs d'usine, dans la forme interne.
+
+    NE RENVOIE PAS les reglages du joystick, volontairement : ce tuple est
+    deja long, et le faire grandir cassait une dizaine d'appels a chaque
+    ajout. joysticks_usine() les donne a part.
+    """
     profils = {}
     for nom, touches in P.PROFILES.items():
         profils[nom] = [(label, dict(gestes)) for label, gestes in touches]
@@ -423,7 +516,7 @@ def defauts():
 def vers_json(nb_touches, stats=None):
     """Configuration complete, prete a etre envoyee a une page web."""
     (profils, ordre, titres, couleurs, couleurs2, noms, combos,
-     apps, repli, origine) = charger(nb_touches)
+     apps, repli, joysticks, origine) = charger(nb_touches)
     blocs = {}
     for nom, touches in profils.items():
         liste = []
@@ -444,6 +537,7 @@ def vers_json(nb_touches, stats=None):
                          if couleurs2.get(nom) else ""),
             "touches": liste,
             "combos": combos_vers_json(combos.get(nom), noms.get(nom)),
+            "joystick": joystick_vers_json(joysticks.get(nom)),
         }
 
     return {
@@ -471,8 +565,9 @@ def depuis_json(data, nb_touches):
     """Forme web -> forme interne. Leve une exception si c'est illisible."""
     ordre = [str(n) for n in data["ordre"]]
     profils, titres, couleurs, combos = {}, {}, {}, {}
-    couleurs2, noms = {}, {}
+    couleurs2, noms, joysticks = {}, {}, {}
     usine = combos_usine()
+    usine_joy = joysticks_usine()
     for nom, bloc in data["profils"].items():
         touches = []
         cles_longues = {}
@@ -542,6 +637,14 @@ def depuis_json(data, nb_touches):
             # plutot que de les faire disparaitre a la premiere mise a jour.
             # Une liste presente mais VIDE, elle, est respectee.
             combos[str(nom)] = usine.get(str(nom), [])
+        if "joystick" in bloc:
+            joysticks[str(nom)] = joystick_depuis_json(bloc.get("joystick"))
+        else:
+            # Fichier ecrit avant le joystick : on remet les reglages
+            # d'usine du profil plutot que de l'eteindre en silence a la
+            # premiere mise a jour du firmware.
+            joysticks[str(nom)] = usine_joy.get(
+                str(nom), joystick_depuis_json(None))
 
     bloc_apps = data.get("apps") or {}
     apps = []
@@ -554,7 +657,7 @@ def depuis_json(data, nb_touches):
     repli = (str(bloc_repli.get("profil", P.APPS_REPLI[0])).upper(),
              str(bloc_repli.get("abrege", P.APPS_REPLI[1]))[:7])
     return (profils, ordre, titres, couleurs, couleurs2, noms, combos,
-            apps, repli)
+            apps, repli, joysticks)
 
 
 # =====================================================================
@@ -562,43 +665,58 @@ def depuis_json(data, nb_touches):
 # =====================================================================
 def charger(nb_touches):
     """Retourne (profils, ordre, titres, couleurs, couleurs2, noms, combos,
-    apps, repli, origine).
+    apps, repli, joysticks, origine).
 
     origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire d'ou
-    viennent les macros actives.
+    viennent les macros actives. Il reste EN DERNIER, quoi qu'on ajoute.
+
+    diag.py compte ces valeurs (CHAMPS_CHARGER) et sait donc dire "des
+    fichiers de versions differentes cohabitent" au lieu de laisser la
+    carte planter sur un "too many values to unpack" qui ne nomme
+    personne. Si tu ajoutes un champ ici, mets ce compteur a jour.
     """
     try:
         with open(C.PROFILES_FILE) as fichier:
             data = json.load(fichier)
     except OSError:
-        return defauts() + ("usine",)              # fichier absent : normal
+        # fichier absent : normal, c'est le cas au tout premier demarrage
+        return defauts() + (joysticks_usine(), "usine")
     except Exception as exc:
         print("[store] %s illisible (%s), retour aux valeurs d'usine"
               % (C.PROFILES_FILE, exc))
-        return defauts() + ("usine",)
+        return defauts() + (joysticks_usine(), "usine")
 
     try:
         (profils, ordre, titres, couleurs, couleurs2, noms, combos,
-         apps, repli) = depuis_json(data, nb_touches)
+         apps, repli, joysticks) = depuis_json(data, nb_touches)
     except Exception as exc:
         print("[store] %s mal forme (%s), retour aux valeurs d'usine"
               % (C.PROFILES_FILE, exc))
-        return defauts() + ("usine",)
+        return defauts() + (joysticks_usine(), "usine")
 
     problemes = verifier(profils, ordre, nb_touches, combos)
     if problemes:
         print("[store] %s refuse, retour aux valeurs d'usine :" % C.PROFILES_FILE)
         for probleme in problemes:
             print("   -", probleme)
-        return defauts() + ("usine",)
+        return defauts() + (joysticks_usine(), "usine")
 
     return (profils, ordre, titres, couleurs, couleurs2, noms, combos, apps,
-            repli, "fichier")
+            repli, joysticks, "fichier")
 
 
 def enregistrer(profils, ordre, titres, couleurs, couleurs2, noms, combos,
-                apps, repli, nb_touches):
-    """Verifie puis ecrit. Retourne (True, "") ou (False, raison)."""
+                apps, repli, nb_touches, joysticks=None):
+    """Verifie puis ecrit. Retourne (True, "") ou (False, raison).
+
+    joysticks est FACULTATIF et vient en dernier, apres nb_touches : les
+    appels ecrits avant le joystick continuent donc de fonctionner mot pour
+    mot, et ecrivent les reglages d'usine. C'etait le but - ce tuple a deja
+    grandi deux fois, et chaque fois il a fallu retoucher une dizaine
+    d'appels.
+    """
+    if joysticks is None:
+        joysticks = joysticks_usine()
     problemes = verifier(profils, ordre, nb_touches, combos)
     if problemes:
         return False, " ; ".join(problemes)
@@ -622,6 +740,7 @@ def enregistrer(profils, ordre, titres, couleurs, couleurs2, noms, combos,
             "touches": liste,
             "combos": combos_vers_json((combos or {}).get(nom),
                                        (noms or {}).get(nom)),
+            "joystick": joystick_vers_json((joysticks or {}).get(nom)),
         }
 
     data = {"version": 2, "ordre": list(ordre), "profils": blocs,
@@ -650,11 +769,11 @@ def enregistrer_json(data, nb_touches):
     """Enregistre directement une configuration recue d'une page web."""
     try:
         (profils, ordre, titres, couleurs, couleurs2, noms, combos,
-         apps, repli) = depuis_json(data, nb_touches)
+         apps, repli, joysticks) = depuis_json(data, nb_touches)
     except Exception as exc:
         return False, "donnees illisibles : %s" % exc
     return enregistrer(profils, ordre, titres, couleurs, couleurs2, noms,
-                       combos, apps, repli, nb_touches)
+                       combos, apps, repli, nb_touches, joysticks)
 
 
 def effacer():

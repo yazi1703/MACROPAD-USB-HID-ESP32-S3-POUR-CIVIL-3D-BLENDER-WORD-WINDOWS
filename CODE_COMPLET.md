@@ -25,6 +25,8 @@ de `device/`, pas ce document.
 - [`device/portal.py`](#deviceportalpy)
 - [`device/link.py`](#devicelinkpy)
 - [`device/hid_keyboard.py`](#devicehidkeyboardpy)
+- [`device/hid_mouse.py`](#devicehidmousepy)
+- [`device/joystick.py`](#devicejoystickpy)
 - [`device/display.py`](#devicedisplaypy)
 - [`device/agenda.py`](#deviceagendapy)
 - [`device/led.py`](#deviceledpy)
@@ -35,13 +37,14 @@ de `device/`, pas ce document.
 - [`device/lib/usb/device/core.py`](#devicelibusbdevicecorepy)
 - [`device/lib/usb/device/hid.py`](#devicelibusbdevicehidpy)
 - [`device/lib/usb/device/keyboard.py`](#devicelibusbdevicekeyboardpy)
+- [`device/lib/usb/device/mouse.py`](#devicelibusbdevicemousepy)
 
 
 ---
 
 ## device/config.py
 
-`459 lignes - sha256 9ba7468ea4bff5e2`
+`571 lignes - sha256 1c94244616c57343`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -188,7 +191,21 @@ HID_TEST = None
 # permettrait à quelqu'un à portée de reprogrammer ce qu'il tape. Ici la
 # radio ne s'allume que si TU maintiens un bouton, et dans ce mode le
 # clavier USB n'existe même pas.
-SAFE_MODE_BUTTON_INDEX = 0          # index dans BUTTON_PINS : 0 = B1
+# POURQUOI LE MODE SANS ÉCHEC EST SUR B6 ET PLUS SUR B1
+# Il était sur B1, le pouce — la touche la plus facile à atteindre, ce qui
+# semblait raisonnable pour un filet de secours. Mais le pouce a reçu le
+# JOYSTICK, et le clic du joystick EST devenu B1 (son fil SW est soudé sur
+# la broche de B1 ; voir le bloc 7 plus bas).
+#
+# Or un stick, on l'enfonce sans le vouloir : en posant la main, en
+# rangeant le pad, en le branchant d'une seule main. Le macropad aurait
+# donc démarré régulièrement SANS clavier, pour une raison invisible.
+#
+# B6 est l'auriculaire : la touche la plus difficile à enfoncer par
+# accident, et parfaitement accessible quand tu la veux vraiment.
+# Le mode configuration reste sur B2 (index) : l'index ne touche pas le
+# stick, il n'y a donc rien à y changer.
+SAFE_MODE_BUTTON_INDEX = 5          # index dans BUTTON_PINS : 5 = B6
 CONFIG_MODE_BUTTON_INDEX = 1        # index dans BUTTON_PINS : 1 = B2
 
 AP_SSID = "MACROPAD"                # nom du réseau créé par le macropad
@@ -503,13 +520,111 @@ LED_FLASH_MS = 120      # durée de l'éclat quand tu appuies sur ESC
 LED_RETURN_MS = 350     # retour progressif du flash vers la respiration
 # Note : le flash monte à 100 %, sans aucun risque, parce que le courant
 # est limité par la résistance de 330 ohms montée en série avec la LED.
+
+
+# =====================================================================
+# 7. JOYSTICK 3D (deux axes analogiques + son clic)
+# =====================================================================
+# À QUOI IL SERT : tourner la vue dans Civil 3D, Blender, InfraWorks ou
+# RealWorks SANS lâcher la souris. Main gauche sur le pad, main droite sur
+# la souris.
+#
+# ------------------------------------------------------------------
+# POURQUOI CES DEUX BROCHES-LÀ, ET PAS D'AUTRES
+# ------------------------------------------------------------------
+# L'ESP32-S3 a deux convertisseurs analogiques, ADC1 et ADC2. **ADC2
+# devient inutilisable dès que le WiFi est allumé** — et le mode
+# configuration allume le WiFi. Un joystick sur ADC2 fonctionnerait donc
+# jusqu'au jour où tu entrerais en mode configuration, et tomberait sans
+# explication.
+#
+# Sur ADC1 (GPIO1 à GPIO10), après avoir retiré tout ce qui est déjà
+# occupé — B1..B4 sur 4-7, l'écran sur 8-9, un TTP223 sur 10 — il reste
+# exactement GPIO1 et GPIO2. Deux voies pour deux axes, zéro marge.
+# GPIO3 est libre aussi mais DÉCONSEILLÉE : c'est une broche de strapping,
+# lue au démarrage pour choisir la source JTAG.
+JOYSTICK_X_PIN = 1          # VRx du module
+JOYSTICK_Y_PIN = 2          # VRy du module
+
+# Le clic du stick (fil SW) n'est PAS déclaré ici : il se soude sur la
+# broche de B1, c'est-à-dire BUTTON_PINS[0]. Un joystick a un poussoir qui
+# relie sa sortie à la masse, et c'est exactement ce qu'attend inputs.py.
+# Le clic du stick EST donc la touche B1, sans une ligne de code en plus.
+
+# ------------------------------------------------------------------
+# DANGER : 3,3 V, JAMAIS 5 V
+# ------------------------------------------------------------------
+# Beaucoup de modules portent « +5V » sur leur pastille d'alimentation.
+# NE LA BRANCHE PAS SUR 5 V. Le curseur d'un potentiomètre alimenté en
+# 5 V peut renvoyer jusqu'à 5 V sur une entrée analogique qui n'accepte
+# pas plus de 3,3 V. La broche s'abîme sans bruit : rien ne fume, et la
+# lecture devient fausse pour toujours. Un joystick marche très bien en
+# 3,3 V, il sort juste une plage un peu plus petite.
+
+# False tant que le joystick n'est pas soudé ET vérifié. Même convention
+# que HID_ENABLED et RGB_ENABLED : une fonctionnalité neuve ne s'active
+# que quand tu l'as éprouvée.
+JOYSTICK_ENABLED = False
+
+# Atténuation de l'entrée analogique. 11 dB est le réglage qui accepte la
+# plage la plus large, donc le bon pour un signal qui va de 0 à 3,3 V.
+# VÉRIFIE LE NOM EXACT SUR TA CARTE — les constantes dépendent du port :
+#     from machine import ADC
+#     print([n for n in dir(ADC) if n.startswith("ATTN")])
+# Si ATTN_11DB n'existe pas sous ce nom, mets ici celui que la commande
+# ci-dessus affiche. diag.py le vérifie aussi et te le dira.
+JOYSTICK_ATTEN = "ATTN_11DB"
+
+# --- Étalonnage -----------------------------------------------------
+# Le centre d'un joystick ne vaut JAMAIS la moitié de l'échelle : chaque
+# exemplaire a le sien, souvent 2 à 10 % à côté. On le mesure donc au
+# démarrage, stick au repos, en moyennant plusieurs lectures.
+#
+# NE TOUCHE PAS AU STICK PENDANT LES PREMIÈRES SECONDES. Si les lectures
+# se dispersent trop, l'étalonnage ÉCHOUE exprès et le joystick reste
+# inactif : un centre pris stick poussé ferait dériver la vue sans fin,
+# et personne ne comprendrait pourquoi.
+JOYSTICK_ETALON_LECTURES = 16       # nombre de mesures moyennées
+JOYSTICK_ETALON_MS = 20             # délai entre deux mesures
+
+# --- Cadence --------------------------------------------------------
+# L'USB ne transporte qu'environ 125 rapports de souris par seconde
+# (interval_ms=8 dans la bibliothèque). La boucle principale, elle, tourne
+# 500 fois par seconde. On n'envoie donc qu'un tour sur six environ.
+# Descendre sous 8 ms ne rend rien de plus : les rapports seraient
+# simplement perdus, ce qui donne un mouvement saccadé sans que rien ne
+# le signale.
+JOYSTICK_CADENCE_MS = 12
+
+# --- Le piège du retour au centre -----------------------------------
+# Pour passer d'une rotation à gauche à une rotation à droite, le stick
+# TRAVERSE le centre. Pendant un instant très court il est donc « au
+# repos ». Sans ce délai, le glissement serait coupé en deux — bouton
+# relâché, bouton re-enfoncé — et la vue sauterait.
+JOYSTICK_FIN_MS = 120
+
+# --- Le clic qui bouge le stick -------------------------------------
+# Sur un module à quelques euros, le poussoir est dur et décentré : en
+# enfonçant, tu BOUGES le stick. Comme ce clic est devenu B1, chaque appui
+# enverrait un petit mouvement parasite à la vue. On ferme donc les yeux
+# sur les axes pendant ce délai autour d'un appui.
+# Mets 0 pour désactiver, si ton module a un clic franc.
+JOYSTICK_CLIC_AVEUGLE_MS = 80
+
+# --- Réglages de repli ----------------------------------------------
+# Les vrais réglages vivent DANS CHAQUE PROFIL (voir profiles.py et la
+# page web) : chaque logiciel 3D a sa propre convention de navigation, et
+# Blender et Civil 3D sont même inversés l'un de l'autre. Les valeurs
+# ci-dessous ne servent que si un profil n'en déclare aucun.
+JOYSTICK_SENSIBILITE = 6            # pas de souris à pleine inclinaison
+JOYSTICK_ZONE_MORTE = 12            # en % de la course, autour du centre
 ```
 
 ---
 
 ## device/profiles.py
 
-`434 lignes - sha256 ed1a4efcab741509`
+`506 lignes - sha256 eee4d576efb691aa`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -872,6 +987,78 @@ NOMS = {
 }
 
 
+# =====================================================================
+# LE JOYSTICK 3D, PROFIL PAR PROFIL
+# =====================================================================
+# POURQUOI CES REGLAGES NE PEUVENT PAS ETRE LES MEMES PARTOUT, ET C'EST
+# LE POINT IMPORTANT : chaque logiciel 3D a SA convention de navigation.
+#
+#   Blender          orbite = clic du milieu glisse, SANS modificateur
+#   Civil 3D         orbite = MAJ + clic du milieu glisse
+#
+# C'est INVERSE entre les deux : le meme geste physique fait tourner dans
+# l'un et translater dans l'autre. Un comportement unique est donc
+# impossible, et c'est pour cela que le reglage appartient au profil et
+# bascule tout seul quand le PC change de logiciel.
+#
+# InfraWorks et RealWorks ne sont PAS reglés ici, volontairement :
+#   - InfraWorks change de convention selon la version, et possede une
+#     option "Invert Pan/Orbit Mouse Buttons" qui echange les deux. Meme
+#     la documentation Autodesk se contredit d'une version a l'autre.
+#   - Pour RealWorks, aucune documentation Trimble fiable sur le clic du
+#     milieu n'a pu etre trouvee.
+# Inventer un reglage pour ces deux-la donnerait un joystick qui translate
+# quand tu veux tourner, sans que rien ne l'explique. Ils demarrent donc
+# ETEINTS, et le relevé se fait en deux minutes, a la souris :
+#   1. clic du milieu maintenu + deplacement -> ca tourne, ou ca translate ?
+#   2. recommencer avec Maj, puis Ctrl, puis Alt maintenu.
+# Celui des quatre qui donne l'orbite va dans "modificateur".
+#
+# LES CHAMPS
+#   mode          "souris"  = clic du milieu glisse (orbite fluide)
+#                 "touches" = envoie les raccourcis de "directions"
+#                 "eteint"  = le joystick ne fait rien dans ce logiciel
+#   modificateur  ""  "MAJ"  "CTRL"  "ALT" : maintenu pendant le glissement
+#   sensibilite   1 a 15 : pas de souris a pleine inclinaison
+#   zone_morte    1 a 60 % : en dessous, le stick est considere au repos
+#   inverser_x/y  si ton module est monte dans l'autre sens
+#   directions    mode "touches" seulement : une macro par direction
+JOYSTICK = {
+    # Blender : l'orbite est le clic du milieu SEUL.
+    "BLENDER": {
+        "mode": "souris",
+        "modificateur": "",
+        "sensibilite": 7,
+        "zone_morte": 12,
+        # Repli clavier si tu preferes le mode "touches" : le pave
+        # numerique 4 et 6 tournent la vue par pas de 15 degres, 8 et 2 la
+        # font basculer. C'est la navigation d'usine de Blender.
+        "directions": {
+            "gauche": [("key", "KP_4")],
+            "droite": [("key", "KP_6")],
+            "haut": [("key", "KP_8")],
+            "bas": [("key", "KP_2")],
+        },
+    },
+
+    # Civil 3D / AutoCAD : l'orbite demande MAJ en plus. Sans lui, le
+    # meme geste translate la vue (un "pan"), ce qui est tres deroutant
+    # quand on vient de Blender.
+    "CIVIL3D": {
+        "mode": "souris",
+        "modificateur": "MAJ",
+        "sensibilite": 6,
+        "zone_morte": 12,
+        "directions": {},
+    },
+
+    # Dans un traitement de texte, un joystick n'a aucun sens comme
+    # souris. Eteint, donc - et c'est un reglage, pas un oubli.
+    "WORD": {"mode": "eteint"},
+    "WINDOWS": {"mode": "eteint"},
+}
+
+
 # Nom affiche a l'ecran quand il differe de la cle interne.
 TITLES = {"CIVIL3D": "CIVIL 3D"}
 
@@ -1042,7 +1229,7 @@ else:
 
 ## device/main.py
 
-`661 lignes - sha256 ef44668afa5edc29`
+`661 lignes - sha256 cf95ceaef832f33b`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1272,7 +1459,7 @@ def run():
     # recapitulatif du compagnon PC - la carte affiche le libelle court -
     # mais ils doivent traverser le rechargement sans se perdre.
     (profils, ordre, titres, couleurs, couleurs2, _noms, table_combos,
-     apps, repli, origine) = store.charger(NB_TOUCHES)
+     apps, repli, joysticks, origine) = store.charger(NB_TOUCHES)
     print("Macros chargees depuis :", origine)
 
     manager = ProfileManager(ordre, C.DEFAULT_PROFILE, profils, NB_TOUCHES)
@@ -1359,7 +1546,7 @@ def run():
         nonlocal manager, titres, ordre, couleurs, couleurs2, table_combos
         try:
             (neufs, ordre_neuf, titres_neufs, couleurs_neuves, secondes_neuves,
-             _noms_neufs, combos_neuves, _apps, _repli,
+             _noms_neufs, combos_neuves, _apps, _repli, joysticks_neufs,
              origine_neuve) = store.charger(NB_TOUCHES)
             nouveau = ProfileManager(ordre_neuf, manager.name, neufs, NB_TOUCHES)
         except Exception as exc:
@@ -2418,7 +2605,7 @@ class Combos:
 
 ## device/layouts.py
 
-`355 lignes - sha256 f49425de3d954ee7`
+`388 lignes - sha256 a4acf1514af15776`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -2526,6 +2713,39 @@ SPECIAL = {
     "DELETE": 76, "SUPPR": 76, "END": 77, "PAGEDOWN": 78,
     "RIGHT": 79, "LEFT": 80, "DOWN": 81, "UP": 82,
     "MENU": 101,
+
+    # --- PAVE NUMERIQUE -------------------------------------------------
+    # Ce sont des touches A PART, avec leurs propres numeros HID : le 4 du
+    # pave numerique n'est PAS le 4 de la rangee du haut, et beaucoup de
+    # logiciels les distinguent.
+    #
+    # Blender en est l'exemple parfait : le pave numerique 4 et 6 font
+    # TOURNER la vue par pas de 15 degres, 8 et 2 la font basculer, et le 5
+    # bascule entre vue en perspective et vue orthographique. C'est ce qui
+    # permet au joystick de naviguer en 3D SANS avoir besoin de la souris
+    # USB - le mode "touches" du bloc joystick de chaque profil.
+    #
+    # ATTENTION A VERR. NUM : ces touches n'envoient des chiffres que si
+    # Verr. Num est actif. Pour la navigation dans Blender cela n'a aucune
+    # importance - il lit la touche, pas le caractere - mais pour taper un
+    # nombre, si.
+    "KP_0": 98, "NUM0": 98,
+    "KP_1": 89, "NUM1": 89,
+    "KP_2": 90, "NUM2": 90,
+    "KP_3": 91, "NUM3": 91,
+    "KP_4": 92, "NUM4": 92,
+    "KP_5": 93, "NUM5": 93,
+    "KP_6": 94, "NUM6": 94,
+    "KP_7": 95, "NUM7": 95,
+    "KP_8": 96, "NUM8": 96,
+    "KP_9": 97, "NUM9": 97,
+    "KP_DOT": 99, "NUMDOT": 99,
+    "KP_PLUS": 87, "NUMPLUS": 87,
+    "KP_MINUS": 86, "NUMMINUS": 86,
+    "KP_MULTIPLY": 85, "NUMMULTIPLY": 85,
+    "KP_DIVIDE": 84, "NUMDIVIDE": 84,
+    "KP_ENTER": 88, "NUMENTER": 88,
+    "NUMLOCK": 83, "VERRNUM": 83,
 }
 
 
@@ -2782,7 +3002,7 @@ def compile_actions(actions, layout, caps_lock=False):
 
 ## device/store.py
 
-`667 lignes - sha256 6a45c18f31131ca4`
+`786 lignes - sha256 8744314f4421c853`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -3003,6 +3223,94 @@ def combos_depuis_json(champ):
     return combos
 
 
+# IMPORT TOLERANT, et c'est une regle du projet : un fichier qui manque se
+# SIGNALE (diag.py le nomme), il n'empeche pas le macropad de TAPER. Si
+# joystick.py n'a pas ete televerse, les reglages du joystick traversent
+# sans verification - ce qui est sans danger, puisque sans ce fichier il
+# n'y a de toute facon aucun joystick pour les utiliser.
+try:
+    from joystick import reglages_valides as _reglages_joystick
+    from joystick import DIRECTIONS as _DIRECTIONS
+except ImportError:
+    _DIRECTIONS = ("gauche", "droite", "haut", "bas")
+
+    def _reglages_joystick(brut):
+        return dict(brut) if isinstance(brut, dict) else {}
+
+
+def joysticks_usine():
+    """Les reglages joystick d'usine, profil par profil.
+
+    getattr : un profiles.py televerse depuis une version anterieure n'a
+    pas de table JOYSTICK. Le firmware demarre quand meme, joystick eteint,
+    plutot que de refuser de booter.
+    """
+    table = {}
+    for nom in getattr(P, "PROFILES", {}):
+        table[nom] = joystick_depuis_json(
+            getattr(P, "JOYSTICK", {}).get(nom))
+    return table
+
+
+def joystick_vers_json(reglages):
+    """Forme interne -> forme web. Toujours un bloc complet, jamais None.
+
+    La page web a besoin de TOUS les champs, meme vides : un selecteur sans
+    valeur ne saurait pas quoi afficher.
+    """
+    reglages = reglages or {}
+    propre = _reglages_joystick(reglages)
+    directions = {}
+    for sens in _DIRECTIONS:
+        directions[sens] = actions_vers_json(
+            (reglages.get("directions") or {}).get(sens))
+    propre["directions"] = directions
+    return propre
+
+
+def joystick_depuis_json(bloc):
+    """Forme web -> forme interne. Ne leve jamais.
+
+    Un profils.json edite a la main, tronque, ou ecrit par une version plus
+    ancienne doit degrader proprement - pas faire tomber la carte.
+    """
+    bloc = bloc if isinstance(bloc, dict) else {}
+    propre = _reglages_joystick(bloc)
+    directions = {}
+    for sens in _DIRECTIONS:
+        actions = _actions_direction((bloc.get("directions") or {}).get(sens))
+        if actions:
+            directions[sens] = actions
+    propre["directions"] = directions
+    return propre
+
+
+def _actions_direction(brut):
+    """Les actions d'une direction, quelle que soit la forme recue.
+
+    DEUX FORMES ARRIVENT ICI, ET LES CONFONDRE EST UN BOGUE QUE LE TEST
+    D'ALLER-RETOUR A ATTRAPE :
+
+      la page web envoie   [{"type": "key", "valeur": "KP_4"}]
+      profiles.py donne    [("key", "KP_4")]
+
+    Les deux sont des listes. Si l'on range la premiere telle quelle comme
+    si c'etait la seconde, action_vers_json() deballe ensuite le
+    dictionnaire au lieu du couple et rend ("type", "valeur") - les NOMS
+    des champs a la place de leur contenu. La macro devient
+    silencieusement illisible, et l'aller-retour perd la touche.
+
+    On regarde donc ce que contient la liste, pas seulement son type.
+    """
+    if not brut:
+        return []
+    if isinstance(brut, dict):
+        return actions_depuis_json(brut)          # une action seule
+    if isinstance(brut[0], dict):
+        return actions_depuis_json(brut)          # forme web
+    return [tuple(action) for action in brut]     # forme interne
+
+
 def combos_usine():
     """Copie des combinaisons d'usine, profil par profil."""
     table = {}
@@ -3192,7 +3500,12 @@ def verifier(profils, ordre, nb_touches, combos=None):
 # Valeurs d'usine
 # =====================================================================
 def defauts():
-    """Copie des valeurs d'usine, dans la forme interne."""
+    """Copie des valeurs d'usine, dans la forme interne.
+
+    NE RENVOIE PAS les reglages du joystick, volontairement : ce tuple est
+    deja long, et le faire grandir cassait une dizaine d'appels a chaque
+    ajout. joysticks_usine() les donne a part.
+    """
     profils = {}
     for nom, touches in P.PROFILES.items():
         profils[nom] = [(label, dict(gestes)) for label, gestes in touches]
@@ -3210,7 +3523,7 @@ def defauts():
 def vers_json(nb_touches, stats=None):
     """Configuration complete, prete a etre envoyee a une page web."""
     (profils, ordre, titres, couleurs, couleurs2, noms, combos,
-     apps, repli, origine) = charger(nb_touches)
+     apps, repli, joysticks, origine) = charger(nb_touches)
     blocs = {}
     for nom, touches in profils.items():
         liste = []
@@ -3231,6 +3544,7 @@ def vers_json(nb_touches, stats=None):
                          if couleurs2.get(nom) else ""),
             "touches": liste,
             "combos": combos_vers_json(combos.get(nom), noms.get(nom)),
+            "joystick": joystick_vers_json(joysticks.get(nom)),
         }
 
     return {
@@ -3258,8 +3572,9 @@ def depuis_json(data, nb_touches):
     """Forme web -> forme interne. Leve une exception si c'est illisible."""
     ordre = [str(n) for n in data["ordre"]]
     profils, titres, couleurs, combos = {}, {}, {}, {}
-    couleurs2, noms = {}, {}
+    couleurs2, noms, joysticks = {}, {}, {}
     usine = combos_usine()
+    usine_joy = joysticks_usine()
     for nom, bloc in data["profils"].items():
         touches = []
         cles_longues = {}
@@ -3329,6 +3644,14 @@ def depuis_json(data, nb_touches):
             # plutot que de les faire disparaitre a la premiere mise a jour.
             # Une liste presente mais VIDE, elle, est respectee.
             combos[str(nom)] = usine.get(str(nom), [])
+        if "joystick" in bloc:
+            joysticks[str(nom)] = joystick_depuis_json(bloc.get("joystick"))
+        else:
+            # Fichier ecrit avant le joystick : on remet les reglages
+            # d'usine du profil plutot que de l'eteindre en silence a la
+            # premiere mise a jour du firmware.
+            joysticks[str(nom)] = usine_joy.get(
+                str(nom), joystick_depuis_json(None))
 
     bloc_apps = data.get("apps") or {}
     apps = []
@@ -3341,7 +3664,7 @@ def depuis_json(data, nb_touches):
     repli = (str(bloc_repli.get("profil", P.APPS_REPLI[0])).upper(),
              str(bloc_repli.get("abrege", P.APPS_REPLI[1]))[:7])
     return (profils, ordre, titres, couleurs, couleurs2, noms, combos,
-            apps, repli)
+            apps, repli, joysticks)
 
 
 # =====================================================================
@@ -3349,43 +3672,58 @@ def depuis_json(data, nb_touches):
 # =====================================================================
 def charger(nb_touches):
     """Retourne (profils, ordre, titres, couleurs, couleurs2, noms, combos,
-    apps, repli, origine).
+    apps, repli, joysticks, origine).
 
     origine vaut "fichier" ou "usine" : main.py s'en sert pour te dire d'ou
-    viennent les macros actives.
+    viennent les macros actives. Il reste EN DERNIER, quoi qu'on ajoute.
+
+    diag.py compte ces valeurs (CHAMPS_CHARGER) et sait donc dire "des
+    fichiers de versions differentes cohabitent" au lieu de laisser la
+    carte planter sur un "too many values to unpack" qui ne nomme
+    personne. Si tu ajoutes un champ ici, mets ce compteur a jour.
     """
     try:
         with open(C.PROFILES_FILE) as fichier:
             data = json.load(fichier)
     except OSError:
-        return defauts() + ("usine",)              # fichier absent : normal
+        # fichier absent : normal, c'est le cas au tout premier demarrage
+        return defauts() + (joysticks_usine(), "usine")
     except Exception as exc:
         print("[store] %s illisible (%s), retour aux valeurs d'usine"
               % (C.PROFILES_FILE, exc))
-        return defauts() + ("usine",)
+        return defauts() + (joysticks_usine(), "usine")
 
     try:
         (profils, ordre, titres, couleurs, couleurs2, noms, combos,
-         apps, repli) = depuis_json(data, nb_touches)
+         apps, repli, joysticks) = depuis_json(data, nb_touches)
     except Exception as exc:
         print("[store] %s mal forme (%s), retour aux valeurs d'usine"
               % (C.PROFILES_FILE, exc))
-        return defauts() + ("usine",)
+        return defauts() + (joysticks_usine(), "usine")
 
     problemes = verifier(profils, ordre, nb_touches, combos)
     if problemes:
         print("[store] %s refuse, retour aux valeurs d'usine :" % C.PROFILES_FILE)
         for probleme in problemes:
             print("   -", probleme)
-        return defauts() + ("usine",)
+        return defauts() + (joysticks_usine(), "usine")
 
     return (profils, ordre, titres, couleurs, couleurs2, noms, combos, apps,
-            repli, "fichier")
+            repli, joysticks, "fichier")
 
 
 def enregistrer(profils, ordre, titres, couleurs, couleurs2, noms, combos,
-                apps, repli, nb_touches):
-    """Verifie puis ecrit. Retourne (True, "") ou (False, raison)."""
+                apps, repli, nb_touches, joysticks=None):
+    """Verifie puis ecrit. Retourne (True, "") ou (False, raison).
+
+    joysticks est FACULTATIF et vient en dernier, apres nb_touches : les
+    appels ecrits avant le joystick continuent donc de fonctionner mot pour
+    mot, et ecrivent les reglages d'usine. C'etait le but - ce tuple a deja
+    grandi deux fois, et chaque fois il a fallu retoucher une dizaine
+    d'appels.
+    """
+    if joysticks is None:
+        joysticks = joysticks_usine()
     problemes = verifier(profils, ordre, nb_touches, combos)
     if problemes:
         return False, " ; ".join(problemes)
@@ -3409,6 +3747,7 @@ def enregistrer(profils, ordre, titres, couleurs, couleurs2, noms, combos,
             "touches": liste,
             "combos": combos_vers_json((combos or {}).get(nom),
                                        (noms or {}).get(nom)),
+            "joystick": joystick_vers_json((joysticks or {}).get(nom)),
         }
 
     data = {"version": 2, "ordre": list(ordre), "profils": blocs,
@@ -3437,11 +3776,11 @@ def enregistrer_json(data, nb_touches):
     """Enregistre directement une configuration recue d'une page web."""
     try:
         (profils, ordre, titres, couleurs, couleurs2, noms, combos,
-         apps, repli) = depuis_json(data, nb_touches)
+         apps, repli, joysticks) = depuis_json(data, nb_touches)
     except Exception as exc:
         return False, "donnees illisibles : %s" % exc
     return enregistrer(profils, ordre, titres, couleurs, couleurs2, noms,
-                       combos, apps, repli, nb_touches)
+                       combos, apps, repli, nb_touches, joysticks)
 
 
 def effacer():
@@ -4843,7 +5182,7 @@ class Link:
 
 ## device/hid_keyboard.py
 
-`435 lignes - sha256 ed6650910bd594a5`
+`509 lignes - sha256 201234afb0c70afd`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -4930,6 +5269,25 @@ class HIDKeyboard:
         # qui permet à une touche du pad de se comporter comme la touche
         # Ctrl d'un vrai clavier : Ctrl reste enfoncé pendant que tu
         # cliques à la souris.
+        #
+        # DEUX SOURCES, ET C'EST UNE CORRECTION DE BOGUE. Avant le joystick,
+        # une seule chose pouvait maintenir des touches : le doigt sur une
+        # touche du pad. maintenir() faisait donc simplement
+        # "self.tenus = codes", une AFFECTATION.
+        #
+        # Le joystick a besoin du meme mecanisme : dans Civil 3D, l'orbite
+        # est Maj + clic du milieu, et ce Maj doit rester enfonce pendant
+        # tout le glissement. Avec une affectation, les deux s'ecrasaient :
+        # ton Ctrl disparaissait au milieu d'une selection, ou l'orbite
+        # partait sans son Maj et Civil 3D translatait au lieu de tourner.
+        # Deux symptomes du genre "ca marche une fois sur trois", les pires
+        # a diagnostiquer.
+        #
+        # On garde donc les deux sources separement, et self.tenus est leur
+        # UNION, recalculee a chaque changement. Tout le reste du fichier
+        # continue de lire self.tenus sans rien savoir de cette histoire.
+        self._tenus_touche = ()
+        self._tenus_joystick = ()
         self.tenus = ()
         self.fault = False
 
@@ -4985,23 +5343,74 @@ class HIDKeyboard:
         if not self.accepting():
             print("HID : maintien ignore, interface non prete")
             return False
-        # Traduit tout de suite pour verifier, comme submit().
-        frappes = compile_actions(actions, C.KEYBOARD_LAYOUT)
-        codes = ()
-        for frappe in frappes:
-            codes += frappe
-        self.tenus = codes
+        self._tenus_touche = self._codes(actions)
+        self._recalculer_tenus()
         self.release_needed = True     # provoque l'envoi de l'etat courant
         self.progress = ticks_ms()
         return True
 
     def relacher_maintien(self):
-        """Relâche les touches maintenues. Sans effet s'il n'y en a pas."""
-        if not self.tenus:
+        """Relâche les touches maintenues PAR UNE TOUCHE DU PAD.
+
+        Ne touche pas à ce que le joystick maintient : voir l'explication
+        des deux sources dans __init__.
+        """
+        if not self._tenus_touche:
             return
-        self.tenus = ()
+        self._tenus_touche = ()
+        self._recalculer_tenus()
         self.release_needed = True
         self.progress = ticks_ms()
+
+    def maintenir_joystick(self, actions):
+        """Enfonce et garde des touches POUR LE JOYSTICK (le Maj d'une orbite).
+
+        Même mécanisme que maintenir(), mais sur l'autre source : un
+        glissement de vue 3D et un modificateur tenu au pouce peuvent donc
+        coexister, ce qui est exactement ce qu'on fait dans Civil 3D.
+        """
+        if not self.accepting():
+            return False
+        self._tenus_joystick = self._codes(actions)
+        self._recalculer_tenus()
+        self.release_needed = True
+        self.progress = ticks_ms()
+        return True
+
+    def relacher_joystick(self):
+        """Relâche ce que le joystick maintenait. Sans effet s'il n'y a rien."""
+        if not self._tenus_joystick:
+            return
+        self._tenus_joystick = ()
+        self._recalculer_tenus()
+        self.release_needed = True
+        self.progress = ticks_ms()
+
+    def _codes(self, actions):
+        """Traduit une macro en codes de touches, tout de suite.
+
+        Comme submit() : on compile IMMEDIATEMENT pour qu'une macro
+        impossible a taper echoue ici, et pas au milieu d'un rapport USB.
+        """
+        codes = ()
+        for frappe in compile_actions(actions, C.KEYBOARD_LAYOUT):
+            codes += frappe
+        return codes
+
+    def _recalculer_tenus(self):
+        """self.tenus = union des deux sources, sans doublon.
+
+        L'ordre est stable - d'abord la touche, puis le joystick - pour que
+        les paquets envoyes soient reproductibles, ce dont les tests ont
+        besoin. Les modificateurs sont des valeurs negatives et ne comptent
+        pas dans la limite de six touches du rapport HID ; _avec_tenus() s'en
+        occupe deja plus bas.
+        """
+        tenus = tuple(self._tenus_touche)
+        for code in self._tenus_joystick:
+            if code not in tenus:
+                tenus += (code,)
+        self.tenus = tenus
 
     def cancel(self):
         """Oublie tout ce qui était prévu et programme un relâchement."""
@@ -5011,6 +5420,10 @@ class HIDKeyboard:
         # Un ESC, un changement de profil ou une panne doivent TOUT
         # relâcher, y compris un Ctrl resté enfoncé. Sinon le PC garde un
         # modificateur bloqué, ce qui est la pire panne possible.
+        # LES DEUX SOURCES, donc : le Maj d'une orbite en cours n'a aucune
+        # raison de survivre a un ESC ou a un changement de logiciel.
+        self._tenus_touche = ()
+        self._tenus_joystick = ()
         self.tenus = ()
         self.release_needed = True
         # INDISPENSABLE : le relâchement qu'on vient de programmer est une
@@ -5281,6 +5694,767 @@ def create_interface():
     interface = KeyboardWithLEDs()
     usb.device.get().init(interface, builtin_driver=True)
     return interface
+```
+
+---
+
+## device/hid_mouse.py
+
+`298 lignes - sha256 798fd70431376a5f`
+
+```python
+# -*- coding: utf-8 -*-
+"""
+hid_mouse.py - La souris USB, et la raison pour laquelle on la reecrit.
+
+=====================================================================
+POURQUOI CE FICHIER EXISTE
+=====================================================================
+La bibliotheque officielle de MicroPython fournit bien une souris :
+device/lib/usb/device/mouse.py, recopiee telle quelle (licence MIT,
+auteur Angus Gratton). Mais on ne peut pas l'utiliser directement, et la
+raison est grave.
+
+Sa methode send_report() contient ceci, mot pour mot :
+
+    while self.busy():
+        machine.idle()
+
+AUCUNE LIMITE DE TEMPS. Tant que l'hote n'a pas vide le precedent
+rapport, cette boucle tourne. Si le PC se met en veille, si le cable est
+arrache, si le pilote tousse, elle ne rend JAMAIS la main.
+
+Or tout le macropad vit dans une seule boucle cooperative. Un appel qui
+ne rend pas la main, c'est l'ecran fige, les LED figees, et surtout
+LE BOUTON ESC INOPERANT. On aurait echange un joystick contre la touche
+d'annulation : tres mauvaise affaire au milieu d'un dessin.
+
+La classe parente, elle, fait les choses correctement :
+
+    HIDInterface.send_report(self, report_data, timeout_ms=100)
+
+Elle calcule une echeance et rend False quand elle est depassee. La
+sous-classe souris MASQUE cette methode et perd la protection au passage.
+
+On reecrit donc l'envoi en passant par le parent avec timeout_ms=0, ce
+qui est exactement ce que fait hid_keyboard.py depuis le debut. Et le
+commentaire d'origine de la bibliotheque dit lui-meme que cette boucle
+d'attente peut etre retiree si l'on accepte de perdre un rapport de temps
+en temps - ce qui est precisement notre cas.
+
+=====================================================================
+POURQUOI PERDRE UN RAPPORT N'EST PAS GRAVE (MAIS PERDRE UN CLIC, OUI)
+=====================================================================
+Un rapport de souris transporte deux choses tres differentes :
+
+  LE DEPLACEMENT est RELATIF : "avance de 7 pixels". S'il est perdu, le
+  suivant arrive 12 ms plus tard. On ACCUMULE donc le deplacement non
+  envoye, et rien n'est reellement perdu, juste retarde d'un cheveu.
+
+  L'ETAT DES BOUTONS est ABSOLU : "le bouton du milieu est enfonce". S'il
+  est perdu, Windows reste sur son idee precedente - et un bouton du
+  milieu reste enfonce fait tourner la vue 3D sans fin. On REPETE donc
+  l'etat voulu a chaque tour jusqu'a ce qu'il parte vraiment.
+
+C'est pour ca que ce fichier distingue "ce que je veux" de "ce que
+Windows croit". Les deux ne sont pas toujours d'accord, et c'est normal.
+
+=====================================================================
+VOCABULAIRE DES VARIABLES
+=====================================================================
+  _voulu_milieu  etat du bouton du milieu que NOUS voulons
+  _etat_milieu   etat que Windows croit, d'apres le dernier envoi reussi
+  _dx, _dy       deplacement accumule, pas encore envoye
+  opened         Windows a-t-il configure la souris ?
+  fault          une panne grave est survenue, on n'envoie plus rien
+"""
+
+from time import ticks_ms, ticks_diff, sleep_ms
+
+# Le bornage vit dans joystick.py parce que c'est la que la valeur est
+# calculee, et qu'on veut la verifier sans materiel. Ici on s'en sert comme
+# d'un dernier filet : deux remparts valent mieux qu'un quand l'alternative
+# est une exception au milieu de la boucle principale.
+from joystick import DEPLACEMENT_MAX
+
+
+def _borne(valeur):
+    if valeur > DEPLACEMENT_MAX:
+        return DEPLACEMENT_MAX
+    if valeur < -DEPLACEMENT_MAX:
+        return -DEPLACEMENT_MAX
+    return int(valeur)
+
+
+class HIDMouse:
+    """Le pilote souris. N'attend jamais, et relache toujours."""
+
+    def __init__(self, interface):
+        self.interface = interface
+        self.opened = False
+        self.fault = False
+        self._voulu_milieu = False
+        self._etat_milieu = False
+        self._dx = 0
+        self._dy = 0
+        self._perdus = 0          # rapports refuses d'affilee, pour le log
+        self._prevenu = False
+
+    # ------------------------------------------------------------------
+    # Etats
+    # ------------------------------------------------------------------
+    def ready(self):
+        """Peut-on envoyer quelque chose a cet instant ?"""
+        return self.opened and not self.fault
+
+    def enfonce(self):
+        """Le bouton du milieu est-il enfonce cote Windows ?"""
+        return self._etat_milieu
+
+    def en_attente(self):
+        """Reste-t-il quelque chose a envoyer ?"""
+        return (self._voulu_milieu != self._etat_milieu
+                or bool(self._dx) or bool(self._dy))
+
+    # ------------------------------------------------------------------
+    # Demandes venant de main.py
+    # ------------------------------------------------------------------
+    def milieu(self, enfonce):
+        """Demande l'etat du bouton du milieu. Rien n'est envoye ici."""
+        self._voulu_milieu = bool(enfonce)
+
+    def bouger(self, dx, dy):
+        """Ajoute un deplacement a envoyer. Rien n'est envoye ici.
+
+        On ACCUMULE au lieu de remplacer : si le rapport precedent n'est pas
+        encore parti, les deux mouvements s'additionnent et le geste reste
+        fidele a ce que fait la main.
+        """
+        self._dx += int(dx)
+        self._dy += int(dy)
+        # On borne l'accumulation elle-meme. Sans cela, un joystick pousse a
+        # fond pendant que l'USB est bouche creerait une reserve de plusieurs
+        # milliers de pixels, qui partirait d'un coup au rebranchement : la
+        # vue ferait un saut spectaculaire et incomprehensible.
+        reserve = DEPLACEMENT_MAX * 2
+        if self._dx > reserve:
+            self._dx = reserve
+        elif self._dx < -reserve:
+            self._dx = -reserve
+        if self._dy > reserve:
+            self._dy = reserve
+        elif self._dy < -reserve:
+            self._dy = -reserve
+
+    def tout_relacher(self):
+        """Annule le deplacement en attente et demande le relachement.
+
+        Appele au changement de profil, sur ESC, et quand le joystick
+        abandonne un glissement. Le deplacement en attente est jete : il
+        appartenait au geste qu'on vient d'interrompre.
+        """
+        self._dx = 0
+        self._dy = 0
+        self._voulu_milieu = False
+
+    # ------------------------------------------------------------------
+    # Envoi
+    # ------------------------------------------------------------------
+    def tick(self, now=None):
+        """Envoie AU PLUS un rapport, et rend la main. Jamais bloquant.
+
+        Un seul rapport porte a la fois l'etat du bouton et le deplacement :
+        c'est le format USB d'une souris, et c'est aussi ce qui garantit que
+        le bouton s'enfonce AVANT que le mouvement ne commence, sans avoir a
+        synchroniser deux envois.
+        """
+        now = ticks_ms() if now is None else now
+        try:
+            ouvert = self.interface.is_open()
+        except Exception as exc:
+            self._panne("etat de l'interface illisible", exc)
+            return
+
+        if not ouvert:
+            # Debranchement, veille, ou reinitialisation du port. Windows a
+            # de toute facon oublie l'etat des boutons : on repart de zero
+            # plutot que de croire qu'un bouton est encore enfonce.
+            if self.opened:
+                print("Souris : deconnexion/reset USB")
+            self.opened = False
+            self._etat_milieu = False
+            self._dx = 0
+            self._dy = 0
+            return
+
+        if not self.opened:
+            print("Souris : interface ouverte par Windows")
+            self.opened = True
+            # Un hote qui vient de reconfigurer le peripherique a tout
+            # oublie : un incident passe ne doit pas exiger un RESET.
+            self.fault = False
+            self._etat_milieu = False
+
+        if self.fault or not self.en_attente():
+            return
+
+        dx = _borne(self._dx)
+        dy = _borne(self._dy)
+        try:
+            envoye = self.interface.rapport(self._voulu_milieu, dx, dy)
+        except Exception as exc:
+            self._panne("envoi impossible", exc)
+            return
+
+        if not envoye:
+            # L'USB est occupe. On ne retire RIEN de l'accumulation et on
+            # reessaiera au prochain tour, dans deux millisecondes.
+            self._perdus += 1
+            if self._perdus == 50 and not self._prevenu:
+                self._prevenu = True
+                print("Souris : l'USB refuse les rapports depuis 100 ms")
+            return
+
+        self._perdus = 0
+        self._etat_milieu = self._voulu_milieu
+        self._dx -= dx
+        self._dy -= dy
+
+    def _panne(self, quoi, exc):
+        if not self.fault:
+            print("Souris : %s (%s)" % (quoi, exc))
+            print("Souris : desactivee. Le clavier continue de fonctionner.")
+        self.fault = True
+        self._dx = 0
+        self._dy = 0
+        self._voulu_milieu = False
+
+    def close(self):
+        """Appele a l'arret de main.py. Garantit que rien ne reste enfonce.
+
+        UN BOUTON DU MILIEU RESTE ENFONCE EST PIRE QU'UN CTRL RESTE
+        ENFONCE : la vue 3D tourne sans fin, et il faut aller cliquer dans
+        le logiciel pour s'en sortir. On s'accorde donc 150 ms - le meme
+        budget que le clavier - pour envoyer le relachement.
+        """
+        self._dx = 0
+        self._dy = 0
+        self._voulu_milieu = False
+        if not self._etat_milieu:
+            # Rien n'etait enfonce : il n'y a rien a reparer. On ne touche
+            # pas a l'USB, et le REPL de Thonny reste disponible.
+            return
+        depart = ticks_ms()
+        try:
+            while ticks_diff(ticks_ms(), depart) < 150:
+                if self.interface.is_open() and self.interface.rapport(False):
+                    self._etat_milieu = False
+                    return
+                sleep_ms(1)
+        except Exception as exc:
+            print("Souris : liberation finale echouee", exc)
+        print("Souris : bouton peut-etre encore enfonce cote PC.")
+        print("Souris : un clic du milieu dans le logiciel 3D le liberera.")
+
+
+def creer_interface():
+    """Fabrique l'interface souris SANS la declarer a Windows.
+
+    La declaration se fait ailleurs, en UN SEUL appel qui porte le clavier
+    et la souris ensemble - c'est ce qu'on appelle un peripherique
+    composite. Voir hid_keyboard.create_interface().
+    """
+    import usb.device                                    # noqa: F401
+    from usb.device.hid import HIDInterface
+    from usb.device.mouse import MouseInterface
+    import struct
+
+    class SourisNonBloquante(MouseInterface):
+        """La souris officielle, mais qui rend toujours la main.
+
+        On reecrit send_report() au lieu de l'appeler : voir l'explication
+        complete en tete de fichier. L'ordre des bits est celui de la
+        bibliotheque d'origine et du descripteur HID - bouton 1 (gauche) en
+        bit 0, bouton 2 (droit) en bit 1, bouton 3 (milieu) en bit 2. Les
+        intervertir donnerait une souris qui clique a cote.
+        """
+
+        def send_report(self, dx=0, dy=0, timeout_ms=0):
+            if self.busy():
+                # LA LIGNE QUI JUSTIFIE TOUT CE FICHIER. L'originale
+                # attendait ici, sans limite. Nous, on renonce et on
+                # reessaiera : l'appelant accumule le deplacement.
+                return False
+            octet = 0
+            if self._l:
+                octet |= 1 << 0
+            if self._r:
+                octet |= 1 << 1
+            if self._m:
+                octet |= 1 << 2
+            struct.pack_into("Bbb", self._buf, 0, octet, dx, dy)
+            return HIDInterface.send_report(self, self._buf, timeout_ms)
+
+        def rapport(self, milieu, dx=0, dy=0):
+            """Un seul rapport : l'etat du bouton du milieu et le mouvement."""
+            self._m = bool(milieu)
+            return self.send_report(dx, dy)
+
+    return SourisNonBloquante(interface_str="Macropad 3D Mouse")
+```
+
+---
+
+## device/joystick.py
+
+`445 lignes - sha256 392cfc0b6c03a1a9`
+
+```python
+# -*- coding: utf-8 -*-
+"""
+joystick.py - Le stick analogique, traduit en mouvement de vue 3D.
+
+=====================================================================
+CE FICHIER NE TOUCHE AUCUN MATERIEL
+=====================================================================
+Il ne lit aucune broche, il n'envoie rien par USB, il ne connait ni
+l'ecran ni le port serie. On lui donne DEUX NOMBRES - la position brute
+des deux axes - et il repond ce qu'il faut faire.
+
+C'est ce qui le rend testable sur un PC, sans carte et sans joystick :
+tous les cas penibles - un centre decale, un axe inverse, le stick qui
+traverse le centre au milieu d'un mouvement - se verifient en une
+milliseconde.
+
+Le meme choix a ete fait pour agenda.py, et pour la meme raison.
+
+=====================================================================
+POURQUOI UNE "MACHINE A ETATS" ET PAS UN SIMPLE CALCUL
+=====================================================================
+Tourner une vue 3D, ce n'est pas "deplacer la souris". Dans tous les
+logiciels, c'est un GLISSEMENT : on enfonce un bouton, on deplace, on
+relache. Trois moments differents, et l'ordre compte.
+
+    repos      le stick est au milieu, rien n'est enfonce
+    debut      le stick sort du milieu -> enfoncer le bouton
+    glissement -> envoyer des petits deplacements
+    fin        le stick est revenu au milieu -> relacher le bouton
+
+Un simple calcul "position -> deplacement" ne saurait pas ou enfoncer ni
+ou relacher. D'ou les quatre etats ci-dessous.
+
+=====================================================================
+LE PIEGE DU RETOUR AU CENTRE
+=====================================================================
+Quand tu passes d'une rotation vers la gauche a une rotation vers la
+droite, le stick TRAVERSE le centre. Pendant un instant tres court, il
+est donc "au repos".
+
+Sans precaution, le glissement serait coupe en deux : bouton relache,
+bouton re-enfonce. Dans Blender cela termine l'orbite et en commence une
+autre - la vue saute. D'ou JOYSTICK_FIN_MS : on n'accepte la fin d'un
+glissement qu'apres un court sejour au repos.
+
+=====================================================================
+VOCABULAIRE
+=====================================================================
+  brut        ce que rend read_u16() : un entier de 0 a 65535
+  centre      la valeur brute du stick AU REPOS. Elle ne vaut jamais
+              32768 : chaque exemplaire a la sienne, d'ou l'etalonnage.
+  fraction    la position ramenee entre -1.0 et +1.0, zone morte deduite
+  zone morte  la plage autour du centre ou l'on considere le stick immobile
+  cadence     le temps minimal entre deux envois (l'USB ne suit pas au-dela)
+"""
+
+from time import ticks_ms, ticks_diff, ticks_add
+import config as C
+
+# Ce que rend read_u16() au maximum. C'est l'echelle de MicroPython, pas
+# celle du convertisseur : la bibliotheque etire toujours la mesure sur
+# seize bits, quelle que soit la resolution reelle du materiel.
+PLEINE_ECHELLE = 65535
+
+# Un rapport de souris USB ne transporte qu'un octet signe par axe. Au-dela,
+# la bibliotheque leve ValueError - voir la note dans hid_mouse.py.
+DEPLACEMENT_MAX = 127
+
+# Les quatre etats du glissement.
+REPOS = "repos"
+GLISSE = "glisse"
+
+# Ce que service() demande a main.py de faire. main.py est le seul a savoir
+# comment parler a l'USB ; ce fichier ne fait que nommer l'intention.
+RIEN = "rien"
+COMMENCER = "commencer"      # enfoncer le modificateur puis le bouton
+BOUGER = "bouger"            # envoyer (dx, dy)
+TERMINER = "terminer"        # relacher le bouton puis le modificateur
+
+# Les modes possibles, et ils sont verifies : une valeur inconnue venant
+# d'un profils.json bricole a la main ne doit pas faire tomber la carte.
+MODE_ETEINT = "eteint"
+MODE_SOURIS = "souris"
+MODE_TOUCHES = "touches"
+MODES = (MODE_ETEINT, MODE_SOURIS, MODE_TOUCHES)
+
+# Ce qui peut etre maintenu pendant le glissement. C'est le seul reglage
+# qui distingue Blender de Civil 3D : dans l'un l'orbite est le clic du
+# milieu seul, dans l'autre c'est Maj + clic du milieu.
+MODIFICATEURS = ("", "MAJ", "CTRL", "ALT")
+
+# Les quatre directions du mode "touches", dans l'ordre ou la page web et
+# profiles.py les presentent.
+DIRECTIONS = ("gauche", "droite", "haut", "bas")
+
+
+def reglage(nom, defaut):
+    """Lit un reglage de config.py, avec un repli s'il est ancien.
+
+    Meme detour que dans main.py, et pour la meme raison : le projet te dit
+    de GARDER ton config.py quand tu televerses une nouvelle version du
+    dossier device. Un firmware neuf tourne donc tres souvent avec un
+    config.py qui ne connait pas encore les constantes du joystick.
+    """
+    return getattr(C, nom, defaut)
+
+
+def fraction(brut, centre, zone_morte, inverse=False):
+    """Position brute d'un axe -> fraction de -1.0 a +1.0. 0.0 au repos.
+
+    TROIS CHOSES SE PASSENT ICI, ET AUCUNE N'EST SUPERFLUE.
+
+    1. ON NORMALISE CHAQUE COTE SEPAREMENT. Si le centre mesure 30000, il
+       reste 35535 de course vers le haut et seulement 30000 vers le bas.
+       Diviser les deux par la meme valeur rendrait le stick plus rapide
+       dans un sens que dans l'autre - defaut tres desagreable, et tres
+       difficile a comprendre quand on ne sait pas d'ou il vient.
+
+    2. ON RETIRE LA ZONE MORTE. En dessous, on rend 0.0 : un stick au repos
+       ne doit pas faire deriver la vue tout seul.
+
+    3. ON RE-ETALE CE QUI RESTE. Sans cela, le mouvement SAUTERAIT a la
+       sortie de la zone morte : avec une zone morte de 12 %, le premier
+       deplacement vaudrait deja 12 % de la vitesse maximale. On remet donc
+       l'intervalle restant a l'echelle, et le mouvement demarre a zero.
+    """
+    try:
+        brut = int(brut)
+        centre = int(centre)
+    except (TypeError, ValueError):
+        return 0.0
+    if centre <= 0 or centre >= PLEINE_ECHELLE:
+        # Un centre a 0 ou au maximum veut dire que l'etalonnage s'est fait
+        # stick pousse a fond, ou que la broche ne lit rien. Dans les deux
+        # cas on ne peut rien calculer de fiable : on rend 0.0 plutot qu'un
+        # mouvement invente.
+        return 0.0
+
+    ecart = brut - centre
+    if ecart >= 0:
+        f = ecart / float(PLEINE_ECHELLE - centre)
+    else:
+        f = ecart / float(centre)
+    if f > 1.0:
+        f = 1.0
+    elif f < -1.0:
+        f = -1.0
+
+    zone = _zone(zone_morte)
+    if -zone <= f <= zone:
+        return 0.0
+    if f > 0:
+        f = (f - zone) / (1.0 - zone)
+    else:
+        f = (f + zone) / (1.0 - zone)
+    return -f if inverse else f
+
+
+def _zone(pourcentage):
+    """La zone morte en fraction de la course, bornee pour rester utile.
+
+    En dessous de 1 %, un stick de qualite moyenne derive tout seul. Au-dela
+    de 60 %, il ne resterait presque plus de course utile. On borne donc, au
+    lieu de refuser : un reglage absurde doit degrader le confort, pas
+    empecher le joystick de fonctionner.
+    """
+    try:
+        valeur = float(pourcentage)
+    except (TypeError, ValueError):
+        valeur = 12.0
+    if valeur < 1.0:
+        valeur = 1.0
+    elif valeur > 60.0:
+        valeur = 60.0
+    return valeur / 100.0
+
+
+def deplacement(f, sensibilite):
+    """Fraction -> nombre de pas a envoyer, BORNE.
+
+    LE BORNAGE N'EST PAS UNE PRECAUTION DECORATIVE. La bibliotheque souris
+    officielle leve ValueError des qu'un axe sort de -127..127, et son
+    empaquetage (struct "Bbb") leverait de toute facon. Une sensibilite mal
+    reglee ferait donc tomber la boucle principale, c'est-a-dire tout le
+    macropad : plus d'ecran, plus de LED, plus de bouton ESC.
+    """
+    try:
+        sensibilite = float(sensibilite)
+    except (TypeError, ValueError):
+        sensibilite = 6.0
+    if sensibilite < 0:
+        sensibilite = 0.0
+    pas = int(round(f * sensibilite))
+    if pas > DEPLACEMENT_MAX:
+        return DEPLACEMENT_MAX
+    if pas < -DEPLACEMENT_MAX:
+        return -DEPLACEMENT_MAX
+    return pas
+
+
+def direction(fx, fy):
+    """La direction dominante, pour le mode "touches". None si au repos.
+
+    Le mode "touches" n'envoie pas un deplacement mais un raccourci - par
+    exemple le pave numerique 4 ou 6 de Blender, qui tournent la vue par
+    pas de 15 degres. Un raccourci n'a pas de nuance : il faut choisir UNE
+    direction, et c'est la plus franche qui gagne.
+    """
+    if not fx and not fy:
+        return None
+    if abs(fx) >= abs(fy):
+        return "droite" if fx > 0 else "gauche"
+    # Attention au sens : sur un ecran, l'axe Y descend. Pousser le stick
+    # vers l'avant doit donner "haut", et c'est au reglage inverser_y de
+    # corriger si ton module est monte dans l'autre sens.
+    return "bas" if fy > 0 else "haut"
+
+
+def reglages_valides(brut):
+    """Nettoie un bloc de reglages venant d'un profil. Ne leve jamais.
+
+    Un profils.json peut avoir ete edite a la main, ecrit par une version
+    plus ancienne, ou tronque. La regle du projet est constante : on repare
+    en silence vers une valeur sure, on ne refuse pas, et surtout on ne
+    laisse pas une valeur folle arriver jusqu'a l'USB.
+    """
+    if not isinstance(brut, dict):
+        brut = {}
+    mode = str(brut.get("mode", MODE_ETEINT)).strip().lower()
+    if mode not in MODES:
+        mode = MODE_ETEINT
+    modif = str(brut.get("modificateur", "")).strip().upper()
+    if modif in ("SHIFT",):
+        modif = "MAJ"
+    if modif not in MODIFICATEURS:
+        modif = ""
+    try:
+        sens = int(brut.get("sensibilite", 6))
+    except (TypeError, ValueError):
+        sens = 6
+    if sens < 1:
+        sens = 1
+    elif sens > 15:
+        sens = 15
+    try:
+        zone = int(brut.get("zone_morte", 12))
+    except (TypeError, ValueError):
+        zone = 12
+    if zone < 1:
+        zone = 1
+    elif zone > 60:
+        zone = 60
+    return {
+        "mode": mode,
+        "modificateur": modif,
+        "sensibilite": sens,
+        "zone_morte": zone,
+        "inverser_x": bool(brut.get("inverser_x", False)),
+        "inverser_y": bool(brut.get("inverser_y", False)),
+    }
+
+
+class Joystick:
+    """Ce que le stick demande, sans jamais savoir comment on l'executera."""
+
+    def __init__(self):
+        self.centre_x = None        # None = pas encore etalonne
+        self.centre_y = None
+        self.etat = REPOS
+        self.reglages = reglages_valides(None)
+        self._rentre = None         # instant du retour au repos, ou None
+        self._prochain = 0          # avant cet instant, on n'envoie rien
+        self._aveugle = 0           # instant jusqu'auquel on ignore les axes
+        self.derniere = (0.0, 0.0)  # pour l'ecran et les diagnostics
+
+    # ------------------------------------------------------------------
+    # Etalonnage
+    # ------------------------------------------------------------------
+    def etalonner(self, lectures):
+        """Memorise le centre a partir de plusieurs lectures AU REPOS.
+
+        Retourne True si l'etalonnage est credible. Il echoue - et c'est
+        voulu - si le stick bougeait pendant la mesure : un centre pris
+        stick pousse rendrait la vue folle, et personne ne comprendrait
+        pourquoi. Mieux vaut un joystick qui refuse de demarrer qu'un
+        joystick qui derive.
+        """
+        xs, ys = [], []
+        for lecture in lectures or ():
+            try:
+                x, y = lecture
+                xs.append(int(x))
+                ys.append(int(y))
+            except (TypeError, ValueError):
+                continue
+        if len(xs) < 3:
+            return False
+        # Une dispersion large pendant la mesure veut dire que le stick
+        # n'etait pas au repos. 4 % de la pleine echelle laisse passer le
+        # bruit normal du convertisseur et arrete une main sur le stick.
+        marge = PLEINE_ECHELLE * 4 // 100
+        if (max(xs) - min(xs)) > marge or (max(ys) - min(ys)) > marge:
+            return False
+        self.centre_x = sum(xs) // len(xs)
+        self.centre_y = sum(ys) // len(ys)
+        return self.etalonne()
+
+    def etalonne(self):
+        """A-t-on un centre exploitable ?"""
+        for centre in (self.centre_x, self.centre_y):
+            if centre is None or centre <= 0 or centre >= PLEINE_ECHELLE:
+                return False
+        return True
+
+    # ------------------------------------------------------------------
+    # Reglages
+    # ------------------------------------------------------------------
+    def regler(self, brut):
+        """Applique les reglages du profil actif.
+
+        Appele a chaque changement de profil, y compris quand le PC le
+        change tout seul selon la fenetre active. Un glissement en cours est
+        ABANDONNE : les reglages d'un logiciel ne doivent pas finir un
+        mouvement commence dans un autre.
+        """
+        self.reglages = reglages_valides(brut)
+        return self.etat != REPOS
+
+    def mode(self):
+        return self.reglages["mode"]
+
+    def modificateur(self):
+        return self.reglages["modificateur"]
+
+    # ------------------------------------------------------------------
+    # Lecture
+    # ------------------------------------------------------------------
+    def fractions(self, x, y):
+        """Les deux axes, zone morte et inversion appliquees."""
+        zone = self.reglages["zone_morte"]
+        fx = fraction(x, self.centre_x, zone, self.reglages["inverser_x"])
+        fy = fraction(y, self.centre_y, zone, self.reglages["inverser_y"])
+        self.derniere = (fx, fy)
+        return fx, fy
+
+    def ignorer(self, now=None, duree=None):
+        """Ferme les yeux sur les axes pendant un court instant.
+
+        A QUOI CA SERT : sur un module a quelques euros, le clic du stick
+        est dur et decentre. En enfoncant, on BOUGE le stick. Comme ce clic
+        est devenu la touche B1, chaque appui enverrait un petit mouvement
+        parasite a la vue 3D.
+
+        Pendant cet aveuglement, un glissement en cours n'est NI poursuivi
+        NI termine : le chronometre du retour au repos est gele. Un clic au
+        milieu d'une orbite ne la coupe donc pas.
+        """
+        now = ticks_ms() if now is None else now
+        if duree is None:
+            duree = reglage("JOYSTICK_CLIC_AVEUGLE_MS", 80)
+        self._aveugle = ticks_add(now, int(duree))
+
+    def service(self, x, y, now=None):
+        """Le coeur. Retourne (action, dx, dy) a chaque tour de boucle.
+
+        Appele environ 500 fois par seconde, et c'est volontaire : lire les
+        axes est tres rapide. Ce qui est limite, c'est l'ENVOI - l'USB ne
+        transporte qu'environ 125 rapports par seconde - et c'est la cadence
+        qui s'en occupe.
+        """
+        now = ticks_ms() if now is None else now
+
+        # Eteint, ou pas etalonne : on ne fait rien, mais on n'oublie pas de
+        # refermer un glissement qui serait reste ouvert.
+        if self.mode() == MODE_ETEINT or not self.etalonne():
+            if self.etat != REPOS:
+                return self._terminer()
+            return (RIEN, 0, 0)
+
+        if ticks_diff(now, self._aveugle) < 0:
+            self._rentre = None        # on gele le retour au repos
+            return (RIEN, 0, 0)
+
+        fx, fy = self.fractions(x, y)
+        actif = bool(fx) or bool(fy)
+
+        if self.etat == REPOS:
+            if not actif:
+                return (RIEN, 0, 0)
+            self.etat = GLISSE
+            self._rentre = None
+            # On attend une cadence avant le premier deplacement : Windows
+            # doit voir le bouton s'enfoncer AVANT de voir bouger, sinon le
+            # logiciel 3D prend le mouvement pour un simple survol.
+            self._prochain = ticks_add(now, self._cadence())
+            return (COMMENCER, 0, 0)
+
+        # --- un glissement est en cours ---
+        if actif:
+            self._rentre = None
+            if ticks_diff(now, self._prochain) < 0:
+                return (RIEN, 0, 0)
+            self._prochain = ticks_add(now, self._cadence())
+            sens = self.reglages["sensibilite"]
+            dx = deplacement(fx, sens)
+            dy = deplacement(fy, sens)
+            if not dx and not dy:
+                # Arrondi a zero : inutile d'occuper l'USB pour ne rien dire.
+                return (RIEN, 0, 0)
+            return (BOUGER, dx, dy)
+
+        # Le stick est revenu au repos. On ne termine pas tout de suite :
+        # voir "LE PIEGE DU RETOUR AU CENTRE" en tete de fichier.
+        if self._rentre is None:
+            self._rentre = now
+        if ticks_diff(now, self._rentre) >= reglage("JOYSTICK_FIN_MS", 120):
+            return self._terminer()
+        return (RIEN, 0, 0)
+
+    def abandonner(self):
+        """Oublie un glissement en cours. True s'il faut encore relacher.
+
+        Appele au changement de profil, a l'appui sur ESC, et dans le
+        finally de la boucle principale. UN BOUTON DU MILIEU RESTE ENFONCE
+        COTE WINDOWS EST PIRE QU'UN CTRL : la vue tourne sans fin et il faut
+        aller cliquer pour s'en sortir.
+        """
+        if self.etat == REPOS:
+            return False
+        self.etat = REPOS
+        self._rentre = None
+        return True
+
+    def _terminer(self):
+        self.etat = REPOS
+        self._rentre = None
+        return (TERMINER, 0, 0)
+
+    def _cadence(self):
+        valeur = int(reglage("JOYSTICK_CADENCE_MS", 12))
+        # En dessous de 8 ms on depasse ce que l'interface accepte
+        # (interval_ms=8 par defaut dans la bibliotheque) : les rapports
+        # seraient simplement perdus, ce qui donnerait un mouvement saccade
+        # sans que rien ne le signale.
+        return valeur if valeur >= 8 else 8
 ```
 
 ---
@@ -6871,7 +8045,7 @@ def limiter(couleur):
 
 ## device/diag.py
 
-`772 lignes - sha256 8ede01afae27a97d`
+`773 lignes - sha256 b76969c9adb05e7e`
 
 ```python
 # -*- coding: utf-8 -*-
@@ -6930,15 +8104,16 @@ MODULES_ATTENDUS = ("config", "profiles", "runtime", "inputs", "gestures",
                     "hid_keyboard", "display", "agenda", "led", "rgb",
                     "sh1106")
 
-# Nombre de valeurs que store.charger() doit rendre. Il a grandi deux fois
-# (les combinaisons, puis les noms complets), et chaque fois une carte dont
+# Nombre de valeurs que store.charger() doit rendre. Il a grandi trois fois
+# (les combinaisons, les noms complets, puis le joystick), et chaque fois
+# une carte dont
 # on n'avait televerse qu'une partie des fichiers refusait de demarrer sur
 # un message qui ne nomme personne :
 #
 #     ValueError: too many values to unpack (expected 9)
 #
 # Rien n'y dit QUEL fichier est en retard. Ce controle-la le dit.
-CHAMPS_CHARGER = 10
+CHAMPS_CHARGER = 11
 
 # Les reglages ajoutes au fil des versions. Un config.py conserve d'une
 # version precedente ne les a pas : le firmware se rabat sur une valeur
@@ -9393,5 +10568,116 @@ class LEDCode:
     SCROLL_LOCK = 0x04
     COMPOSE = 0x08
     KANA = 0x10
+```
+
+---
+
+## device/lib/usb/device/mouse.py
+
+> Fichier TIERS repris sans modification (micropython-lib, MIT).
+
+`100 lignes - sha256 651de586bfa1a6f7`
+
+```python
+# MicroPython USB Mouse module
+#
+# MIT license; Copyright (c) 2023-2024 Angus Gratton
+from micropython import const
+import struct
+import machine
+
+from usb.device.hid import HIDInterface
+
+_INTERFACE_PROTOCOL_MOUSE = const(0x02)
+
+
+class MouseInterface(HIDInterface):
+    # A basic three button USB mouse HID interface
+    def __init__(self, interface_str="MicroPython Mouse"):
+        super().__init__(
+            _MOUSE_REPORT_DESC,
+            protocol=_INTERFACE_PROTOCOL_MOUSE,
+            interface_str=interface_str,
+        )
+        self._l = False  # Left button
+        self._m = False  # Middle button
+        self._r = False  # Right button
+        self._buf = bytearray(3)
+
+    def send_report(self, dx=0, dy=0):
+        b = 0
+        if self._l:
+            b |= 1 << 0
+        if self._r:
+            b |= 1 << 1
+        if self._m:
+            b |= 1 << 2
+
+        # Wait for any pending report to be sent to the host
+        # before updating contents of _buf.
+        #
+        # This loop can be removed if you don't care about possibly missing a
+        # transient report, the final report buffer contents will always be the
+        # last one sent to the host (it just might lose one of the ones in the
+        # middle).
+        while self.busy():
+            machine.idle()
+
+        struct.pack_into("Bbb", self._buf, 0, b, dx, dy)
+
+        return super().send_report(self._buf)
+
+    def click_left(self, down=True):
+        self._l = down
+        return self.send_report()
+
+    def click_middle(self, down=True):
+        self._m = down
+        return self.send_report()
+
+    def click_right(self, down=True):
+        self._r = down
+        return self.send_report()
+
+    def move_by(self, dx, dy):
+        if not -127 <= dx <= 127:
+            raise ValueError("dx")
+        if not -127 <= dy <= 127:
+            raise ValueError("dy")
+        return self.send_report(dx, dy)
+
+
+# Basic 3-button mouse HID Report Descriptor.
+# This is based on Appendix E.10 of the HID v1.11 document.
+# fmt: off
+_MOUSE_REPORT_DESC = (
+    b'\x05\x01'  # Usage Page (Generic Desktop)
+        b'\x09\x02'  # Usage (Mouse)
+    b'\xA1\x01'  # Collection (Application)
+        b'\x09\x01'  # Usage (Pointer)
+        b'\xA1\x00'  # Collection (Physical)
+            b'\x05\x09'  # Usage Page (Buttons)
+                b'\x19\x01'  # Usage Minimum (01),
+                b'\x29\x03'  # Usage Maximum (03),
+                b'\x15\x00'  # Logical Minimum (0),
+                b'\x25\x01'  # Logical Maximum (1),
+                b'\x95\x03'  # Report Count (3),
+                b'\x75\x01'  # Report Size (1),
+                b'\x81\x02'  # Input (Data, Variable, Absolute), ;3 button bits
+                b'\x95\x01'  # Report Count (1),
+                b'\x75\x05'  # Report Size (5),
+                b'\x81\x01'  # Input (Constant), ;5 bit padding
+            b'\x05\x01'  # Usage Page (Generic Desktop),
+                b'\x09\x30'  # Usage (X),
+                b'\x09\x31'  # Usage (Y),
+                b'\x15\x81'  # Logical Minimum (-127),
+                b'\x25\x7F'  # Logical Maximum (127),
+                b'\x75\x08'  # Report Size (8),
+                b'\x95\x02'  # Report Count (2),
+                b'\x81\x06'  # Input (Data, Variable, Relative), ;2 position bytes (X & Y)
+        b'\xC0'  # End Collection
+    b'\xC0'  # End Collection
+)
+# fmt: on
 ```
 

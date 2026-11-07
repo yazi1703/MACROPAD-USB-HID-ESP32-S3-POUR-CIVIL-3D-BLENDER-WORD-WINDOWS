@@ -54,15 +54,16 @@ MODULES_ATTENDUS = ("config", "profiles", "runtime", "inputs", "gestures",
                     "hid_keyboard", "display", "agenda", "led", "rgb",
                     "sh1106")
 
-# Nombre de valeurs que store.charger() doit rendre. Il a grandi deux fois
-# (les combinaisons, puis les noms complets), et chaque fois une carte dont
+# Nombre de valeurs que store.charger() doit rendre. Il a grandi trois fois
+# (les combinaisons, les noms complets, puis le joystick), et chaque fois
+# une carte dont
 # on n'avait televerse qu'une partie des fichiers refusait de demarrer sur
 # un message qui ne nomme personne :
 #
 #     ValueError: too many values to unpack (expected 9)
 #
 # Rien n'y dit QUEL fichier est en retard. Ce controle-la le dit.
-CHAMPS_CHARGER = 10
+CHAMPS_CHARGER = 11
 
 # Les reglages ajoutes au fil des versions. Un config.py conserve d'une
 # version precedente ne les a pas : le firmware se rabat sur une valeur

@@ -358,6 +358,78 @@ NOMS = {
 }
 
 
+# =====================================================================
+# LE JOYSTICK 3D, PROFIL PAR PROFIL
+# =====================================================================
+# POURQUOI CES REGLAGES NE PEUVENT PAS ETRE LES MEMES PARTOUT, ET C'EST
+# LE POINT IMPORTANT : chaque logiciel 3D a SA convention de navigation.
+#
+#   Blender          orbite = clic du milieu glisse, SANS modificateur
+#   Civil 3D         orbite = MAJ + clic du milieu glisse
+#
+# C'est INVERSE entre les deux : le meme geste physique fait tourner dans
+# l'un et translater dans l'autre. Un comportement unique est donc
+# impossible, et c'est pour cela que le reglage appartient au profil et
+# bascule tout seul quand le PC change de logiciel.
+#
+# InfraWorks et RealWorks ne sont PAS reglés ici, volontairement :
+#   - InfraWorks change de convention selon la version, et possede une
+#     option "Invert Pan/Orbit Mouse Buttons" qui echange les deux. Meme
+#     la documentation Autodesk se contredit d'une version a l'autre.
+#   - Pour RealWorks, aucune documentation Trimble fiable sur le clic du
+#     milieu n'a pu etre trouvee.
+# Inventer un reglage pour ces deux-la donnerait un joystick qui translate
+# quand tu veux tourner, sans que rien ne l'explique. Ils demarrent donc
+# ETEINTS, et le relevé se fait en deux minutes, a la souris :
+#   1. clic du milieu maintenu + deplacement -> ca tourne, ou ca translate ?
+#   2. recommencer avec Maj, puis Ctrl, puis Alt maintenu.
+# Celui des quatre qui donne l'orbite va dans "modificateur".
+#
+# LES CHAMPS
+#   mode          "souris"  = clic du milieu glisse (orbite fluide)
+#                 "touches" = envoie les raccourcis de "directions"
+#                 "eteint"  = le joystick ne fait rien dans ce logiciel
+#   modificateur  ""  "MAJ"  "CTRL"  "ALT" : maintenu pendant le glissement
+#   sensibilite   1 a 15 : pas de souris a pleine inclinaison
+#   zone_morte    1 a 60 % : en dessous, le stick est considere au repos
+#   inverser_x/y  si ton module est monte dans l'autre sens
+#   directions    mode "touches" seulement : une macro par direction
+JOYSTICK = {
+    # Blender : l'orbite est le clic du milieu SEUL.
+    "BLENDER": {
+        "mode": "souris",
+        "modificateur": "",
+        "sensibilite": 7,
+        "zone_morte": 12,
+        # Repli clavier si tu preferes le mode "touches" : le pave
+        # numerique 4 et 6 tournent la vue par pas de 15 degres, 8 et 2 la
+        # font basculer. C'est la navigation d'usine de Blender.
+        "directions": {
+            "gauche": [("key", "KP_4")],
+            "droite": [("key", "KP_6")],
+            "haut": [("key", "KP_8")],
+            "bas": [("key", "KP_2")],
+        },
+    },
+
+    # Civil 3D / AutoCAD : l'orbite demande MAJ en plus. Sans lui, le
+    # meme geste translate la vue (un "pan"), ce qui est tres deroutant
+    # quand on vient de Blender.
+    "CIVIL3D": {
+        "mode": "souris",
+        "modificateur": "MAJ",
+        "sensibilite": 6,
+        "zone_morte": 12,
+        "directions": {},
+    },
+
+    # Dans un traitement de texte, un joystick n'a aucun sens comme
+    # souris. Eteint, donc - et c'est un reglage, pas un oubli.
+    "WORD": {"mode": "eteint"},
+    "WINDOWS": {"mode": "eteint"},
+}
+
+
 # Nom affiche a l'ecran quand il differe de la cle interne.
 TITLES = {"CIVIL3D": "CIVIL 3D"}
 
