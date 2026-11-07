@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Le Joystick du Macropad</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=Spectral:wght@300;400;500;600&display=swap">
+<style>:root{padding:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+<style>
+/* Mise en page : une colonne de lecture d'environ 66 caracteres, posee sur
+   un papier de plan. Les dessins techniques sortent en pleine largeur sur
+   un fond de tirage bleu. Tout est aligne a gauche, comme un plan. */
+:root{
+  --papier:#e8ece7;        /* papier de plan, vert-gris froid */
+  --papier-2:#f2f5f1;
+  --encre:#14211f;         /* encre de dessin */
+  --encre-2:#485a56;
+  --encre-3:#6f817c;
+  --trait:#c3cdc6;
+  --bleu:#152d4a;          /* tirage bleu */
+  --bleu-2:#1d3b60;
+  --craie:#eef3f7;         /* le trait blanc sur le tirage */
+  --cyan:#0e6f7a;          /* l'accent : encre d'instrument */
+  --jaune:#9a7406;         /* signalisation de chantier */
+  --jaune-fond:#f6eec9;
+  --rouge:#9d2a1c;
+  --rouge-fond:#f6e2de;
+  --vert:#1f6340;
+  --vert-fond:#dfeee4;
+  --titre:"Archivo Narrow","Arial Narrow",Arial,sans-serif;
+  --texte:"Spectral",Georgia,"Times New Roman",serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --papier:#101715; --papier-2:#18211e;
+  --encre:#e4ebe6; --encre-2:#a2b2ad; --encre-3:#7e8f8a;
+  --trait:#2b3734;
+  --bleu:#0c1d31; --bleu-2:#132a45; --craie:#dde8f0;
+  --cyan:#5cc3cd; --jaune:#e0b954; --jaune-fond:#2e2409;
+  --rouge:#ef8a7c; --rouge-fond:#331512;
+  --vert:#64c592; --vert-fond:#11291c;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --papier:#101715; --papier-2:#18211e;
+  --encre:#e4ebe6; --encre-2:#a2b2ad; --encre-3:#7e8f8a;
+  --trait:#2b3734;
+  --bleu:#0c1d31; --bleu-2:#132a45; --craie:#dde8f0;
+  --cyan:#5cc3cd; --jaune:#e0b954; --jaune-fond:#2e2409;
+  --rouge:#ef8a7c; --rouge-fond:#331512;
+  --vert:#64c592; --vert-fond:#11291c;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{background:var(--papier);color:var(--encre);
+  font-family:var(--texte);font-weight:400;font-size:1.0625rem;
+  line-height:1.72;margin:0;-webkit-text-size-adjust:100%}
+
+.gouttiere{padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px))}
+.colonne{max-width:40rem;margin:0 auto}
+.large{max-width:58rem;margin:0 auto}
+
+/* --- le tirage bleu : bandes pleine largeur pour les dessins --- */
+.tirage{background:var(--bleu);color:var(--craie);
+  border-block:1px solid var(--bleu-2);padding-block:2.2rem;margin-block:2.6rem}
+.tirage h2,.tirage h3{color:var(--craie)}
+.tirage p{color:#b9cbdb}
+.tirage .legende{color:#8fa6b9}
+
+/* --- en-tete --- */
+header.cr{padding-block:3rem 1.6rem}
+h1{font-family:var(--titre);font-weight:700;
+  font-size:clamp(2.1rem,7vw,3.4rem);line-height:1.02;
+  letter-spacing:-.005em;margin:0 0 1rem;text-wrap:balance}
+.resume{font-size:1.22rem;line-height:1.6;color:var(--encre-2);
+  margin:0 0 1.6rem;font-weight:300}
+.fiche{display:grid;gap:.1rem .9rem;grid-template-columns:auto 1fr;
+  font-family:var(--mono);font-size:.76rem;color:var(--encre-3);
+  border-top:1px solid var(--trait);border-bottom:1px solid var(--trait);
+  padding-block:.8rem;max-width:30rem}
+.fiche dt{color:var(--encre-2)}
+.fiche dd{margin:0}
+
+/* --- titres --- */
+h2{font-family:var(--titre);font-weight:700;
+  font-size:clamp(1.5rem,4.5vw,2.1rem);line-height:1.1;
+  margin:2.8rem 0 .2rem;text-wrap:balance}
+h3{font-family:var(--titre);font-weight:600;font-size:1.22rem;
+  line-height:1.25;margin:2rem 0 .3rem;text-wrap:balance}
+h4{font-family:var(--titre);font-weight:600;font-size:1rem;
+  margin:1.4rem 0 .2rem;color:var(--encre-2)}
+p{margin:.85rem 0}
+ul,ol{margin:.85rem 0;padding-left:1.4rem}
+li{margin:.45rem 0}
+strong{font-weight:600}
+em{font-style:italic;color:var(--encre-2)}
+code{font-family:var(--mono);font-size:.84em;
+  background:var(--papier-2);border:1px solid var(--trait);
+  border-radius:3px;padding:.06em .3em}
+
+/* L'accroche de chaque chapitre : plus grande, plus claire, sans etiquette
+   au-dessus. C'est la phrase qu'on lit si on ne lit que ca. */
+.accroche{font-size:1.16rem;line-height:1.62;color:var(--encre-2);
+  font-weight:300}
+
+/* --- encarts --- */
+.note{border-left:3px solid var(--trait);background:var(--papier-2);
+  padding:1rem 1.15rem;margin:1.5rem 0}
+.note>:first-child{margin-top:0}.note>:last-child{margin-bottom:0}
+.note .chapeau{font-family:var(--titre);font-weight:700;font-size:.95rem;
+  margin:0 0 .35rem}
+.note.danger{border-left-color:var(--rouge);background:var(--rouge-fond)}
+.note.danger .chapeau{color:var(--rouge)}
+.note.attention{border-left-color:var(--jaune);background:var(--jaune-fond)}
+.note.attention .chapeau{color:var(--jaune)}
+.note.bien{border-left-color:var(--vert);background:var(--vert-fond)}
+.note.bien .chapeau{color:var(--vert)}
+.note.repere{border-left-color:var(--cyan)}
+.note.repere .chapeau{color:var(--cyan)}
+
+/* --- dessins --- */
+figure{margin:1.8rem 0}
+.cadre{overflow-x:auto}
+figure svg{display:block;max-width:100%;height:auto;margin-inline:auto}
+figcaption{font-size:.84rem;line-height:1.55;color:var(--encre-3);
+  margin-top:.7rem;max-width:34rem}
+.tirage figcaption{color:#8fa6b9}
+
+/* --- les pieges : une liste de constats, pas des cartes identiques --- */
+.constats{list-style:none;padding:0;margin:1.6rem 0}
+.constats>li{padding:1.1rem 0;border-top:1px solid var(--trait)}
+.constats>li:last-child{border-bottom:1px solid var(--trait)}
+.constats .quoi{font-family:var(--titre);font-weight:600;font-size:1.08rem;
+  display:block;margin-bottom:.25rem}
+.constats .sinon{display:block;margin-top:.4rem;font-size:.95rem;
+  color:var(--encre-2);padding-left:.9rem;
+  border-left:2px solid var(--rouge)}
+
+/* --- la suite des etapes : c'est une vraie sequence, donc numerotee --- */
+ol.etapes{list-style:none;padding:0;counter-reset:e;margin:1.8rem 0}
+ol.etapes>li{counter-increment:e;display:grid;
+  grid-template-columns:2.2rem 1fr;gap:.1rem .9rem;
+  padding-bottom:1.3rem;margin-bottom:1.3rem;
+  border-bottom:1px solid var(--trait)}
+ol.etapes>li:last-child{border-bottom:none;margin-bottom:0}
+ol.etapes>li::before{content:counter(e);grid-row:span 2;
+  font-family:var(--titre);font-weight:700;font-size:1.5rem;
+  color:var(--cyan);line-height:1.1}
+ol.etapes .quoi{font-family:var(--titre);font-weight:600;font-size:1.1rem;
+  margin:0 0 .2rem}
+ol.etapes p{margin:.2rem 0}
+
+/* --- comparaison des deux logiciels --- */
+.deux{display:grid;gap:1.2rem;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));
+  margin:1.6rem 0}
+.deux>div{min-width:0}
+.deux .nom{font-family:var(--titre);font-weight:700;font-size:1.1rem;
+  margin:0 0 .3rem}
+.deux .geste{font-family:var(--mono);font-size:.82rem;color:var(--cyan);
+  margin:0 0 .5rem}
+
+footer.cr{border-top:1px solid var(--trait);margin-top:3rem;
+  padding-block:1.5rem 3.5rem;font-size:.88rem;color:var(--encre-3)}
+
+@media print{
+  body{background:#fff;color:#000;font-size:10.5pt}
+  .tirage{background:#fff;color:#000;border-block:1px solid #999}
+  .tirage p,.tirage .legende,.tirage figcaption{color:#333}
+  .tirage h2,.tirage h3{color:#000}
+  .note,.cadre{background:#fff}
+  h2,h3{break-after:avoid;page-break-after:avoid}
+  figure,.note,.constats>li,ol.etapes>li{break-inside:avoid;page-break-inside:avoid}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="gouttiere">
+<header class="cr colonne">
+  <h1>Tourner une vue 3D sans lâcher la souris</h1>
+  <p class="resume">Le macropad sait déjà taper tes raccourcis. On vient de
+  lui ajouter un joystick sous le pouce : la main gauche fait tourner la
+  maquette, la main droite reste sur la souris.</p>
+  <dl class="fiche">
+    <dt>Objet</dt><dd>Macropad USB fait main, ESP32-S3</dd>
+    <dt>Ajout</dt><dd>Joystick analogique deux axes + son clic</dd>
+    <dt>Logiciels</dt><dd>Civil 3D, Blender, InfraWorks, RealWorks</dd>
+    <dt>État</dt><dd>Code écrit et testé — reste le câblage</dd>
+  </dl>
+</header>
+</div>
+
+<section class="tirage">
+<div class="gouttiere large">
+<figure>
+<div class="cadre">
+<svg viewBox="0 0 960 470" role="img" aria-label="Vue de dessus du macropad : six touches disposées en arc sous les doigts de la main gauche, le joystick sur une tablette inclinée côté pouce, le petit écran à l'avant du boîtier, et le gros bouton d'annulation déporté à côté.">
+  <defs>
+    <marker id="pt" markerWidth="8" markerHeight="8" refX="4" refY="4">
+      <circle cx="4" cy="4" r="2.8" fill="#8fa6b9"/>
+    </marker>
+    <pattern id="grille" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0 H0 V40" fill="none" stroke="#1d3b60" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect x="0" y="0" width="960" height="470" fill="url(#grille)"/>
+
+  <!-- corps du pad -->
+  <path d="M104 290 C108 196 168 146 262 138 C360 130 452 140 512 160
+           C556 174 572 212 564 254 C556 294 530 318 488 326
+           C382 346 200 344 140 328 C112 320 102 310 104 290 Z"
+        fill="#19324f" stroke="#8fb4d6" stroke-width="2.2"/>
+
+  <!-- touches -->
+  <g fill="#0f2338" stroke="#cfe0ef" stroke-width="1.6">
+    <circle cx="156" cy="258" r="24"/>
+    <circle cx="224" cy="224" r="24"/>
+    <circle cx="296" cy="204" r="24"/>
+    <circle cx="368" cy="198" r="24"/>
+    <circle cx="368" cy="268" r="24"/>
+    <circle cx="444" cy="206" r="24"/>
+  </g>
+  <g font-family="Archivo Narrow, sans-serif" font-size="14" font-weight="600"
+     fill="#eef3f7" text-anchor="middle">
+    <text x="156" y="263">B6</text><text x="224" y="229">B5</text>
+    <text x="296" y="209">B4</text><text x="368" y="203">B3</text>
+    <text x="368" y="273">B2</text><text x="444" y="211">B1</text>
+  </g>
+  <g font-family="Spectral, serif" font-size="11.5" fill="#8fa6b9" text-anchor="middle">
+    <text x="156" y="302">auriculaire</text>
+    <text x="224" y="268">annulaire</text>
+    <text x="296" y="170">majeur</text>
+    <text x="368" y="164">index</text>
+    <text x="368" y="312">index</text>
+    <text x="444" y="248">pouce</text>
+  </g>
+
+  <!-- la tablette du pouce et le joystick -->
+  <path d="M492 206 L588 182 L620 272 L524 298 Z"
+        fill="#0d2c3a" stroke="#5cc3cd" stroke-width="2.2"/>
+  <circle cx="556" cy="240" r="29" fill="#0f2338" stroke="#5cc3cd" stroke-width="2"/>
+  <g stroke="#5cc3cd" stroke-width="1.3" stroke-dasharray="5 4">
+    <path d="M518 240 H594"/><path d="M556 202 V278"/>
+  </g>
+  <circle cx="556" cy="240" r="10" fill="#5cc3cd"/>
+
+  <!-- l'ecran, a l'avant du boitier -->
+  <rect x="196" y="298" width="124" height="32" rx="3"
+        fill="#0b1b2c" stroke="#8fb4d6" stroke-width="1.6"/>
+  <text x="258" y="319" text-anchor="middle" font-family="ui-monospace, monospace"
+        font-size="12" fill="#9fc4e0">CIVIL 3D</text>
+
+  <!-- le bouton d'annulation, franchement a part -->
+  <circle cx="862" cy="158" r="40" fill="#2a1512" stroke="#ef8a7c" stroke-width="2.2"/>
+  <text x="862" y="165" text-anchor="middle" font-family="Archivo Narrow, sans-serif"
+        font-size="18" font-weight="700" fill="#ef8a7c">ESC</text>
+  <text x="862" y="222" text-anchor="middle" font-family="Spectral, serif"
+        font-size="13" fill="#cfe0ef">annulation, déportée</text>
+
+  <!-- LES LIGNES DE RAPPEL, chacune dans sa bande : aucune ne traverse
+       un texte, ni le bouton d'annulation. -->
+  <g stroke="#8fa6b9" stroke-width="1.3" fill="none" marker-start="url(#pt)">
+    <path d="M444 182 V62 H680"/>
+    <path d="M556 240 L648 306 H680"/>
+    <path d="M196 314 L128 392 H112"/>
+  </g>
+  <g font-family="Spectral, serif" font-size="13.5" fill="#cfe0ef">
+    <text x="690" y="66">le clic du stick, c'est la touche B1</text>
+    <text x="690" y="310">le joystick, sous le pouce</text>
+  </g>
+  <text x="112" y="412" font-family="Spectral, serif" font-size="13.5" fill="#cfe0ef">l'écran dit quel logiciel est actif</text>
+</svg>
+</div>
+<figcaption>Vue de dessus, main gauche posée. Les six touches ne bougent
+pas : le joystick s'ajoute sur une tablette inclinée, là où tombe le
+pouce quand la main est détendue.</figcaption>
+</figure>
+</div>
+</section>
+
+<div class="gouttiere">
+<div class="colonne">
+
+<h2>En une page</h2>
+<p class="accroche">Si tu ne lis que ce paragraphe : le joystick est
+faisable, le code est écrit et vérifié, il reste à le souder. Le câblage
+est simple, à une précaution près qui peut abîmer la carte. Et le
+comportement ne sera pas identique dans tous les logiciels — non par
+négligence, mais parce qu'ils ne sont pas d'accord entre eux.</p>
+
+<h2>Le macropad, pour qui ne l'a jamais vu</h2>
+
+<p>C'est un petit boîtier posé à gauche du clavier, sur lequel la main
+gauche se repose. Six touches, une par doigt, deux pour l'index. Un gros
+bouton d'annulation à part. Un petit écran.</p>
+
+<p>Ce qu'il fait tient en une phrase : <strong>chaque touche tape une
+commande à ta place</strong>. Au lieu de chercher un raccourci à trois
+touches, tu appuies avec un doigt.</p>
+
+<p>Et il fait une chose de plus, qui est la vraie bonne idée du projet :
+<strong>il sait dans quel logiciel tu travailles, et les touches changent
+de rôle toutes seules.</strong> La même touche sous l'annulaire fait une
+chose dans Civil 3D et une autre dans Blender. C'est le levier de vitesse
+d'une voiture : un seul levier, des rapports différents selon où tu le
+pousses.</p>
+
+<p>L'écran sert justement à ça : il affiche le nom du logiciel reconnu.
+Sans lui, on ne saurait pas quel jeu de touches est actif.</p>
+
+<h2>Le problème que le joystick résout</h2>
+
+<p class="accroche">Dans un logiciel 3D, faire tourner la maquette autour
+d'un point s'appelle une <em>orbite</em>. C'est le geste qu'on fait cent
+fois par heure quand on modélise.</p>
+
+<p>Aujourd'hui, pour orbiter, il faut <strong>enfoncer la molette de la
+souris et déplacer la souris</strong> — parfois en plus avec une touche
+maintenue au clavier. Donc la main droite quitte ce qu'elle faisait, la
+main gauche va chercher une touche, et on revient. À chaque fois.</p>
+
+<p>Avec le joystick, la main gauche pousse le stick avec le pouce, et la
+vue tourne. La main droite n'a pas bougé : elle est restée sur la souris,
+prête à cliquer.</p>
+
+<h2>Pourquoi sous le pouce, et pas ailleurs</h2>
+
+<p>C'est le fait qui a décidé de toute la forme du boîtier, et il est
+purement anatomique.</p>
+
+<p>L'index, le majeur, l'annulaire et l'auriculaire ne savent faire
+qu'<strong>un seul mouvement</strong> : ils se plient et se déplient. Très
+bien pour appuyer sur une touche. Inutilisable pour un joystick, qui
+demande de partir dans deux directions à la fois.</p>
+
+<p>Le pouce, lui, est <strong>opposable</strong> : il part dans toutes les
+directions. C'est pour cette raison que toutes les manettes de jeu depuis
+trente ans mettent le stick sous le pouce, et jamais sous l'index.</p>
+</div>
+</div>
+
+<section class="tirage">
+<div class="gouttiere large">
+<figure>
+<div class="cadre">
+<svg viewBox="0 0 760 260" role="img" aria-label="Comparaison : les quatre doigts ne font qu'un mouvement, se plier et se déplier, représenté par une flèche à double sens. Le pouce part dans toutes les directions, représenté par une rose de huit flèches.">
+  <!-- les quatre doigts -->
+  <text x="40" y="40" font-family="Archivo Narrow, sans-serif" font-size="19"
+        font-weight="700" fill="#eef3f7">Les quatre doigts</text>
+  <text x="40" y="64" font-family="Spectral, serif" font-size="13.5" fill="#8fa6b9">un seul mouvement : plier, déplier</text>
+  <g transform="translate(150,160)">
+    <circle r="56" fill="none" stroke="#2c4e74" stroke-width="1.4" stroke-dasharray="4 4"/>
+    <g stroke="#9fc4e0" stroke-width="3.4" fill="none">
+      <path d="M0 -44 V44"/>
+      <path d="M-11 -32 L0 -46 L11 -32"/>
+      <path d="M-11 32 L0 46 L11 32"/>
+    </g>
+    <circle r="7" fill="#9fc4e0"/>
+  </g>
+  <text x="150" y="246" text-anchor="middle" font-family="ui-monospace, monospace"
+        font-size="12" fill="#8fa6b9">1 axe</text>
+
+  <!-- separateur -->
+  <path d="M330 56 V214" stroke="#2c4e74" stroke-width="1.4"/>
+
+  <!-- le pouce -->
+  <text x="400" y="40" font-family="Archivo Narrow, sans-serif" font-size="19"
+        font-weight="700" fill="#eef3f7">Le pouce</text>
+  <text x="400" y="64" font-family="Spectral, serif" font-size="13.5" fill="#8fa6b9">opposable : toutes les directions</text>
+  <g transform="translate(560,160)">
+    <circle r="56" fill="none" stroke="#2a6a74" stroke-width="1.4"/>
+    <g stroke="#5cc3cd" stroke-width="3" fill="none">
+      <path d="M0 -46 V-14"/><path d="M-8 -36 L0 -48 L8 -36"/>
+      <path d="M0 46 V14"/><path d="M-8 36 L0 48 L8 36"/>
+      <path d="M-46 0 H-14"/><path d="M-36 -8 L-48 0 L-36 8"/>
+      <path d="M46 0 H14"/><path d="M36 -8 L48 0 L36 8"/>
+      <path d="M-33 -33 L-12 -12"/><path d="M-34 -22 L-35 -35 L-22 -34"/>
+      <path d="M33 33 L12 12"/><path d="M34 22 L35 35 L22 34"/>
+      <path d="M33 -33 L12 -12"/><path d="M22 -34 L35 -35 L34 -22"/>
+      <path d="M-33 33 L-12 12"/><path d="M-22 34 L-35 35 L-34 22"/>
+    </g>
+    <circle r="8" fill="#5cc3cd"/>
+  </g>
+  <text x="560" y="246" text-anchor="middle" font-family="ui-monospace, monospace"
+        font-size="12" fill="#5cc3cd">2 axes</text>
+</svg>
+</div>
+<figcaption>Un joystick a besoin de deux directions indépendantes. Un seul
+doigt de la main sait les donner.</figcaption>
+</figure>
+</div>
+</section>
+
+<div class="gouttiere">
+<div class="colonne">
+
+<h2>La bonne surprise du câblage</h2>
+
+<p>Un joystick de ce type, c'est trois choses : deux petits boutons
+rotatifs qui mesurent la position (un par direction), et un
+<strong>bouton-poussoir</strong> qu'on actionne en enfonçant le stick.</p>
+
+<p>Or ce poussoir est exactement le même genre de contact que les touches
+existantes du macropad. On peut donc le brancher là où allait la touche du
+pouce : <strong>le clic du stick devient la touche B1</strong>, sans une
+seule ligne de programme à écrire pour ça.</p>
+
+<div class="note danger">
+  <p class="chapeau">La seule chose qui peut abîmer la carte</p>
+  <p>Beaucoup de ces modules portent la mention <code>+5V</code> sur leur
+  patte d'alimentation. <strong>Il ne faut pas la brancher sur 5 volts.</strong>
+  La carte lit ces mesures sur des entrées qui n'acceptent pas plus de
+  3,3 volts. En 5 volts, l'entrée s'abîme <em>sans rien montrer</em> :
+  rien ne fume, rien ne chauffe, et la mesure devient simplement fausse
+  pour toujours.</p>
+  <p>Un joystick fonctionne très bien en 3,3 volts. Il donne juste une
+  plage de mesure un peu plus petite, ce que le programme rattrape tout
+  seul.</p>
+</div>
+
+<div class="note attention">
+  <p class="chapeau">Et une chose contre-intuitive</p>
+  <p>Jusqu'ici, tu n'appuyais que <em>vers le bas</em>. Un joystick, on le
+  pousse <em>sur le côté</em> : le boîtier va se mettre à glisser sur le
+  bureau. Il faudra des patins antidérapants, ou du poids dans le fond.
+  C'est ce qui fera la différence entre agréable et pénible.</p>
+</div>
+
+<h2>Pourquoi ce ne sera pas pareil dans tous les logiciels</h2>
+
+<p class="accroche">Voilà le point qu'il faut avoir en tête, parce qu'il
+ressemble à un défaut et n'en est pas un.</p>
+
+<p>Il n'existe <strong>aucune convention commune</strong> entre logiciels
+3D pour faire tourner une vue. Chacun a choisi la sienne. Et les deux que
+tu utilises le plus ont choisi… l'inverse l'une de l'autre.</p>
+
+<div class="deux">
+  <div>
+    <p class="nom">Blender</p>
+    <p class="geste">molette enfoncée + déplacer</p>
+    <p>la vue <strong>tourne</strong></p>
+  </div>
+  <div>
+    <p class="nom">Civil 3D</p>
+    <p class="geste">molette enfoncée + déplacer</p>
+    <p>la vue <strong>se déplace</strong> — pour la faire tourner, il faut
+    maintenir <em>Maj</em> en plus</p>
+  </div>
+</div>
+
+<p>Le même geste physique, deux résultats différents. Aucun réglage unique
+ne peut donc convenir aux deux.</p>
+
+<p>La solution est celle que le macropad utilise déjà pour les touches :
+<strong>un réglage par logiciel, qui bascule tout seul.</strong> Tu ouvres
+Civil 3D, le joystick prend les règles de Civil 3D. Tu passes sur Blender,
+il prend celles de Blender. Tu n'as rien à faire.</p>
+
+<p>Dans Word et sur le bureau Windows, il est simplement éteint — un
+joystick n'y a aucun sens, et c'est un réglage, pas un oubli.</p>
+
+<div class="note repere">
+  <p class="chapeau">Deux logiciels restent à régler, et il te faut deux minutes</p>
+  <p>Pour <strong>InfraWorks</strong>, les conventions changent selon la
+  version, et il existe même une option qui échange les deux boutons : la
+  documentation d'Autodesk se contredit d'une version à l'autre. Pour
+  <strong>RealWorks</strong>, je n'ai trouvé aucune documentation Trimble
+  fiable sur ce point.</p>
+  <p>Plutôt que d'inventer un réglage — qui te donnerait un joystick qui
+  déplace quand tu veux tourner, sans que rien ne l'explique — ils
+  démarrent éteints. Le relevé se fait à la souris, dans le logiciel :
+  molette enfoncée et déplace, puis recommence avec Maj, Ctrl et Alt.
+  Celui des quatre qui fait tourner est le bon réglage.</p>
+</div>
+
+<h2>Ce qui a été construit</h2>
+
+<p>Quatre pièces, et chacune peut tomber en panne sans empêcher les autres
+de fonctionner. C'est une règle du projet depuis le début : un morceau
+absent se <em>signale</em>, il n'empêche jamais le macropad de taper.</p>
+</div>
+</div>
+
+<section class="tirage">
+<div class="gouttiere large">
+<figure>
+<div class="cadre">
+<svg viewBox="0 0 860 210" role="img" aria-label="La chaîne en quatre maillons : la mesure du stick, le calcul qui enlève le tremblement, la traduction en langage de souris, puis le logiciel 3D qui fait tourner la vue.">
+  <defs>
+    <marker id="fl" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <polygon points="0 0, 10 4, 0 8" fill="#5cc3cd"/>
+    </marker>
+  </defs>
+  <g font-family="Archivo Narrow, sans-serif" font-weight="600" font-size="15"
+     fill="#eef3f7" text-anchor="middle">
+    <rect x="14" y="54" width="170" height="86" rx="4" fill="#0f2338" stroke="#5cc3cd" stroke-width="1.8"/>
+    <text x="99" y="88">on mesure</text>
+    <text x="99" y="110" font-family="Spectral, serif" font-size="12.5" fill="#8fa6b9">où est le stick</text>
+
+    <rect x="236" y="54" width="170" height="86" rx="4" fill="#0f2338" stroke="#8fb4d6" stroke-width="1.8"/>
+    <text x="321" y="88">on calcule</text>
+    <text x="321" y="110" font-family="Spectral, serif" font-size="12.5" fill="#8fa6b9">sans le tremblement</text>
+
+    <rect x="458" y="54" width="170" height="86" rx="4" fill="#0f2338" stroke="#8fb4d6" stroke-width="1.8"/>
+    <text x="543" y="88">on traduit</text>
+    <text x="543" y="110" font-family="Spectral, serif" font-size="12.5" fill="#8fa6b9">en langage de souris</text>
+
+    <rect x="680" y="54" width="166" height="86" rx="4" fill="#0d2c3a" stroke="#5cc3cd" stroke-width="1.8"/>
+    <text x="763" y="88">le logiciel</text>
+    <text x="763" y="110" font-family="Spectral, serif" font-size="12.5" fill="#8fa6b9">fait tourner la vue</text>
+  </g>
+  <g stroke="#5cc3cd" stroke-width="2" marker-end="url(#fl)">
+    <path d="M186 97 H230"/><path d="M408 97 H452"/><path d="M630 97 H674"/>
+  </g>
+  <text x="430" y="186" text-anchor="middle" font-family="Spectral, serif"
+        font-size="13" fill="#8fa6b9">cinq cents fois par seconde, sans jamais bloquer le reste du boîtier</text>
+</svg>
+</div>
+<figcaption>Le boîtier fait tout cela en continu tout en surveillant les
+touches, l'écran et le bouton d'annulation. Rien n'attend jamais rien.</figcaption>
+</figure>
+</div>
+</section>
+
+<div class="gouttiere">
+<div class="colonne">
+
+<h3>La mesure</h3>
+<p>Le stick ne rend pas « gauche » ou « droite », mais un nombre, entre 0
+et 65 535, pour chaque direction. Au repos, ce nombre n'est jamais pile au
+milieu : <strong>chaque exemplaire a son propre centre</strong>, souvent
+quelques pour cent à côté. Le boîtier le mesure donc au démarrage, en
+moyennant plusieurs lectures.</p>
+<p>Et si le stick bougeait pendant cette mesure, <strong>l'étalonnage est
+refusé exprès</strong> : un centre pris stick poussé ferait tourner la vue
+sans fin, sans que personne comprenne pourquoi. Mieux vaut un joystick qui
+ne démarre pas qu'un joystick qui part tout seul.</p>
+
+<h3>Le calcul</h3>
+<p>Un stick au repos tremble légèrement. Si on envoyait ce tremblement tel
+quel, la maquette dériverait toute seule à l'écran. On définit donc une
+<strong>zone morte</strong> autour du centre, dans laquelle on considère
+que rien ne bouge.</p>
+<p>Un détail qui compte : à la sortie de cette zone, le mouvement
+<strong>démarre à zéro</strong> et monte progressivement. Sans cette
+précaution, la vue partirait d'un coup dès que le pouce quitte le milieu.</p>
+
+<h3>La traduction</h3>
+<p>Pour l'ordinateur, le macropad est un clavier. Pour que le joystick
+fonctionne, il faut qu'il devienne <strong>aussi une souris</strong> — un
+seul appareil qui présente deux choses à la fois.</p>
+<p>C'est le moment le plus délicat du projet, parce que si Windows refuse
+cette nouvelle présentation, on ne perd pas la souris : <strong>on perd le
+clavier</strong>, donc tout. Le programme rattrape ce cas et repart
+automatiquement en clavier seul, en le disant clairement.</p>
+
+<h3>Le contrôle de soi-même</h3>
+<p>Une commande à taper dans le boîtier, <code>diag.joystick()</code>,
+vérifie tout ce qui peut mal tourner et <strong>nomme la cause
+probable</strong> quand un chiffre ne va pas : que les bonnes broches
+soient utilisées, que la mesure couvre toute la course du stick, que le
+centre soit stable. C'est à faire avant de refermer le boîtier, pas
+après.</p>
+
+<h2>Les pièges trouvés en route</h2>
+
+<p class="accroche">Aucun n'était visible en lisant le programme. Chacun
+aurait produit une panne difficile à comprendre.</p>
+
+<ul class="constats">
+  <li>
+    <span class="quoi">La bibliothèque de souris officielle peut figer tout le boîtier</span>
+    <p>Elle contient une attente sans limite de durée : si l'ordinateur se
+    met en veille ou que le câble bouge, elle ne rend jamais la main.</p>
+    <span class="sinon">Écran figé, lumières figées, et surtout
+    <strong>le bouton d'annulation inopérant</strong>. On aurait échangé un
+    joystick contre la touche qui sert à tout arrêter.</span>
+  </li>
+  <li>
+    <span class="quoi">Le Maj partait après le clic, au lieu d'avant</span>
+    <p>Dans Civil 3D, l'orbite demande de maintenir Maj <em>pendant</em> le
+    glissement. Un Maj qui arrive en retard n'est pas pris en compte.</p>
+    <span class="sinon">Le joystick aurait <strong>déplacé</strong> la vue
+    au lieu de la faire tourner. Et seulement dans Civil 3D, ce qui aurait
+    fait chercher la cause dans le logiciel.</span>
+  </li>
+  <li>
+    <span class="quoi">La touche d'annulation n'arrêtait pas l'orbite</span>
+    <p>Elle fermait bien le mouvement, mais le stick était encore poussé :
+    une nouvelle orbite repartait dans l'instant.</p>
+    <span class="sinon">Appuyer sur annulation n'aurait <strong>rien
+    changé du tout</strong>. Il faut maintenant ramener le stick au milieu
+    pour repartir — ce qu'on attend d'une touche d'arrêt.</span>
+  </li>
+  <li>
+    <span class="quoi">Le mode sans échec se serait déclenché tout seul</span>
+    <p>Maintenir la touche du pouce pendant l'allumage démarre le boîtier
+    <em>sans clavier</em> : c'est le filet de secours. Mais le clic du
+    joystick est devenu cette touche, et un stick, on l'enfonce sans le
+    vouloir — en posant la main, en branchant d'une seule main.</p>
+    <span class="sinon">Un macropad qui démarre régulièrement sans taper,
+    pour une raison invisible. Le filet de secours a déménagé sur
+    l'auriculaire.</span>
+  </li>
+  <li>
+    <span class="quoi">Le Maj du joystick effaçait le Ctrl du pouce</span>
+    <p>Les deux passaient par le même emplacement en mémoire, qui ne
+    pouvait en retenir qu'un.</p>
+    <span class="sinon">Un Ctrl qui disparaît au milieu d'une sélection, ou
+    une orbite qui part sans son Maj. Du « ça marche une fois sur
+    trois » — le pire à diagnostiquer.</span>
+  </li>
+  <li>
+    <span class="quoi">Le bouton se ré-enfonçait seul au rebranchement</span>
+    <p>Après un débranchement, le boîtier gardait en mémoire ce qu'il
+    voulait, alors que l'ordinateur avait tout oublié.</p>
+    <span class="sinon">Un clic du milieu surgissant dans le logiciel qui
+    avait le focus à ce moment-là, sans que personne l'ait demandé.</span>
+  </li>
+</ul>
+
+<div class="note bien">
+  <p class="chapeau">Comment ces pièges ont été trouvés</p>
+  <p>Par une méthode simple : <strong>on casse volontairement le programme
+  et on regarde si les tests le voient.</strong> Dix-sept dégâts ont été
+  introduits un par un. Seize ont été détectés. Le dix-septième ne l'a pas
+  été, parce que deux protections différentes couvrent le même point : en
+  retirant les deux à la fois, le test tombe bien.</p>
+  <p>Trois tests qui semblaient bons ne prouvaient en réalité rien. Les
+  renforcer a révélé deux vrais défauts de comportement. Sans cette étape,
+  ils seraient encore là.</p>
+</div>
+
+<h2>Ce qu'il reste à faire, dans l'ordre</h2>
+
+<p class="accroche">Les trois premières étapes ne touchent pas du tout au
+clavier : on ne risque donc pas de casser ce qui fonctionne déjà.</p>
+
+<ol class="etapes">
+  <li>
+    <p class="quoi">Mesurer et faire une maquette en carton</p>
+    <p>Avec le vrai module scotché à l'endroit prévu. Dix minutes, aucun
+    coût, et c'est le seul moyen de savoir si l'angle et la hauteur
+    conviennent au pouce. Cinq millimètres de trop et c'est fatigant au
+    bout d'une heure.</p>
+  </li>
+  <li>
+    <p class="quoi">Brancher les deux mesures seules, sur une plaque d'essai</p>
+    <p>Pas de boîtier, pas de soudure définitive. On vérifie simplement que
+    les deux nombres bougent et reviennent toujours au même centre. C'est
+    aussi là qu'on note ce centre.</p>
+  </li>
+  <li>
+    <p class="quoi">Lancer le contrôle intégré</p>
+    <p><code>diag.joystick()</code> fait le reste : il dit si les bonnes
+    broches sont utilisées, si toute la course du stick est lue, et si le
+    centre est stable — avec la cause probable quand un chiffre ne va pas.</p>
+  </li>
+  <li>
+    <p class="quoi">Sauvegarder, puis activer</p>
+    <p>On copie le dossier qui fonctionne ailleurs, <em>avant</em> de
+    changer quoi que ce soit. Puis on met <code>JOYSTICK_ENABLED = True</code>
+    dans les réglages et on redémarre.</p>
+  </li>
+  <li>
+    <p class="quoi">Relever les conventions d'InfraWorks et de RealWorks</p>
+    <p>Deux minutes chacun, à la souris, dans le logiciel. Puis on entre le
+    réglage dans la page web du macropad.</p>
+  </li>
+  <li>
+    <p class="quoi">Imprimer le boîtier définitif</p>
+    <p>Une fois la position du pouce validée sur la maquette, et une fois
+    le joystick utilisé quelques jours sur plaque d'essai.</p>
+  </li>
+</ol>
+
+<h2>Ce que je n'ai pas pu vérifier</h2>
+
+<p>Par honnêteté, et parce que c'est une règle posée au départ du
+projet.</p>
+
+<ul>
+  <li><strong>Rien n'a été essayé sur la carte.</strong> Je n'y ai pas
+  accès. Tout ce qui est écrit vient de la lecture des fichiers du projet
+  et du code des bibliothèques utilisées, et de tests qui tournent sur un
+  ordinateur avec un faux joystick.</li>
+  <li><strong>Que Windows accepte le clavier et la souris ensemble.</strong>
+  C'est autorisé et documenté, mais seul ton ordinateur peut le confirmer.
+  D'où la sauvegarde obligatoire à l'étape 4.</li>
+  <li><strong>Les conventions d'InfraWorks et de RealWorks.</strong>
+  Détaillé plus haut.</li>
+  <li><strong>Les cotes exactes de ton module.</strong> Les copies de ces
+  petits modules varient, parfois beaucoup. À mesurer au pied à coulisse
+  avant de dessiner le boîtier.</li>
+  <li><strong>La dureté du clic du stick.</strong> Sur un module à quelques
+  euros, il est souvent dur et décentré : en enfonçant, on bouge le stick.
+  Le programme ferme les yeux sur les mesures pendant 80 millisecondes
+  autour d'un appui — ce chiffre est une estimation de départ, pas une
+  mesure.</li>
+</ul>
+
+</div>
+</div>
+
+<div class="gouttiere">
+<footer class="cr colonne">
+<p><strong>Le joystick du macropad</strong> — compte-rendu de réalisation.
+Les relevés de broches, de constantes et de fonctions viennent de la
+lecture du dépôt et du code source des bibliothèques employées. Quatre
+cent soixante-quatre tests automatiques passent sur ordinateur. Rien n'a
+été essayé sur la carte.</p>
+</footer>
+</div>
+</body>
+</html>
